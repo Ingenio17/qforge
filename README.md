@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
 [![PyPI version](https://badge.fury.io/py/qforge.svg)](https://badge.fury.io/py/qforge)
-[![Build Status](https://github.com/Ingenio17/qforge/actions/workflows/python-publish.yml/badge.svg)](https://github.com/Ingenio17/qforge/actions/workflows/python-publish.yml)
+<!-- [![Build Status](https://github.com/Ingenio17/qforge/actions/workflows/python-publish.yml/badge.svg)](https://github.com/Ingenio17/qforge/actions/workflows/python-publish.yml) -->
 
 **QForge** is a comprehensive, terminal-based quantum simulation toolkit that bridges qubit physics to hardware design. Built for everyone from absolute beginners to seasoned quantum computing researchers.
 

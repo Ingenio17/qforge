@@ -1,0 +1,16 @@
+numpy==1.26.4
+scipy
+matplotlib
+scqubits
+qutip
+qiskit
+qiskit-aer
+click
+rich
+prompt-toolkit
+plotext
+pandas
+pyyaml
+jsonschema
+tqdm
+h5py

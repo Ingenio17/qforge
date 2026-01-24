@@ -55,7 +55,7 @@ Once trusted publishing is configured:
    - Go to https://github.com/Ingenio17/qforge/releases/new
    - Choose tag: `v0.1.0`
    - Release title: `v0.1.0 - Initial Release`
-   - Description: Copy the content from CHANGELOG.md for v0.1.0
+   - Description: Copy the "Added" and "Infrastructure" sections from the [0.1.0] section in CHANGELOG.md
    - Check "Set as the latest release"
    - Click "Publish release"
 
@@ -69,7 +69,7 @@ Once trusted publishing is configured:
 
 After the workflow completes:
 
-1. Check that the package appears on PyPI: https://pypi.org/project/qforge/
+1. Check that the package appears on PyPI: https://pypi.org/project/qforge/ (note: this URL will only work after the first successful publication)
 2. Test installation from PyPI:
    ```bash
    pip install qforge

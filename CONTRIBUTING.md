@@ -33,7 +33,11 @@ We welcome feature requests and enhancement suggestions! Please open an issue wi
 
 2. **Install development dependencies**
    ```bash
+   # For bash/zsh shells:
    pip install -e ".[dev]"
+   
+   # For Windows cmd (without quotes):
+   pip install -e .[dev]
    ```
 
 3. **Make your changes** following our coding standards

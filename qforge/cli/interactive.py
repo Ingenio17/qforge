@@ -27,6 +27,9 @@ def run_interactive():
     # Main menu
     menu_options = [
         "Create a qubit",
+        "List qubits",
+        "Analyze a qubit",
+        "Delete a qubit",
         "Simulate gates",
         "Build a circuit",
         "Design hardware",
@@ -65,19 +68,25 @@ def run_interactive():
             # Route to appropriate wizard
             if choice in ["create a qubit", "1"]:
                 _wizard_create_qubit()
-            elif choice in ["simulate gates", "2"]:
+            elif choice in ["list qubits", "2"]:
+                _wizard_list_qubits()
+            elif choice in ["analyze a qubit", "3"]:
+                _wizard_analyze_qubit()
+            elif choice in ["delete a qubit", "4"]:
+                _wizard_delete_qubit()
+            elif choice in ["simulate gates", "5"]:
                 _wizard_simulate_gate()
-            elif choice in ["build a circuit", "3"]:
+            elif choice in ["build a circuit", "6"]:
                 _wizard_build_circuit()
-            elif choice in ["design hardware", "4"]:
+            elif choice in ["design hardware", "7"]:
                 _wizard_design_hardware()
-            elif choice in ["compare qubits", "5"]:
+            elif choice in ["compare qubits", "8"]:
                 _wizard_compare_qubits()
-            elif choice in ["run full workflow", "6"]:
+            elif choice in ["run full workflow", "9"]:
                 _wizard_full_workflow()
-            elif choice in ["help", "7"]:
+            elif choice in ["help", "10"]:
                 _show_help()
-            elif choice in ["exit", "8", "quit", "q"]:
+            elif choice in ["exit", "11", "quit", "q"]:
                 console.print("\n[cyan]Thank you for using QForge! Goodbye![/cyan]\n")
                 break
             else:
@@ -194,3 +203,76 @@ def _show_help():
     """
     
     console.print(Panel(Markdown(help_md), title="Help", border_style="yellow"))
+
+
+def _wizard_list_qubits():
+    """Wizard for listing qubits."""
+    console.print("\n[bold cyan]List of Qubits[/bold cyan]")
+    from qforge.cli.commands.qubit import list_qubits
+    try:
+        # Use callback to bypass Click context requirements if possible,
+        # otherwise we invoke normally. list_qubits is simple.
+        list_qubits.callback()
+    except Exception as e:
+        console.print(f"[red]Error listing qubits: {e}[/red]")
+    
+    input("\nPress Enter to continue...")
+
+
+def _wizard_analyze_qubit():
+    """Wizard for analyzing a qubit."""
+    console.print("\n[bold cyan]Qubit Analysis Wizard[/bold cyan]")
+    from qforge.cli.commands.qubit import analyze
+    
+    name = prompt("Enter qubit name to analyze: ").strip()
+    if not name: return
+
+    # Ask for options
+    do_plot = prompt("Generate plots? (y/n) [y]: ").strip().lower() != "n"
+    do_coherence = prompt("Estimate coherence? (y/n) [y]: ").strip().lower() != "n"
+    
+    try:
+        analyze.callback(name=name, plot=do_plot, coherence=do_coherence)
+    except Exception as e:
+        # Error is already printed by analyze usually
+        if "Abort" not in str(type(e)):
+            console.print(f"[red]Error: {e}[/red]")
+    
+    input("\nPress Enter to continue...")
+
+
+def _wizard_delete_qubit():
+    """Wizard for deleting a qubit."""
+    console.print("\n[bold cyan]Qubit Deletion Wizard[/bold cyan]")
+    from qforge.cli.commands.qubit import delete
+    
+    name = prompt("Enter qubit name to delete: ").strip()
+    if not name: return
+    
+    if prompt(f"Are you sure you want to delete '{name}'? (y/n): ").strip().lower() == "y":
+        try:
+            delete.callback(name=name)
+        except Exception as e:
+            if "Abort" not in str(type(e)):
+                console.print(f"[red]Error: {e}[/red]")
+    
+    input("\nPress Enter to continue...")
+
+
+def _wizard_compare_qubits():
+    """Wizard for comparing qubits."""
+    console.print("\n[bold cyan]Qubit Comparison Wizard[/bold cyan]")
+    from qforge.cli.commands.compare import compare_qubits
+    
+    qubits = prompt("Enter qubit names (comma-separated): ").strip()
+    if not qubits: return
+    
+    metrics = prompt("Enter metrics (comma-separated) [default: all]: ").strip() or "all"
+    
+    try:
+        compare_qubits.callback(qubits=qubits, metrics=metrics, output=None)
+    except Exception as e:
+        if "Abort" not in str(type(e)):
+            console.print(f"[red]Error: {e}[/red]")
+    
+    input("\nPress Enter to continue...")

@@ -5,7 +5,7 @@ End-to-end quantum simulation from qubit physics to hardware design.
 """
 
 __version__ = "0.1.0"
-__author__ = "QForge Contributors"
+__author__ = "Saumya Shah"
 
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine

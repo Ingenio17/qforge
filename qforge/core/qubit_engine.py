@@ -8,11 +8,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import numpy as np
-import scqubits as scq
-from scqubits import Transmon, Fluxonium, FluxQubit, ZeroPi
-import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend for terminal use
-import matplotlib.pyplot as plt
+import numpy as np
+# Lazy imports for heavy libraries to speed up CLI startup
+# import scqubits as scq
+# import matplotlib.pyplot as plt
 
 from qforge.config.defaults import QUBIT_PRESETS, NOISE_DEFAULTS, OUTPUT_DIRS
 
@@ -24,38 +23,85 @@ class QubitEngine:
         """Initialize the qubit engine."""
         self._qubits = {}  # Store created qubits
         self._ensure_output_dirs()
+        self._session_file = Path(OUTPUT_DIRS["qubits"]) / ".qforge_session.json"
+        self._load_session()  # Load previously created qubits
     
     def _ensure_output_dirs(self):
         """Create output directories if they don't exist."""
         for dir_path in OUTPUT_DIRS.values():
             Path(dir_path).mkdir(parents=True, exist_ok=True)
     
-    def create_qubit(self, qubit_type: str, name: str, params: Dict[str, Any]):
-        """
-        Create a qubit instance.
+    def _save_session(self):
+        """Save current session (all qubits) to disk."""
+        # Helper to convert numpy types to python types
+        def convert(o):
+            if isinstance(o, np.integer): return int(o)
+            if isinstance(o, np.floating): return float(o)
+            if isinstance(o, np.ndarray): return o.tolist()
+            raise TypeError
+
+        session_data = {
+            name: {
+                "type": data["type"],
+                "params": data["params"],
+                "name": name,
+            }
+            for name, data in self._qubits.items()
+        }
         
-        Args:
-            qubit_type: Type of qubit (transmon, fluxonium, flux, zeropi)
-            name: Name for the qubit
-            params: Qubit parameters
+        try:
+            with open(self._session_file, 'w') as f:
+                json.dump(session_data, f, indent=2, default=convert)
+        except Exception:
+            # Silently fail if can't save - don't break user workflow
+            pass
+    
+    def _load_session(self):
+        """Load previous session (all qubits) from disk."""
+        if not self._session_file.exists():
+            return
         
-        Returns:
-            scqubits qubit object
-        """
+        try:
+            with open(self._session_file, 'r') as f:
+                session_data = json.load(f)
+            
+            # Recreate qubits from session
+            for name, qubit_data in session_data.items():
+                try:
+                    qubit_obj = self._create_qubit_object(
+                        qubit_data["type"],
+                        qubit_data["params"]
+                    )
+                    self._qubits[name] = {
+                        "object": qubit_obj,
+                        "type": qubit_data["type"],
+                        "params": qubit_data["params"],
+                        "name": name,
+                    }
+                except Exception:
+                    # Skip qubits that fail to load
+                    pass
+        except Exception:
+            # If session file is corrupted, start fresh
+            pass
+    
+    def _create_qubit_object(self, qubit_type, params):
+        """Internal method to create qubit object from type and params."""
+        import scqubits as scq
+        from scqubits import Transmon, Fluxonium, FluxQubit, ZeroPi
+        
         qubit_type = qubit_type.lower()
         
-        # Create the appropriate scqubits object
         if qubit_type == "transmon":
-            qubit = Transmon(
+            return Transmon(
                 EJ=params.get("EJ", 15.0),
                 EC=params.get("EC", 0.3),
                 ng=params.get("ng", 0.0),
                 ncut=params.get("ncut", 30),
                 truncated_dim=params.get("truncated_dim", 10)
             )
-        
         elif qubit_type == "fluxonium":
-            qubit = Fluxonium(
+            return Fluxonium(
                 EJ=params.get("EJ", 8.9),
                 EC=params.get("EC", 2.5),
                 EL=params.get("EL", 0.5),
@@ -63,9 +109,8 @@ class QubitEngine:
                 cutoff=params.get("cutoff", 110),
                 truncated_dim=params.get("truncated_dim", 10)
             )
-        
         elif qubit_type == "flux":
-            qubit = FluxQubit(
+            return FluxQubit(
                 EJ1=params.get("EJ1", 10.0),
                 EJ2=params.get("EJ2", 10.0),
                 EJ3=params.get("EJ3", 10.0),
@@ -80,10 +125,9 @@ class QubitEngine:
                 ncut=params.get("ncut", 10),
                 truncated_dim=params.get("truncated_dim", 10)
             )
-        
         elif qubit_type == "zeropi":
             grid = params.get("grid", (-6.0, 6.0, 100))
-            qubit = ZeroPi(
+            return ZeroPi(
                 EJ=params.get("EJ", 10.0),
                 EL=params.get("EL", 0.1),
                 ECJ=params.get("ECJ", 20.0),
@@ -94,17 +138,34 @@ class QubitEngine:
                 ncut=params.get("ncut", 30),
                 truncated_dim=params.get("truncated_dim", 10)
             )
-        
         else:
             raise ValueError(f"Unknown qubit type: {qubit_type}")
+    
+    def create_qubit(self, qubit_type: str, name: str, params: Dict[str, Any]):
+        """
+        Create a qubit instance.
+        
+        Args:
+            qubit_type: Type of qubit (transmon, fluxonium, flux, zeropi)
+            name: Name for the qubit
+            params: Qubit parameters
+        
+        Returns:
+            scqubits qubit object
+        """
+        # Use the internal method to create qubit object
+        qubit = self._create_qubit_object(qubit_type, params)
         
         # Store metadata
         self._qubits[name] = {
             "object": qubit,
-            "type": qubit_type,
+            "type": qubit_type.lower(),
             "params": params,
             "name": name,
         }
+        
+        # Save session after creating qubit
+        self._save_session()
         
         return qubit
     
@@ -113,6 +174,19 @@ class QubitEngine:
         if name not in self._qubits:
             raise ValueError(f"Qubit '{name}' not found. Use 'qforge qubit list' to see available qubits.")
         return self._qubits[name]["object"]
+    
+    def delete_qubit(self, name: str):
+        """
+        Delete a qubit by name.
+        
+        Args:
+            name: Name of the qubit to delete
+        """
+        if name not in self._qubits:
+            raise ValueError(f"Qubit '{name}' not found.")
+        
+        del self._qubits[name]
+        self._save_session()
     
     def list_qubits(self) -> List[Dict]:
         """List all created qubits with their properties."""
@@ -178,26 +252,30 @@ class QubitEngine:
         
         try:
             # T1 from dielectric loss
-            t1_diel = qubit.t1_capacitive(
+            # scqubits returns time in units of 1/frequency.
+            # Since frequency is in GHz, time is in ns.
+            t1_diel_ns = qubit.t1_capacitive(
                 T=temperature,
                 Q_cap=1e6  # Quality factor
             )
+            t1_diel_us = t1_diel_ns / 1000.0  # Convert ns to μs
+            
             coherence_data["T1 (dielectric)"] = {
-                "value": t1_diel * 1e6,  # Convert to μs
+                "value": t1_diel_us,
                 "limit": "Capacitive loss"
             }
         except:
             # Fallback to typical values
-            t1_diel = NOISE_DEFAULTS.get(qubit_type, {}).get("T1_dielectric", 50.0)
+            t1_diel_us = NOISE_DEFAULTS.get(qubit_type, {}).get("T1_dielectric", 50.0)
             coherence_data["T1 (dielectric)"] = {
-                "value": t1_diel,
+                "value": t1_diel_us,
                 "limit": "Estimated"
             }
         
         try:
             # T2 from dephasing
             # T2 ≈ 2*T1 in the best case (no pure dephasing)
-            t2_estimate = 2 * t1_diel * 0.7  # Factor of 0.7 accounts for typical pure dephasing
+            t2_estimate = 2 * t1_diel_us * 0.7  # Factor of 0.7 accounts for typical pure dephasing
             coherence_data["T2 (echo)"] = {
                 "value": t2_estimate,
                 "limit": "Estimated from T1"
@@ -220,6 +298,10 @@ class QubitEngine:
             plot_type: Type of visualization (spectrum, wavefunctions, matrix_elements)
             save: Whether to save the plot
         """
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
         fig, ax = plt.subplots(figsize=(10, 6))
         
         if plot_type == "spectrum":
@@ -422,6 +504,8 @@ class QubitEngine:
         Returns:
             dict: Mapping plot_type -> file_path
         """
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         from pathlib import Path
         

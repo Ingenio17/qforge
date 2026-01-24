@@ -23,15 +23,15 @@ def qubit():
 @qubit.command("create")
 @click.option("--type", "-t", "qubit_type", required=True, 
               type=click.Choice(["transmon", "fluxonium", "flux", "zeropi"], case_sensitive=False),
-              help="Type of qubit to create")
-@click.option("--name", "-n", required=True, help="Name for the qubit")
-@click.option("--EJ", type=float, help="Josephson energy (GHz)")
-@click.option("--EC", type=float, help="Charging energy (GHz)")
-@click.option("--EL", type=float, help="Inductive energy (GHz) [fluxonium only]")
-@click.option("--flux", type=float, default=0.0, help="External flux (Φ₀ units)")
+              help="[REQUIRED] Type of qubit to create")
+@click.option("--name", "-n", required=True, help="[REQUIRED] Name for the qubit")
+@click.option("--EJ", type=float, help="[OPTIONAL] Josephson energy (GHz) - uses preset/default if not specified")
+@click.option("--EC", type=float, help="[OPTIONAL] Charging energy (GHz) - uses preset/default if not specified")
+@click.option("--EL", type=float, help="[OPTIONAL] Inductive energy (GHz) - required for fluxonium, ignored otherwise")
+@click.option("--flux", type=float, default=0.0, help="[OPTIONAL] External flux in Φ₀ units (default: 0.0)")
 @click.option("--preset", "-p", type=click.Choice(["typical", "high_coherence", "fast_gates"]),
-              help="Use preset parameters")
-@click.option("--output", "-o", type=click.Path(), help="Save qubit to file")
+              help="[OPTIONAL] Use preset parameters (typical, high_coherence, or fast_gates)")
+@click.option("--output", "-o", type=click.Path(), help="[OPTIONAL] Save qubit configuration to file")
 def create(qubit_type, name, ej, ec, el, flux, preset, output):
     """Create a new qubit with specified parameters."""
     
@@ -141,10 +141,22 @@ def list_qubits():
     console.print(table)
 
 
+@qubit.command("delete")
+@click.argument("name")
+def delete(name):
+    """Delete a qubit."""
+    try:
+        engine.delete_qubit(name)
+        console.print(f"[bold green]✓ Qubit '{name}' deleted successfully.[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
 @qubit.command("analyze")
 @click.argument("name")
-@click.option("--plot", is_flag=True, help="Generate plots")
-@click.option("--coherence", is_flag=True, help="Estimate coherence times")
+@click.option("--plot", is_flag=True, help="[OPTIONAL] Generate and save visualization plots")
+@click.option("--coherence", is_flag=True, help="[OPTIONAL] Estimate coherence times (T1, T2)")
 def analyze(name, plot, coherence):
     """Analyze qubit properties in detail."""
     try:
@@ -183,8 +195,8 @@ def analyze(name, plot, coherence):
 @qubit.command("export")
 @click.argument("name")
 @click.option("--format", "-f", type=click.Choice(["json", "qutip", "qiskit"]),
-              default="json", help="Export format")
-@click.option("--output", "-o", type=click.Path(), required=True, help="Output file")
+              default="json", help="[OPTIONAL] Export format: json, qutip, or qiskit (default: json)")
+@click.option("--output", "-o", type=click.Path(), required=True, help="[REQUIRED] Output file path")
 def export(name, format, output):
     """Export qubit to various formats."""
     try:

@@ -147,7 +147,7 @@ python examples\transmon_vs_fluxonium.py
 Name: qforge
 Version: 0.1.0
 Description: End-to-end quantum simulation toolkit from qubit physics to hardware design
-Author: QForge Contributors
+Author: Saumya Shah
 License: Apache-2.0
 Location: C:\Users\sdsha\AppData\Local\Programs\Python\Python39\lib\site-packages
 Editable Location: C:\Users\sdsha\.gemini\antigravity\playground\silent-cassini

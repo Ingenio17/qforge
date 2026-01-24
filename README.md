@@ -7,13 +7,21 @@
 
 ## 🚀 Features
 
-- **End-to-End Workflow**: Qubit modeling → Gate physics → Circuit simulation → Hardware design
-- **Popular Qubits**: Transmon, Fluxonium, Flux, Zero-π with pre-configured parameters
-- **Realistic Noise**: Accurate modeling of T1, T2, thermal noise, flux noise, and more
-- **Easy Comparisons**: Side-by-side comparison of different qubit architectures
+### ✅ Fully Implemented
+- **Qubit Physics Modeling**: Transmon, Fluxonium, Flux, Zero-π with pre-configured parameters
+- **Comprehensive Analysis**: Energy spectra, coherence times (T1, T2), parameter sweeps
+- **Realistic Noise Modeling**: Accurate coherence time estimates with multiple decoherence channels
+- **Side-by-Side Comparisons**: Compare different qubit architectures across multiple metrics
 - **Interactive CLI**: Beginner-friendly wizards with rich terminal output
-- **Minimal Typing**: Concise, intuitive commands
-- **Extensible**: Plugin architecture for custom qubits and components
+- **Python API**: Full programmatic access to qubit modeling functionality
+- **Minimal Typing**: Concise, intuitive commands for qubit operations
+- **Export Functionality**: Export to QuTiP, Qiskit formats
+
+### 🚧 Coming Soon
+- **Gate Physics**: Quantum gate dynamics simulation with QuTiP
+- **Circuit Simulation**: Multi-qubit circuit simulation with Qiskit
+- **Hardware Design**: Chip layout design with Qiskit Metal
+- **Plugin Architecture**: Extensible system for custom qubits and components
 
 ## 📦 Installation
 
@@ -24,7 +32,7 @@ pip install qforge
 ### Development Installation
 
 ```bash
-git clone https://github.com/qforge/qforge.git
+git clone https://github.com/Ingenio17/qforge.git
 cd qforge
 pip install -e ".[dev]"
 ```
@@ -43,34 +51,18 @@ qforge --interactive
 qforge qubit create transmon --name my_transmon --EJ 15 --EC 0.3
 ```
 
-### Simulate a Gate
 
-```bash
-qforge gate simulate --qubit my_transmon --gate X --duration 20ns --noise realistic
-```
-
-### Build and Simulate a Circuit
-
-```bash
-qforge circuit build --qubits my_transmon --gates H,X,CNOT --shots 1000
-```
-
-### Design Hardware Layout
-
-```bash
-qforge hardware design --qubit my_transmon --layout grid --export my_chip.gds
-```
 
 ### Compare Qubit Architectures
 
 ```bash
-qforge compare --qubits transmon,fluxonium --metrics coherence,fidelity,frequency
+qforge compare qubits --qubits transmon,fluxonium --metrics coherence,frequency
 ```
 
-### Run End-to-End Workflow
+### Analyze Qubit Properties
 
 ```bash
-qforge workflow run --qubit-type transmon --interactive
+qforge qubit analyze my_transmon --coherence --plot
 ```
 
 ## 📊 Example Output
@@ -101,27 +93,25 @@ QForge is built on industry-standard quantum libraries:
 ## 📚 Documentation
 
 - [Getting Started Guide](docs/getting_started.md)
-- [Command Reference](docs/command_reference.md)
-- [Plugin Development](docs/plugin_development.md)
 - [Examples](examples/)
 
 ## 🎓 Examples
 
 Check out the `examples/` directory for complete workflows:
 
-- `transmon_workflow.py` - Complete transmon simulation
-- `fluxonium_workflow.py` - Complete fluxonium simulation
-- `transmon_vs_fluxonium.py` - Detailed comparison
+- `transmon_workflow.py` - Complete transmon simulation and analysis
+- `transmon_vs_fluxonium.py` - Detailed qubit comparison
 
-## 🔌 Extensibility
+## 🔌 Future Development
 
-QForge supports custom plugins for:
-- Custom qubit types
-- Custom gates and pulses
-- Custom noise models
-- Custom hardware components
+Planned features include:
+- **Gate Simulation**: Custom gates and pulses with QuTiP
+- **Circuit Building**: Multi-qubit circuits with Qiskit integration
+- **Noise Models**: Advanced noise modeling for realistic simulations
+- **Hardware Design**: Chip layout with Qiskit Metal
+- **Plugin System**: Extensible architecture for custom components
 
-See [Plugin Development Guide](docs/plugin_development.md) for details.
+Contributions welcome! See the [Contributing](#-contributing) section.
 
 ## 🤝 Contributing
 

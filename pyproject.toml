@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "QForge Contributors"}
+    {name = "Saumya Shah"}
 ]
 keywords = ["quantum", "simulation", "superconducting", "qubits", "hardware", "transmon", "fluxonium"]
 classifiers = [
@@ -68,10 +68,10 @@ hardware = [
 qforge = "qforge.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/qforge/qforge"
+Homepage = "https://github.com/Ingenio17/qforge"
 Documentation = "https://qforge.readthedocs.io"
-Repository = "https://github.com/qforge/qforge"
-Issues = "https://github.com/qforge/qforge/issues"
+Repository = "https://github.com/Ingenio17/qforge"
+Issues = "https://github.com/Ingenio17/qforge/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

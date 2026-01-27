@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Any
 
 
-def plot_energy_spectrum(qubit, qubit_name: str, n_levels: int = 10, save_path: str = None):
+def plot_energy_spectrum(qubit, qubit_name: str, n_levels: int = 10, save_path: str = None, subtract_ground: bool = False):
     """
     Create comprehensive energy spectrum visualization.
     
@@ -17,6 +17,7 @@ def plot_energy_spectrum(qubit, qubit_name: str, n_levels: int = 10, save_path: 
         qubit_name: Name of the qubit
         n_levels: Number of energy levels to plot
         save_path: Path to save figure (if None, display)
+        subtract_ground: Whether to subtract ground state energy
     
     Returns:
         Path to saved figure or None
@@ -24,6 +25,8 @@ def plot_energy_spectrum(qubit, qubit_name: str, n_levels: int = 10, save_path: 
     fig, ax = plt.subplots(figsize=(12, 8))
     
     evals = qubit.eigenvals(evals_count=n_levels)
+    if subtract_ground and len(evals) > 0:
+        evals = evals - evals[0]
     
     # Plot energy levels as horizontal lines
     for i, energy in enumerate(evals):

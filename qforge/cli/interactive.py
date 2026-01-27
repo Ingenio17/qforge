@@ -8,7 +8,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 
+from qforge.core.qubit_engine import QubitEngine
+
 console = Console()
+engine = QubitEngine()
 
 
 def run_interactive():
@@ -224,15 +227,21 @@ def _wizard_analyze_qubit():
     console.print("\n[bold cyan]Qubit Analysis Wizard[/bold cyan]")
     from qforge.cli.commands.qubit import analyze
     
-    name = prompt("Enter qubit name to analyze: ").strip()
+    # Get available qubits for completion
+    qubits = [q["name"] for q in engine.list_qubits()]
+    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
+    
+    name = prompt("Enter qubit name to analyze: ", completer=qubit_completer).strip()
     if not name: return
 
     # Ask for options
-    do_plot = prompt("Generate plots? (y/n) [y]: ").strip().lower() != "n"
-    do_coherence = prompt("Estimate coherence? (y/n) [y]: ").strip().lower() != "n"
+    do_plot = prompt("Generate plots? (y/n) [y]: ", completer=yn_completer).strip().lower() != "n"
+    do_coherence = prompt("Estimate coherence? (y/n) [y]: ", completer=yn_completer).strip().lower() != "n"
+    do_relative = prompt("Display relative energies? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y"
     
     try:
-        analyze.callback(name=name, plot=do_plot, coherence=do_coherence)
+        analyze.callback(name=name, plot=do_plot, coherence=do_coherence, relative=do_relative)
     except Exception as e:
         # Error is already printed by analyze usually
         if "Abort" not in str(type(e)):
@@ -246,10 +255,15 @@ def _wizard_delete_qubit():
     console.print("\n[bold cyan]Qubit Deletion Wizard[/bold cyan]")
     from qforge.cli.commands.qubit import delete
     
-    name = prompt("Enter qubit name to delete: ").strip()
+    # Get available qubits
+    qubits = [q["name"] for q in engine.list_qubits()]
+    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
+    
+    name = prompt("Enter qubit name to delete: ", completer=qubit_completer).strip()
     if not name: return
     
-    if prompt(f"Are you sure you want to delete '{name}'? (y/n): ").strip().lower() == "y":
+    if prompt(f"Are you sure you want to delete '{name}'? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y":
         try:
             delete.callback(name=name)
         except Exception as e:
@@ -264,10 +278,16 @@ def _wizard_compare_qubits():
     console.print("\n[bold cyan]Qubit Comparison Wizard[/bold cyan]")
     from qforge.cli.commands.compare import compare_qubits
     
-    qubits = prompt("Enter qubit names (comma-separated): ").strip()
+    # Get available qubits
+    qubits = [q["name"] for q in engine.list_qubits()]
+    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    metric_completer = WordCompleter(["all", "frequency", "anharmonicity", "t1", "t2"], ignore_case=True)
+    
+    console.print("[dim]Tip: Use Tab to autocomplete qubit names[/dim]")
+    qubits = prompt("Enter qubit names (comma-separated): ", completer=qubit_completer).strip()
     if not qubits: return
     
-    metrics = prompt("Enter metrics (comma-separated) [default: all]: ").strip() or "all"
+    metrics = prompt("Enter metrics (comma-separated) [default: all]: ", completer=metric_completer).strip() or "all"
     
     try:
         compare_qubits.callback(qubits=qubits, metrics=metrics, output=None)

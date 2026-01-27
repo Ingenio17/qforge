@@ -17,7 +17,7 @@ def circuit():
 @circuit.command("build")
 @click.option("--qubits", required=True, help="Comma-separated qubit names")
 @click.option("--gates", required=True, help="Comma-separated gate sequence")
-@click.option("--shots", type=int, default=1024, help="Number of shots")
+@click.option("--shots", type=int, default=1024, show_default=True, help="Number of shots")
 def build(qubits, gates, shots):
     """Build and simulate a quantum circuit."""
     console.print(f"[yellow]Circuit simulation: {gates} on {qubits}[/yellow]")

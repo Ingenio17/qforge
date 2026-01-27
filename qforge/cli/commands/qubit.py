@@ -23,16 +23,17 @@ def qubit():
 @qubit.command("create")
 @click.option("--type", "-t", "qubit_type", required=True, 
               type=click.Choice(["transmon", "fluxonium", "flux", "zeropi"], case_sensitive=False),
-              help="[REQUIRED] Type of qubit to create")
-@click.option("--name", "-n", required=True, help="[REQUIRED] Name for the qubit")
-@click.option("--EJ", type=float, help="[OPTIONAL] Josephson energy (GHz) - uses preset/default if not specified")
-@click.option("--EC", type=float, help="[OPTIONAL] Charging energy (GHz) - uses preset/default if not specified")
-@click.option("--EL", type=float, help="[OPTIONAL] Inductive energy (GHz) - required for fluxonium, ignored otherwise")
-@click.option("--flux", type=float, default=0.0, help="[OPTIONAL] External flux in Φ₀ units (default: 0.0)")
+              help="Type of qubit to create")
+@click.option("--name", "-n", required=True, help="Name for the qubit")
+@click.option("--EJ", type=float, show_default=True, help="Josephson energy (GHz)")
+@click.option("--EC", type=float, show_default=True, help="Charging energy (GHz)")
+@click.option("--EL", type=float, show_default=True, help="Inductive energy (GHz) - required for fluxonium")
+@click.option("--flux", type=float, default=0.0, show_default=True, help="External flux in Φ₀ units")
 @click.option("--preset", "-p", type=click.Choice(["typical", "high_coherence", "fast_gates"]),
-              help="[OPTIONAL] Use preset parameters (typical, high_coherence, or fast_gates)")
-@click.option("--output", "-o", type=click.Path(), help="[OPTIONAL] Save qubit configuration to file")
-def create(qubit_type, name, ej, ec, el, flux, preset, output):
+              help="Use preset parameters")
+@click.option("--output", "-o", type=click.Path(), help="Save qubit configuration to file")
+@click.option("--relative", is_flag=True, help="Display energies relative to ground state")
+def create(qubit_type, name, ej, ec, el, flux, preset, output, relative):
     """Create a new qubit with specified parameters."""
     
     # Build parameters dictionary
@@ -52,10 +53,10 @@ def create(qubit_type, name, ej, ec, el, flux, preset, output):
         params["flux"] = flux
     
     # Call the creation function
-    _create_qubit(qubit_type, name, params, output)
+    _create_qubit(qubit_type, name, params, output, relative)
 
 
-def _create_qubit(qubit_type, name, params, output=None):
+def _create_qubit(qubit_type, name, params, output=None, relative=False):
     """Internal function to create qubit (used by interactive mode too)."""
     try:
         qubit_obj = engine.create_qubit(qubit_type, name, params)
@@ -77,10 +78,10 @@ def _create_qubit(qubit_type, name, params, output=None):
         
         # Compute basic properties
         with console.status("[cyan]Computing energy spectrum...[/cyan]"):
-            spectrum = engine.compute_spectrum(qubit_obj, n_levels=5)
+            spectrum = engine.compute_spectrum(qubit_obj, n_levels=5, subtract_ground=relative)
         
         # Display spectrum
-        spec_table = Table(title="Energy Spectrum (first 5 levels)", show_header=True)
+        spec_table = Table(title=f"Energy Spectrum (first 5 levels){' - Relative' if relative else ''}", show_header=True)
         spec_table.add_column("Level", justify="center")
         spec_table.add_column("Energy (GHz)", justify="right")
         spec_table.add_column("Transition (GHz)", justify="right")
@@ -155,9 +156,10 @@ def delete(name):
 
 @qubit.command("analyze")
 @click.argument("name")
-@click.option("--plot", is_flag=True, help="[OPTIONAL] Generate and save visualization plots")
-@click.option("--coherence", is_flag=True, help="[OPTIONAL] Estimate coherence times (T1, T2)")
-def analyze(name, plot, coherence):
+@click.option("--plot", is_flag=True, help="Generate and save visualization plots")
+@click.option("--coherence", is_flag=True, help="Estimate coherence times (T1, T2)")
+@click.option("--relative", is_flag=True, help="Display energies relative to ground state")
+def analyze(name, plot, coherence, relative):
     """Analyze qubit properties in detail."""
     try:
         qubit_obj = engine.get_qubit(name)
@@ -166,11 +168,11 @@ def analyze(name, plot, coherence):
         
         # Detailed spectrum
         with console.status("[cyan]Computing detailed spectrum...[/cyan]"):
-            spectrum = engine.compute_spectrum(qubit_obj, n_levels=10)
+            spectrum = engine.compute_spectrum(qubit_obj, n_levels=10, subtract_ground=relative)
         
         if plot:
             console.print("[yellow]Generating plots...[/yellow]")
-            engine.visualize(qubit_obj, plot_type="spectrum")
+            engine.visualize(qubit_obj, plot_type="spectrum", subtract_ground=relative)
             console.print("[green]✓ Plots saved to outputs/[/green]")
         
         if coherence:
@@ -195,8 +197,8 @@ def analyze(name, plot, coherence):
 @qubit.command("export")
 @click.argument("name")
 @click.option("--format", "-f", type=click.Choice(["json", "qutip", "qiskit"]),
-              default="json", help="[OPTIONAL] Export format: json, qutip, or qiskit (default: json)")
-@click.option("--output", "-o", type=click.Path(), required=True, help="[REQUIRED] Output file path")
+              default="json", show_default=True, help="Export format")
+@click.option("--output", "-o", type=click.Path(), required=True, help="Output file path")
 def export(name, format, output):
     """Export qubit to various formats."""
     try:

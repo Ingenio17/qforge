@@ -213,18 +213,22 @@ class QubitEngine:
         
         return qubit_list
     
-    def compute_spectrum(self, qubit, n_levels: int = 5) -> np.ndarray:
+    def compute_spectrum(self, qubit, n_levels: int = 5, subtract_ground: bool = False) -> np.ndarray:
         """
         Compute energy spectrum of the qubit.
         
         Args:
             qubit: scqubits qubit object
             n_levels: Number of energy levels to compute
+            subtract_ground: Whether to subtract ground state energy (setting E0 = 0)
         
         Returns:
             Array of energy eigenvalues
         """
-        return qubit.eigenvals(evals_count=n_levels)
+        evals = qubit.eigenvals(evals_count=n_levels)
+        if subtract_ground and len(evals) > 0:
+            evals = evals - evals[0]
+        return evals
     
     def estimate_coherence(self, qubit, temperature: float = 0.015) -> Dict[str, Dict]:
         """
@@ -289,7 +293,7 @@ class QubitEngine:
         
         return coherence_data
     
-    def visualize(self, qubit, plot_type: str = "spectrum", save: bool = True):
+    def visualize(self, qubit, plot_type: str = "spectrum", save: bool = True, subtract_ground: bool = False):
         """
         Visualize qubit properties.
         
@@ -297,6 +301,7 @@ class QubitEngine:
             qubit: scqubits qubit object
             plot_type: Type of visualization (spectrum, wavefunctions, matrix_elements)
             save: Whether to save the plot
+            subtract_ground: Whether to subtract ground state energy (for spectrum)
         """
         import matplotlib
         matplotlib.use('Agg')
@@ -307,10 +312,12 @@ class QubitEngine:
         if plot_type == "spectrum":
             # Plot energy spectrum
             evals = qubit.eigenvals(evals_count=10)
+            if subtract_ground and len(evals) > 0:
+                evals = evals - evals[0]
             ax.plot(range(len(evals)), evals, 'o-', linewidth=2, markersize=8)
             ax.set_xlabel("Energy Level", fontsize=12)
             ax.set_ylabel("Energy (GHz)", fontsize=12)
-            ax.set_title("Energy Spectrum", fontsize=14)
+            ax.set_title("Energy Spectrum" + (" (Relative)" if subtract_ground else ""), fontsize=14)
             ax.grid(True, alpha=0.3)
         
         elif plot_type == "wavefunctions":
@@ -490,7 +497,7 @@ class QubitEngine:
         
         return results
     
-    def visualize_enhanced(self, qubit, plot_types: list = None, save: bool = True):
+    def visualize_enhanced(self, qubit, plot_types: list = None, save: bool = True, subtract_ground: bool = False):
         """
         Create comprehensive visualizations for a qubit.
         
@@ -500,6 +507,7 @@ class QubitEngine:
                 Options: "spectrum", "wavefunctions", "matrix_elements", "potential"
                 If None, generates all applicable plots
             save: Whether to save plots
+            subtract_ground: Whether to subtract ground state energy (for spectrum)
         
         Returns:
             dict: Mapping plot_type -> file_path
@@ -529,7 +537,7 @@ class QubitEngine:
                     save_path = None
                     if save:
                         save_path = str(Path(OUTPUT_DIRS["plots"]) / f"{qubit_name}_spectrum.png")
-                    path = plot_energy_spectrum(qubit, qubit_name, save_path=save_path)
+                    path = plot_energy_spectrum(qubit, qubit_name, save_path=save_path, subtract_ground=subtract_ground)
                     if path:
                         saved_plots[plot_type] = path
                 

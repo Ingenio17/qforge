@@ -18,7 +18,7 @@ console = Console()
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(version=__version__, prog_name="qforge")
+@click.version_option(version=__version__, prog_name="QForge", message="%(prog)s %(version)s")
 @click.option(
     "--interactive",
     "-i",

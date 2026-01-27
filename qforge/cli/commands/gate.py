@@ -16,9 +16,9 @@ def gate():
 
 @gate.command("simulate")
 @click.option("--qubit", required=True, help="Qubit name")
-@click.option("--gate", required=True, type=click.Choice(["X", "Y", "Z", "H", "CNOT"]))
-@click.option("--duration", type=float, help="Gate duration (ns)")
-@click.option("--noise", type=click.Choice(["none", "realistic"]), default="none")
+@click.option("--gate", required=True, type=click.Choice(["X", "Y", "Z", "H", "CNOT"]), help="Gate type")
+@click.option("--duration", type=float, show_default=True, help="Gate duration (ns)")
+@click.option("--noise", type=click.Choice(["none", "realistic"]), default="none", show_default=True, help="Noise model")
 def simulate(qubit, gate, duration, noise):
     """Simulate quantum gate dynamics."""
     console.print(f"[yellow]Gate simulation: {gate} on {qubit}[/yellow]")

@@ -20,7 +20,7 @@
 ### 🚧 Coming Soon
 - **Circuit Simulation**: Multi-qubit circuit simulation with Qiskit
 - **Hardware Design**: Chip layout design with Qiskit Metal
-- **插件 Architecture**: Extensible system for custom qubits and components
+- **Plugin Architecture**: Extensible system for custom qubits and components
 
 ## 📦 Installation
 

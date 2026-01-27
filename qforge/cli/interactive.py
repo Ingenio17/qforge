@@ -148,8 +148,54 @@ def _wizard_create_qubit():
 def _wizard_simulate_gate():
     """Wizard for simulating gates."""
     console.print("\n[bold cyan]Gate Simulation Wizard[/bold cyan]")
-    console.print("[yellow]This feature will simulate quantum gate dynamics with realistic noise.[/yellow]")
-    console.print("[dim]Coming soon in interactive mode. Use: qforge gate simulate --help[/dim]")
+    
+    # Get available qubits
+    qubits = [q["name"] for q in engine.list_qubits()]
+    if not qubits:
+        console.print("[yellow]No qubits found. Please create a qubit first.[/yellow]")
+        return
+
+    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    gate_completer = WordCompleter(["X", "Y", "Z", "H"], ignore_case=True)
+    
+    qubit = prompt("Select qubit: ", completer=qubit_completer).strip()
+    if not qubit: return
+    
+    gate = prompt("Select gate (X/Y/Z/H): ", completer=gate_completer).strip().upper()
+    if not gate: return
+    
+    duration = prompt("Duration (ns) [default: 20.0]: ").strip() or "20.0"
+    
+    noise_completer = WordCompleter(["none", "realistic"], ignore_case=True)
+    noise = prompt("Noise model (none/realistic) [default: none]: ", completer=noise_completer).strip() or "none"
+    
+    console.print(f"\n[green]Simulating {gate} on {qubit}...[/green]")
+    
+    # Run simulation command (invoking directly to show plot)
+    from qforge.cli.commands.gate import simulate
+    try:
+        # We invoke callback but handle save manually to avoid click context issues if simpler
+        # Actually easier to just run our own logic or call `engine` directly here?
+        # Let's call the click command callback but we need to handle "save" interaction ourself
+        # or pass safe=False and ask later. 
+        # Click command prints plot.
+        
+        # We'll pass save=False initially
+        simulate.callback(qubit=qubit, gate=gate, duration=float(duration), noise=noise, save=False, steps=100)
+        
+        # After plot is shown (TerminalPlotter), ask to save
+        yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
+        if prompt("\nSave plot to file? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y":
+            # Re-run logic to save? Or better yet, the click command logic should be split.
+            # For efficiency let's just re-run with save=True, simulation is fast.
+            console.print("[dim]Re-running to save high-res plot...[/dim]")
+            simulate.callback(qubit=qubit, gate=gate, duration=float(duration), noise=noise, save=True, steps=100)
+            
+    except Exception as e:
+        if "Abort" not in str(type(e)):
+            console.print(f"[red]Error: {e}[/red]")
+    
+    input("\nPress Enter to continue...")
 
 
 def _wizard_build_circuit():

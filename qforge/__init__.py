@@ -4,7 +4,7 @@ QForge: Quantum Simulation Toolkit
 End-to-end quantum simulation from qubit physics to hardware design.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 __author__ = "Saumya Shah"
 
 from qforge.core.qubit_engine import QubitEngine

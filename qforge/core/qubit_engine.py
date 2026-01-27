@@ -255,6 +255,9 @@ class QubitEngine:
         coherence_data = {}
         
         try:
+            import scqubits as scq
+            scq.settings.T1_DEFAULT_WARNING = False
+
             # T1 from dielectric loss
             # scqubits returns time in units of 1/frequency.
             # Since frequency is in GHz, time is in ns.

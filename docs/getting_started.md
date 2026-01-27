@@ -11,7 +11,7 @@ pip install qforge
 Or for development:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Ingenio17/qforge.git
 cd qforge
 pip install -e ".[dev]"
 ```
@@ -43,32 +43,34 @@ Output:
 ╭─────────────────────────────────────────────────────────╮
 │           Qubit Created: my_transmon                    │
 ├──────────────────┬──────────────────────────────────────┤
-│ Property         │ Value                                 │
+│ Property         │ Value                                │
 ├──────────────────┼──────────────────────────────────────┤
-│ Type             │ Transmon                              │
-│ Name             │ my_transmon                           │
-│ EJ               │ 15.000 GHz                            │
-│ EC               │ 0.300 GHz                             │
+│ Type             │ Transmon                             │
+│ Name             │ my_transmon                          │
+│ EJ               │ 15.000 GHz                           │
+│ EC               │ 0.300 GHz                            │
 ╰──────────────────┴──────────────────────────────────────╯
 ```
 
-Or use presets:
+#### Analyzing and Plotting
+
+Analyze the qubit's energy spectrum directly in the terminal:
 
 ```bash
-qforge qubit create --type fluxonium --name my_fluxonium --preset high_coherence
+qforge qubit analyze --name my_transmon --plot
 ```
 
-#### Analyzing a Qubit
+This computes the spectrum and displays an ASCII plot of the energy levels (and saves high-res images).
+
+#### Simulating Gates
+
+Simulate quantum dynamics (e.g., a Pi-pulse X gate) to observe Rabi oscillations:
 
 ```bash
-qforge qubit analyze my_transmon --coherence --plot
+qforge gate simulate --qubit my_transmon --gate X --duration 40 --save
 ```
 
-This computes:
-- Energy spectrum
-- Anharmonicity
-- Coherence times (T1, T2)
-- Generates plots (saved to `outputs/plots/`)
+This will run a time-domain simulation using QuTiP and plot the population transfer in real-time in your terminal.
 
 #### Comparing Qubits
 
@@ -78,41 +80,41 @@ Compare transmon vs fluxonium:
 qforge compare qubits --qubits transmon,fluxonium --metrics all
 ```
 
-Output:
-```
-╭──────────────────────────────────────────────────────────────────╮  
-│                    Qubit Comparison                               │
-├──────────────────┬────────────────┬─────────────────────────────┤
-│ Metric           │ Transmon       │ Fluxonium                   │
-├──────────────────┼────────────────┼─────────────────────────────┤
-│ Frequency (ω₀₁)  │ 4.850 GHz      │ 0.750 GHz                   │
-│ Anharmonicity (α)│ -220.0 MHz     │ -1200.0 MHz ✓               │
-│ T1               │ 50.0 μs        │ 1000.0 μs ✓                 │
-│ T2               │ 35.0 μs        │ 700.0 μs ✓                  │
-╰──────────────────┴────────────────┴─────────────────────────────╯
-```
-
 ### 3. Python API
 
-Use QForge programmatically:
+Use QForge programmatically. See `examples/gate_simulation.py` for a complete script.
 
 ```python
 from qforge.core.qubit_engine import QubitEngine
+from qforge.core.gate_engine import GateEngine
+from qforge.utils.terminal_plot import TerminalPlotter
 
-# Create engine
-engine = QubitEngine()
+# 1. Create Engine
+qubit_engine = QubitEngine()
 
-# Create a transmon
+# 2. Create Qubit
 params = {"EJ": 15.0, "EC": 0.3}
-transmon = engine.create_qubit("transmon", "my_transmon", params)
+qubit = qubit_engine.create_qubit(
+    qubit_type="transmon", 
+    name="my_transmon", 
+    params=params
+)
 
-# Compute properties
-spectrum = engine.compute_spectrum(transmon, n_levels=5)
-coherence = engine.estimate_coherence(transmon)
+# 3. Simulate Gate
+gate_engine = GateEngine()
+result = gate_engine.simulate_dynamics(
+    qubit_name="my_transmon",
+    gate_type="X",
+    duration=40.0,
+    noise_model="realistic"
+)
 
-# Export for other tools
-engine.export_to_qutip(transmon, "my_transmon.pkl")
-engine.export_to_qiskit(transmon, "my_transmon.json")
+# 4. Plot
+TerminalPlotter.plot_time_evolution(
+    result["times"], 
+    result["expectations"], 
+    result["labels"]
+)
 ```
 
 ## Supported Qubits
@@ -128,8 +130,8 @@ engine.export_to_qiskit(transmon, "my_transmon.json")
 
 QForge supports end-to-end workflows:
 
-1. **Qubit Physics** (`qforge qubit`) - Model superconducting qubits
-2. **Gate Dynamics** (`qforge gate`) - Simulate quantum gates *[Coming soon]*
+1. **Qubit Physics** (`qforge qubit`) - Model superconducting qubits (**Implemented**)
+2. **Gate Dynamics** (`qforge gate`) - Simulate quantum gates (**Implemented**)
 3. **Circuit Simulation** (`qforge circuit`) - Multi-qubit circuits *[Coming soon]*
 4. **Hardware Design** (`qforge hardware`) - Chip layout *[Coming soon]*
 
@@ -137,19 +139,13 @@ QForge supports end-to-end workflows:
 
 Check the `examples/` directory:
 
+- `gate_simulation.py` - End-to-end gate dynamics and plotting
 - `transmon_workflow.py` - Complete transmon analysis
 - `transmon_vs_fluxonium.py` - Detailed comparison
 
-Run them:
-
-```bash
-python examples/transmon_workflow.py
-python examples/transmon_vs_fluxonium.py
-```
-
 ## Next Steps
 
-- Read the [Command Reference](command_reference.md) for all CLI commands
+- Read the full documentation at `docs/`
 - Explore [Plugin Development](plugin_development.md) for custom qubits
 - Join our community for support
 

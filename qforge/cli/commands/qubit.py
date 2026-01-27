@@ -155,8 +155,8 @@ def delete(name):
 
 
 @qubit.command("analyze")
-@click.argument("name")
-@click.option("--plot", is_flag=True, help="Generate and save visualization plots")
+@click.option("--name", "-n", required=True, help="Name of the qubit to analyze")
+@click.option("--plot", is_flag=True, help="Show terminal plot and save visualizations")
 @click.option("--coherence", is_flag=True, help="Estimate coherence times (T1, T2)")
 @click.option("--relative", is_flag=True, help="Display energies relative to ground state")
 def analyze(name, plot, coherence, relative):
@@ -171,7 +171,14 @@ def analyze(name, plot, coherence, relative):
             spectrum = engine.compute_spectrum(qubit_obj, n_levels=10, subtract_ground=relative)
         
         if plot:
-            console.print("[yellow]Generating plots...[/yellow]")
+            # Terminal Plot
+            from qforge.utils.terminal_plot import TerminalPlotter
+            energies = spectrum
+            title_suffix = " (Relative)" if relative else ""
+            TerminalPlotter.plot_spectrum(energies, title=f"Energy Spectrum: {name}{title_suffix}")
+            
+            # File Plots
+            console.print("\n[yellow]Generating high-resolution plots...[/yellow]")
             engine.visualize(qubit_obj, plot_type="spectrum", subtract_ground=relative)
             console.print("[green]✓ Plots saved to outputs/[/green]")
         

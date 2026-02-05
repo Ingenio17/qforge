@@ -16,6 +16,8 @@ from qforge.utils.console import enable_unicode_console
 enable_unicode_console()
 
 from qforge.core.qubit_engine import QubitEngine
+from qforge.core.gate_engine import GateEngine
+from qforge.utils.terminal_plot import TerminalPlotter
 
 
 def main():
@@ -66,18 +68,35 @@ def main():
     for param, data in coherence.items():
         print(f"   {param}: {data['value']:.2f} μs ({data['limit']})")
     
-    # Step 4: Save qubit
-    print("\n4. Saving qubit...")
+    # Step 4: Simulate Gate Dynamics
+    print("\n4. Simulating Gate Dynamics (Pi-pulse)...")
+    gate_engine = GateEngine()
+    result = gate_engine.simulate_dynamics(
+        qubit_name="my_transmon",
+        gate_type="X",
+        duration=40.0,
+        noise_model="realistic"
+    )
+    
+    print("   ✓ Simulation complete. Plotting dynamics:")
+    TerminalPlotter.plot_time_evolution(
+        result["times"], 
+        result["expectations"], 
+        result["labels"]
+    )
+
+    # Step 5: Save qubit
+    print("\n5. Saving qubit...")
     engine.save_qubit(transmon, "outputs/qubits/my_transmon.json")
     print("   ✓ Saved to outputs/qubits/my_transmon.json")
     
-    # Step 5: Export for QuTiP (for gate simulations)
-    print("\n5. Exporting for QuTiP...")
+    # Step 6: Export for QuTiP (for external use)
+    print("\n6. Exporting for QuTiP...")
     engine.export_to_qutip(transmon, "outputs/qubits/my_transmon_qutip.pkl")
     print("   ✓ Exported to outputs/qubits/my_transmon_qutip.pkl")
     
-    # Step 6: Export for Qiskit (for circuit simulations)
-    print("\n6. Exporting for Qiskit...")
+    # Step 7: Export for Qiskit (for circuit simulations)
+    print("\n7. Exporting for Qiskit...")
     engine.export_to_qiskit(transmon, "outputs/qubits/my_transmon_qiskit.json")
     print("   ✓ Exported to outputs/qubits/my_transmon_qiskit.json")
     

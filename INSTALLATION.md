@@ -40,7 +40,7 @@
 [OK] QubitEngine created
 [OK] Transmon qubit created (EJ=15.0 GHz, EC=0.3 GHz)
 [OK] Spectrum computed - Frequency: 5.683 GHz, Anharmonicity: -344.8 MHz
-[OK] Comparison engine working - compared transmon vs fluxonium
+[OK] Comparison engine working - compared comprehensive_comparison
 ```
 
 ### ✅ Command Line Interface-  `qforge --version` → Works!
@@ -135,7 +135,7 @@ python -m pytest tests/ -v
 
 ### 5. Run Examples
 ```powershell
-python examples\transmon_vs_fluxonium.py
+python examples\comprehensive_comparison.py
 # Note: May have Unicode display issues, but runs correctly
 ```
 

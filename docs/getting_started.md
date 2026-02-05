@@ -141,7 +141,7 @@ Check the `examples/` directory:
 
 - `gate_simulation.py` - End-to-end gate dynamics and plotting
 - `transmon_workflow.py` - Complete transmon analysis
-- `transmon_vs_fluxonium.py` - Detailed comparison
+- `comprehensive_comparison.py` - Advanced multi-qubit comparison with reports
 
 ## Next Steps
 

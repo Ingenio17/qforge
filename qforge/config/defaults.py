@@ -116,6 +116,8 @@ HARDWARE_DEFAULTS = {
 
 # Output directories
 OUTPUT_DIRS = {
+    "base": "outputs",
+    "runs": "outputs/runs",
     "qubits": "outputs/qubits",
     "gates": "outputs/gates",
     "circuits": "outputs/circuits",

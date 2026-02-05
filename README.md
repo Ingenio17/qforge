@@ -75,7 +75,8 @@ Check out the `examples/` directory for complete workflows:
 
 - `gate_simulation.py`: End-to-end gate dynamics simulation.
 - `transmon_workflow.py`: Complete transmon simulation and analysis.
-- `transmon_vs_fluxonium.py`: Detailed qubit comparison.
+- `fluxonium_workflow.py`: Complete fluxonium simulation and analysis.
+- `comprehensive_comparison.py`: Advanced multi-qubit comparison with reports.
 
 ## 🏗️ Architecture
 

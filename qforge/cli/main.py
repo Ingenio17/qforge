@@ -10,7 +10,7 @@ from rich.panel import Panel
 from qforge.utils.console import enable_unicode_console
 enable_unicode_console()
 
-from qforge.cli.commands import qubit, gate, circuit, hardware, compare, workflow
+from qforge.cli.commands import qubit, gate, circuit, hardware, compare, workflow, example, clean
 from qforge.cli.interactive import run_interactive
 from qforge import __version__
 
@@ -58,6 +58,8 @@ cli.add_command(circuit.circuit)
 cli.add_command(hardware.hardware)
 cli.add_command(compare.compare)
 cli.add_command(workflow.workflow)
+cli.add_command(example.example)
+cli.add_command(clean.clean)
 
 
 @cli.command()

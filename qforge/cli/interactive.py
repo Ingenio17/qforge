@@ -7,6 +7,10 @@ from prompt_toolkit.completion import WordCompleter
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
+import os
+import sys
+import subprocess
+from qforge.cli.commands.example import list_example_files, get_examples_dir
 
 from qforge.core.qubit_engine import QubitEngine
 
@@ -37,13 +41,14 @@ def run_interactive():
         "Build a circuit",
         "Design hardware",
         "Compare qubits",
+        "Run an example",
         "Run full workflow",
         "Help",
         "Exit",
     ]
     
     completer = WordCompleter(
-        [opt.lower() for opt in menu_options], ignore_case=True
+        [opt.lower() for opt in menu_options], ignore_case=True, sentence=True
     )
     
     while True:
@@ -85,11 +90,13 @@ def run_interactive():
                 _wizard_design_hardware()
             elif choice in ["compare qubits", "8"]:
                 _wizard_compare_qubits()
-            elif choice in ["run full workflow", "9"]:
+            elif choice in ["run an example", "9"]:
+                _wizard_run_example()
+            elif choice in ["run full workflow", "10"]:
                 _wizard_full_workflow()
-            elif choice in ["help", "10"]:
+            elif choice in ["help", "11"]:
                 _show_help()
-            elif choice in ["exit", "11", "quit", "q"]:
+            elif choice in ["exit", "12", "quit", "q"]:
                 console.print("\n[cyan]Thank you for using QForge! Goodbye![/cyan]\n")
                 break
             else:
@@ -155,7 +162,7 @@ def _wizard_simulate_gate():
         console.print("[yellow]No qubits found. Please create a qubit first.[/yellow]")
         return
 
-    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
     gate_completer = WordCompleter(["X", "Y", "Z", "H"], ignore_case=True)
     
     qubit = prompt("Select qubit: ", completer=qubit_completer).strip()
@@ -219,6 +226,45 @@ def _wizard_compare_qubits():
     console.print("[dim]Coming soon in interactive mode. Use: qforge compare --help[/dim]")
 
 
+
+def _wizard_run_example():
+    """Wizard for running examples."""
+    console.print("\n[bold cyan]Run Example Wizard[/bold cyan]")
+    
+    examples = list_example_files()
+    if not examples:
+        console.print("[yellow]No examples found.[/yellow]")
+        return
+        
+    example_completer = WordCompleter(examples, ignore_case=True, sentence=True)
+    
+    console.print("\n[bold]Available examples:[/bold]")
+    for ex in examples:
+        console.print(f" - {ex}")
+        
+    name = prompt("\nSelect example to run: ", completer=example_completer).strip()
+    if not name: return
+    
+    # Normalize
+    if not name.endswith(".py"):
+        name += ".py"
+        
+    examples_dir = get_examples_dir()
+    script_path = os.path.join(examples_dir, name)
+    
+    if not os.path.exists(script_path):
+        console.print(f"[red]Example '{name}' not found.[/red]")
+        return
+        
+    console.print(f"\n[green]Running {name}...[/green]")
+    try:
+        subprocess.run([sys.executable, script_path], check=True)
+    except Exception as e:
+        console.print(f"[red]Error running example: {e}[/red]")
+    
+    input("\nPress Enter to continue...")
+
+
 def _wizard_full_workflow():
     """Wizard for full workflow."""
     console.print("\n[bold cyan]Full Workflow Wizard[/bold cyan]")
@@ -275,7 +321,7 @@ def _wizard_analyze_qubit():
     
     # Get available qubits for completion
     qubits = [q["name"] for q in engine.list_qubits()]
-    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
     yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
     
     name = prompt("Enter qubit name to analyze: ", completer=qubit_completer).strip()
@@ -303,7 +349,7 @@ def _wizard_delete_qubit():
     
     # Get available qubits
     qubits = [q["name"] for q in engine.list_qubits()]
-    qubit_completer = WordCompleter(qubits, ignore_case=True)
+    qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
     yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
     
     name = prompt("Enter qubit name to delete: ", completer=qubit_completer).strip()

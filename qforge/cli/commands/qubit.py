@@ -20,16 +20,23 @@ def qubit():
     pass
 
 
+# Compute dynamic choices
+QUBIT_TYPES = list(QUBIT_PRESETS.keys())
+ALL_PRESETS = set()
+for q_type in QUBIT_PRESETS:
+    ALL_PRESETS.update(QUBIT_PRESETS[q_type].keys())
+PRESET_CHOICES = list(ALL_PRESETS)
+
 @qubit.command("create")
 @click.option("--type", "-t", "qubit_type", required=True, 
-              type=click.Choice(["transmon", "fluxonium", "flux", "zeropi"], case_sensitive=False),
+              type=click.Choice(QUBIT_TYPES, case_sensitive=False),
               help="Type of qubit to create")
 @click.option("--name", "-n", required=True, help="Name for the qubit")
 @click.option("--EJ", type=float, show_default=True, help="Josephson energy (GHz)")
 @click.option("--EC", type=float, show_default=True, help="Charging energy (GHz)")
 @click.option("--EL", type=float, show_default=True, help="Inductive energy (GHz) - required for fluxonium")
-@click.option("--flux", type=float, default=0.0, show_default=True, help="External flux in Φ₀ units")
-@click.option("--preset", "-p", type=click.Choice(["typical", "high_coherence", "fast_gates"]),
+@click.option("--flux", type=float, default=None, help="External flux in Φ₀ units")
+@click.option("--preset", "-p", type=click.Choice(PRESET_CHOICES),
               help="Use preset parameters")
 @click.option("--output", "-o", type=click.Path(), help="Save qubit configuration to file")
 @click.option("--relative", is_flag=True, help="Display energies relative to ground state")
@@ -47,7 +54,7 @@ def create(qubit_type, name, ej, ec, el, flux, preset, output, relative):
         params["EJ"] = ej
     if ec is not None:
         params["EC"] = ec
-    if el is not None and qubit_type == "fluxonium":
+    if el is not None and (qubit_type == "fluxonium" or qubit_type == "zeropi"):
         params["EL"] = el
     if flux is not None:
         params["flux"] = flux
@@ -58,6 +65,17 @@ def create(qubit_type, name, ej, ec, el, flux, preset, output, relative):
 
 def _create_qubit(qubit_type, name, params, output=None, relative=False):
     """Internal function to create qubit (used by interactive mode too)."""
+    # Warn if qubit already exists
+    if name in [q["name"] for q in engine.list_qubits()]:
+        console.print(f"[yellow]⚠ Qubit '{name}' already exists and will be overwritten.[/yellow]")
+    
+    # Unit mapping for display
+    PARAM_UNITS = {
+        "EJ": "GHz", "EC": "GHz", "EL": "GHz", "EJ1": "GHz", "EJ2": "GHz", "EJ3": "GHz",
+        "ECJ1": "GHz", "ECJ2": "GHz", "ECJ3": "GHz", "ECg1": "GHz", "ECg2": "GHz",
+        "flux": "Φ₀", "ng": "", "ncut": "", "cutoff": "",
+    }
+    
     try:
         qubit_obj = engine.create_qubit(qubit_type, name, params)
         
@@ -70,9 +88,11 @@ def _create_qubit(qubit_type, name, params, output=None, relative=False):
         table.add_row("Name", name)
         for key, value in params.items():
             if isinstance(value, float):
-                table.add_row(key, f"{value:.3f} GHz")
+                unit = PARAM_UNITS.get(key, "GHz")
+                table.add_row(key, f"{value:.3f} {unit}".strip())
             else:
-                table.add_row(key, str(value))
+                unit = PARAM_UNITS.get(key, "")
+                table.add_row(key, f"{str(value)} {unit}".strip())
         
         console.print(table)
         

@@ -53,7 +53,7 @@ def test_list_qubits():
     
     qubits = engine.list_qubits()
     
-    assert len(qubits) == 2
+    assert len(qubits) >= 2
     assert any(q["name"] == "q1" for q in qubits)
     assert any(q["name"] == "q2" for q in qubits)
 

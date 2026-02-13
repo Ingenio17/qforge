@@ -1,0 +1,802 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>qforge.core.gate_engine &mdash; QForge 0.2.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=938c9ccc"></script>
+      <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            QForge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">QForge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">qforge.core.gate_engine</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for qforge.core.gate_engine</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Gate Engine: Simulation of quantum gates and dynamics using QuTiP.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">qutip</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">qforge.core.qubit_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">QubitEngine</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">qforge.core.coupling</span><span class="w"> </span><span class="kn">import</span> <span class="n">CouplingGenerator</span><span class="p">,</span> <span class="n">CouplingType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">qforge.config.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">OUTPUT_DIRS</span>
+
+
+<div class="viewcode-block" id="GateEngine">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GateEngine</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Engine for simulating quantum gates and dynamics.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the gate engine.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span> <span class="o">=</span> <span class="n">QubitEngine</span><span class="p">()</span>
+        
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_qubit_hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the Hamiltonian of a qubit in the computational basis (truncated).&quot;&quot;&quot;</span>
+        <span class="n">qubit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span><span class="o">.</span><span class="n">get_qubit</span><span class="p">(</span><span class="n">qubit_name</span><span class="p">)</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="n">qubit</span><span class="o">.</span><span class="n">truncated_dim</span>
+        
+        <span class="c1"># Get eigenvalues for truncated diagonal Hamiltonian</span>
+        <span class="n">evals</span> <span class="o">=</span> <span class="n">qubit</span><span class="o">.</span><span class="n">eigenvals</span><span class="p">(</span><span class="n">evals_count</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
+        <span class="c1"># Convert to angular frequency (GHz -&gt; rad/ns * 2pi? No, GHz * 2pi = rad/ns if t in ns)</span>
+        <span class="c1"># Actually QuTiP usually assumes consistent units. If t is ns, E should be in GHz * 2pi.</span>
+        <span class="k">return</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">evals</span><span class="p">))</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+
+<div class="viewcode-block" id="GateEngine.get_control_hamiltonian">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.get_control_hamiltonian">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_control_hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gate_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dimension</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the control Hamiltonian operator for a specific gate type.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            gate_type: Type of gate (X, Y, Z, H)</span>
+<span class="sd">            dimension: Dimension of the Hilbert space</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            QuTiP Qobj operator</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">gate_type</span> <span class="o">=</span> <span class="n">gate_type</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        
+        <span class="c1"># Define operators in truncated space</span>
+        <span class="c1"># For simplicity, we assume the drive acts primarily on |0&gt;-|1&gt; transition</span>
+        
+        <span class="c1"># Destroy operator</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">destroy</span><span class="p">(</span><span class="n">dimension</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;X&quot;</span><span class="p">:</span>
+            <span class="c1"># Drive ~ (a + a_dag)</span>
+            <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">a</span><span class="o">.</span><span class="n">dag</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;Y&quot;</span><span class="p">:</span>
+            <span class="c1"># Drive ~ i(a - a_dag)</span>
+            <span class="k">return</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="p">(</span><span class="n">a</span> <span class="o">-</span> <span class="n">a</span><span class="o">.</span><span class="n">dag</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;Z&quot;</span><span class="p">:</span>
+            <span class="c1"># Detuning / Stark shift ~ a_dag * a</span>
+            <span class="k">return</span> <span class="n">a</span><span class="o">.</span><span class="n">dag</span><span class="p">()</span> <span class="o">*</span> <span class="n">a</span>
+        <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;H&quot;</span><span class="p">:</span>
+            <span class="c1"># Simplified Hadamard drive model</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">a</span> <span class="o">+</span> <span class="n">a</span><span class="o">.</span><span class="n">dag</span><span class="p">())</span> <span class="o">+</span> <span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">dag</span><span class="p">()</span> <span class="o">*</span> <span class="n">a</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown gate control: </span><span class="si">{</span><span class="n">gate_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GateEngine.simulate_dynamics">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.simulate_dynamics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">simulate_dynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                          <span class="n">qubit_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                          <span class="n">gate_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                          <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> 
+                          <span class="n">noise_model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span>
+                          <span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Simulate single-qubit gate dynamics.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            qubit_name: Name of the target qubit</span>
+<span class="sd">            gate_type: Gate to simulate (X, Y, Z, H)</span>
+<span class="sd">            duration: Gate duration in ns</span>
+<span class="sd">            noise_model: &#39;none&#39; or &#39;realistic&#39;</span>
+<span class="sd">            steps: Number of time steps</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Simulation result dictionary</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># 1. Setup System</span>
+        <span class="n">qubit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span><span class="o">.</span><span class="n">get_qubit</span><span class="p">(</span><span class="n">qubit_name</span><span class="p">)</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="n">qubit</span><span class="o">.</span><span class="n">truncated_dim</span>
+        
+        <span class="c1"># Drift Hamiltonian (H0)</span>
+        <span class="n">evals</span> <span class="o">=</span> <span class="n">qubit</span><span class="o">.</span><span class="n">eigenvals</span><span class="p">(</span><span class="n">evals_count</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
+        <span class="n">w01</span> <span class="o">=</span> <span class="n">evals</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">evals</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="c1"># Rotating Wave Approximation (RWA)</span>
+        <span class="c1"># Transform to frame rotating at qubit frequency w01</span>
+        <span class="n">evals_rot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">e</span> <span class="o">-</span> <span class="n">i</span> <span class="o">*</span> <span class="n">w01</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">evals</span><span class="p">)])</span>
+        <span class="n">evals_rot</span> <span class="o">=</span> <span class="n">evals_rot</span> <span class="o">-</span> <span class="n">evals_rot</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="n">H0</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">evals_rot</span><span class="p">))</span>
+        
+        <span class="c1"># Control Hamiltonian (H_drive)</span>
+        <span class="c1"># H_ctrl is (a + a^dag) for X</span>
+        <span class="n">H_ctrl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_control_hamiltonian</span><span class="p">(</span><span class="n">gate_type</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        
+        <span class="c1"># Calibration (Simple boxcar pulse)</span>
+        <span class="n">target_rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="c1"># Default to pi pulse (flip)</span>
+        <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;H&quot;</span><span class="p">:</span> <span class="n">target_rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span> 
+        
+        <span class="n">omega</span> <span class="o">=</span> <span class="n">target_rotation</span> <span class="o">/</span> <span class="n">duration</span>
+        <span class="n">amplitude</span> <span class="o">=</span> <span class="n">omega</span> <span class="o">/</span> <span class="mf">2.0</span>
+        
+        <span class="c1"># Time array</span>
+        <span class="n">tlist</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">duration</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+        
+        <span class="c1"># 2. Setup Noise</span>
+        <span class="n">c_ops</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">noise_model</span> <span class="o">==</span> <span class="s2">&quot;realistic&quot;</span><span class="p">:</span>
+            <span class="n">coherence</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span><span class="o">.</span><span class="n">estimate_coherence</span><span class="p">(</span><span class="n">qubit</span><span class="p">)</span>
+            <span class="c1"># T1 in ns</span>
+            <span class="n">t1</span> <span class="o">=</span> <span class="n">coherence</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;T1 (dielectric)&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="mf">50.0</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span> 
+            
+            <span class="k">if</span> <span class="n">t1</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">rate_relax</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">t1</span>
+                <span class="n">c_ops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rate_relax</span><span class="p">)</span> <span class="o">*</span> <span class="n">qt</span><span class="o">.</span><span class="n">destroy</span><span class="p">(</span><span class="n">dim</span><span class="p">))</span>
+            
+        <span class="c1"># 3. Initial State</span>
+        <span class="n">psi0</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> 
+        
+        <span class="c1"># 4. Evolve</span>
+        <span class="n">H_total</span> <span class="o">=</span> <span class="n">H0</span> <span class="o">+</span> <span class="n">amplitude</span> <span class="o">*</span> <span class="n">H_ctrl</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">mesolve</span><span class="p">(</span><span class="n">H_total</span><span class="p">,</span> <span class="n">psi0</span><span class="p">,</span> <span class="n">tlist</span><span class="p">,</span> <span class="n">c_ops</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate expectations</span>
+        <span class="n">expectations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dim</span><span class="p">)):</span>
+            <span class="n">proj</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="o">*</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">dag</span><span class="p">()</span>
+            <span class="n">exp</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="n">proj</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">states</span><span class="p">)</span>
+            <span class="n">expectations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span>
+            <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;|</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">⟩&quot;</span><span class="p">)</span>
+            
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;times&quot;</span><span class="p">:</span> <span class="n">tlist</span><span class="p">,</span>
+            <span class="s2">&quot;expectations&quot;</span><span class="p">:</span> <span class="n">expectations</span><span class="p">,</span>
+            <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">labels</span><span class="p">,</span>
+            <span class="s2">&quot;final_state&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">states</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="p">}</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_two_qubit_hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                                 <span class="n">qubit1_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                 <span class="n">qubit2_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                 <span class="n">coupling_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                 <span class="n">coupling_strength</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Construct the static two-qubit Hamiltonian including interaction.</span>
+<span class="sd">        Delegates interaction term generation to CouplingGenerator.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">q1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span><span class="o">.</span><span class="n">get_qubit</span><span class="p">(</span><span class="n">qubit1_name</span><span class="p">)</span>
+        <span class="n">q2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span><span class="o">.</span><span class="n">get_qubit</span><span class="p">(</span><span class="n">qubit2_name</span><span class="p">)</span>
+        
+        <span class="n">dim1</span> <span class="o">=</span> <span class="n">q1</span><span class="o">.</span><span class="n">truncated_dim</span>
+        <span class="n">dim2</span> <span class="o">=</span> <span class="n">q2</span><span class="o">.</span><span class="n">truncated_dim</span>
+        
+        <span class="c1"># Individual Hamiltonians</span>
+        <span class="n">h1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_qubit_hamiltonian</span><span class="p">(</span><span class="n">qubit1_name</span><span class="p">)</span>
+        <span class="n">h2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_qubit_hamiltonian</span><span class="p">(</span><span class="n">qubit2_name</span><span class="p">)</span>
+        
+        <span class="c1"># Tensor product for non-interacting system</span>
+        <span class="n">H0</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">h1</span><span class="p">,</span> <span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="n">dim2</span><span class="p">))</span> <span class="o">+</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="n">dim1</span><span class="p">),</span> <span class="n">h2</span><span class="p">)</span>
+        
+        <span class="c1"># Interaction Term</span>
+        <span class="c1"># Convert strength to angular frequency</span>
+        <span class="n">H_int</span> <span class="o">=</span> <span class="n">CouplingGenerator</span><span class="o">.</span><span class="n">get_coupling</span><span class="p">(</span><span class="n">coupling_type</span><span class="p">,</span> <span class="n">dim1</span><span class="p">,</span> <span class="n">dim2</span><span class="p">,</span> <span class="n">coupling_strength</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+            
+        <span class="k">return</span> <span class="n">H0</span> <span class="o">+</span> <span class="n">H_int</span><span class="p">,</span> <span class="n">q1</span><span class="p">,</span> <span class="n">q2</span>
+
+
+
+
+<div class="viewcode-block" id="GateEngine.compare_couplings">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.compare_couplings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compare_couplings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">q2</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">gate</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">,</span> 
+                          <span class="n">coupling_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> 
+                          <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> 
+                          <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compare different coupling types for a given gate.</span>
+<span class="sd">        Can optionally run a specific single scenario if arguments are provided.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            q1: Control qubit name</span>
+<span class="sd">            q2: Target qubit name</span>
+<span class="sd">            gate: Gate type (CNOT, CZ)</span>
+<span class="sd">            coupling_type: Optional override</span>
+<span class="sd">            strength: Optional override</span>
+<span class="sd">            duration: Optional override</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary mapping coupling type to metrics {&#39;population&#39;: float, &#39;phase&#39;: float}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        
+        <span class="c1"># Define scenarios to compare</span>
+        <span class="k">if</span> <span class="n">coupling_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">strength</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">duration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+             <span class="c1"># Run specific scenario</span>
+             <span class="n">scenarios</span> <span class="o">=</span> <span class="p">[(</span><span class="n">coupling_type</span><span class="p">,</span> <span class="n">strength</span><span class="p">,</span> <span class="n">duration</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Defaults</span>
+            <span class="n">scenarios</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">gate</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">:</span>
+                <span class="n">scenarios</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">(</span><span class="s2">&quot;capacitive&quot;</span><span class="p">,</span> <span class="mf">0.010</span><span class="p">,</span> <span class="mf">200.0</span><span class="p">),</span> <span class="c1"># CR approx</span>
+                    <span class="p">(</span><span class="s2">&quot;inductive&quot;</span><span class="p">,</span> <span class="mf">0.005</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>   <span class="c1"># Just for comparison (bad for CNOT usually)</span>
+                    <span class="p">(</span><span class="s2">&quot;tunable_coupler&quot;</span><span class="p">,</span> <span class="mf">0.050</span><span class="p">,</span> <span class="mf">40.0</span><span class="p">)</span> <span class="c1"># Tunable CNOT (H-CZ-H)</span>
+                <span class="p">]</span>
+            <span class="k">elif</span> <span class="n">gate</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+                <span class="n">scenarios</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">(</span><span class="s2">&quot;tunable_coupler&quot;</span><span class="p">,</span> <span class="mf">0.050</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">),</span> <span class="c1"># Fast pulse (approx pi/2 or optimized)</span>
+                    <span class="p">(</span><span class="s2">&quot;inductive&quot;</span><span class="p">,</span> <span class="mf">0.010</span><span class="p">,</span> <span class="mf">50.00</span><span class="p">)</span>      <span class="c1"># Optimized via calibration</span>
+                <span class="p">]</span>
+            
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Comparing couplings for </span><span class="si">{</span><span class="n">gate</span><span class="si">}</span><span class="s2"> on </span><span class="si">{</span><span class="n">q1</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">q2</span><span class="si">}</span><span class="s2">:&quot;</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">c_type</span><span class="p">,</span> <span class="n">strength</span><span class="p">,</span> <span class="n">dur</span> <span class="ow">in</span> <span class="n">scenarios</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulate_two_qubit_dynamics</span><span class="p">(</span>
+                    <span class="n">q1</span><span class="p">,</span> <span class="n">q2</span><span class="p">,</span> <span class="n">gate</span><span class="p">,</span> 
+                    <span class="n">coupling_type</span><span class="o">=</span><span class="n">c_type</span><span class="p">,</span> 
+                    <span class="n">coupling_strength</span><span class="o">=</span><span class="n">strength</span><span class="p">,</span> 
+                    <span class="n">duration</span><span class="o">=</span><span class="n">dur</span>
+                <span class="p">)</span>
+                
+                <span class="c1"># Metric: Population of target state</span>
+                <span class="n">target_pop_key</span> <span class="o">=</span> <span class="s2">&quot;11&quot;</span>
+                <span class="n">final_pop</span> <span class="o">=</span> <span class="n">res</span><span class="p">[</span><span class="s2">&quot;populations&quot;</span><span class="p">][</span><span class="n">target_pop_key</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                
+                <span class="n">metrics</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;population&quot;</span><span class="p">:</span> <span class="n">final_pop</span><span class="p">}</span>
+                
+                <span class="n">phase_msg</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                <span class="k">if</span> <span class="n">gate</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+                    <span class="n">ph_pi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calculate_interaction_phase_metric</span><span class="p">(</span><span class="n">q1</span><span class="p">,</span> <span class="n">q2</span><span class="p">,</span> <span class="n">c_type</span><span class="p">,</span> <span class="n">strength</span><span class="p">,</span> <span class="n">dur</span><span class="p">)</span>
+                    <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;phase&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ph_pi</span>
+                    <span class="n">phase_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;, Phase = </span><span class="si">{</span><span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;phase&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">π&quot;</span>
+                
+                <span class="n">results</span><span class="p">[</span><span class="n">c_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">metrics</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; -&gt; </span><span class="si">{</span><span class="n">c_type</span><span class="si">}</span><span class="s2">: Target Pop |</span><span class="si">{</span><span class="n">target_pop_key</span><span class="si">}</span><span class="s2">&gt; = </span><span class="si">{</span><span class="n">final_pop</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}{</span><span class="n">phase_msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; -&gt; </span><span class="si">{</span><span class="n">c_type</span><span class="si">}</span><span class="s2">: Failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+                <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+                <span class="n">results</span><span class="p">[</span><span class="n">c_type</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;population&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">}</span>
+                
+        <span class="k">return</span> <span class="n">results</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_calculate_interaction_phase_metric</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">q2</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                            <span class="n">coupling_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">detuning</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate the interaction phase (normalized to pi) by subtracting reference dynamical phase.</span>
+<span class="sd">        Returns phase in units of pi (e.g. 1.0 means pi).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+             <span class="c1"># 1. Full Simulation</span>
+             <span class="c1"># Use enough steps for numerical stability?</span>
+             <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulate_two_qubit_dynamics</span><span class="p">(</span><span class="n">q1</span><span class="p">,</span> <span class="n">q2</span><span class="p">,</span> <span class="s2">&quot;CZ&quot;</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">,</span> <span class="n">strength</span><span class="p">,</span> <span class="n">duration</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">detuning</span><span class="o">=</span><span class="n">detuning</span><span class="p">)</span>
+             <span class="n">final_state</span> <span class="o">=</span> <span class="n">res</span><span class="p">[</span><span class="s2">&quot;final_state&quot;</span><span class="p">]</span>
+             
+             <span class="c1"># 2. Reference Simulation (g=0, but KEEP FLUX PULSE? No, ref usually means &quot;unperturbed&quot; rotating frame?)</span>
+             <span class="c1"># If we subtract reference, we want to subtract the &quot;dynamical phase&quot; accumulated by the flux pulse itself?</span>
+             <span class="c1"># E.g. flux pulse changes frequency -&gt; accumulates Z phase.</span>
+             <span class="c1"># We want the *entangling* phase (CZ).</span>
+             <span class="c1"># If we default ref to (g=0, det=0), we measure total phase deviation.</span>
+             <span class="c1"># If we default ref to (g=0, det=det), we measure only the interaction induced phase.</span>
+             <span class="c1"># Ideally we want just the interaction phase.</span>
+             <span class="c1"># So Ref should have detuning enabled but g=0.</span>
+             
+             <span class="n">res_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulate_two_qubit_dynamics</span><span class="p">(</span><span class="n">q1</span><span class="p">,</span> <span class="n">q2</span><span class="p">,</span> <span class="s2">&quot;CZ&quot;</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">duration</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">detuning</span><span class="o">=</span><span class="n">detuning</span><span class="p">)</span>
+             <span class="n">final_state_ref</span> <span class="o">=</span> <span class="n">res_ref</span><span class="p">[</span><span class="s2">&quot;final_state&quot;</span><span class="p">]</span>
+             
+             <span class="c1"># Indices</span>
+             <span class="n">q2_obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">qubit_engine</span><span class="o">.</span><span class="n">get_qubit</span><span class="p">(</span><span class="n">q2</span><span class="p">)</span>
+             <span class="n">idx_11</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">q2_obj</span><span class="o">.</span><span class="n">truncated_dim</span> <span class="o">+</span> <span class="mi">1</span>
+             
+             <span class="k">if</span> <span class="n">final_state</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;ket&quot;</span><span class="p">:</span>
+                 <span class="n">amp</span> <span class="o">=</span> <span class="n">final_state</span><span class="p">[</span><span class="n">idx_11</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+                 <span class="n">amp_ref</span> <span class="o">=</span> <span class="n">final_state_ref</span><span class="p">[</span><span class="n">idx_11</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+             <span class="k">else</span><span class="p">:</span>
+                 <span class="k">return</span> <span class="mf">0.0</span> <span class="c1"># TODO: DM support</span>
+                 
+             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">amp</span><span class="p">,</span> <span class="nb">complex</span><span class="p">):</span>
+                 <span class="n">phi_total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">amp</span><span class="p">)</span>
+                 <span class="n">phi_ref</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">amp_ref</span><span class="p">)</span>
+                 
+                 <span class="n">diff</span> <span class="o">=</span> <span class="n">phi_total</span> <span class="o">-</span> <span class="n">phi_ref</span>
+                 
+                 <span class="c1"># Normalize diff to [0, 2pi)</span>
+                 <span class="n">diff</span> <span class="o">=</span> <span class="n">diff</span> <span class="o">%</span> <span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+                 
+                 <span class="k">return</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+             <span class="c1"># print(f&quot;Phase calc error: {e}&quot;)</span>
+             <span class="k">return</span> <span class="mf">0.0</span>
+        <span class="k">return</span> <span class="mf">0.0</span>
+
+<div class="viewcode-block" id="GateEngine.calibrate_gate">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.calibrate_gate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calibrate_gate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                      <span class="n">q1_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                      <span class="n">q2_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                      <span class="n">gate_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                      <span class="n">coupling_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                      <span class="n">coupling_strength</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> 
+                      <span class="n">parameter</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;duration&quot;</span><span class="p">,</span> 
+                      <span class="n">range_vals</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[],</span>
+                      <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calibrate a gate by sweeping a parameter to maximize fidelity/population.</span>
+<span class="sd">        Accepts kwargs (e.g. detuning) passed to simulate().</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calibrating </span><span class="si">{</span><span class="n">gate_type</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">coupling_type</span><span class="si">}</span><span class="s2">) on </span><span class="si">{</span><span class="n">q1_name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">q2_name</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+        <span class="n">best_val</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">max_metric</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span>
+        
+        <span class="c1"># Setup sweep</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">range_vals</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;duration&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                     <span class="c1"># Fast dynamics: 0.1 to 50ns with high resolution</span>
+                     <span class="n">range_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                     <span class="n">range_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span> 
+            <span class="k">elif</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;amplitude&quot;</span><span class="p">:</span>
+                <span class="n">range_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;detuning&quot;</span><span class="p">:</span>
+                <span class="c1"># Sweep -1.0 to 1.0 GHz</span>
+                <span class="n">range_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span>
+
+        <span class="c1"># Helper to run a sweep</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">run_sweep</span><span class="p">(</span><span class="n">vals</span><span class="p">):</span>
+            <span class="n">best_v</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">max_m</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="c1"># 1.0 is max usually? Or maximize closeness?</span>
+            <span class="c1"># For CNOT: Maximize Pop (0 to 1)</span>
+            <span class="c1"># For CZ: Maximize (1 - dist_to_pi) (0 to 1)</span>
+            
+            <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">vals</span><span class="p">:</span>
+                <span class="c1"># kwargs = { &quot;duration&quot;: val } if parameter == &quot;duration&quot; else { &quot;duration&quot;: 100.0 }</span>
+                <span class="c1"># ...</span>
+                
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">metric</span> <span class="o">=</span> <span class="mf">0.0</span>
+                    <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">:</span>
+                        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulate_two_qubit_dynamics</span><span class="p">(</span>
+                            <span class="n">q1_name</span><span class="p">,</span> <span class="n">q2_name</span><span class="p">,</span> <span class="n">gate_type</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">,</span> <span class="n">coupling_strength</span><span class="p">,</span> 
+                            <span class="n">duration</span><span class="o">=</span><span class="n">val</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+                        <span class="p">)</span>
+                        <span class="n">metric</span> <span class="o">=</span> <span class="n">res</span><span class="p">[</span><span class="s2">&quot;populations&quot;</span><span class="p">][</span><span class="s2">&quot;11&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                        
+                    <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+                        <span class="n">d_val</span> <span class="o">=</span> <span class="n">val</span> <span class="k">if</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;detuning&quot;</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;detuning&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                        <span class="n">dur_val</span> <span class="o">=</span> <span class="n">val</span> <span class="k">if</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;duration&quot;</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;duration&quot;</span><span class="p">,</span> <span class="mf">40.0</span><span class="p">)</span>
+                        
+                        <span class="n">run_dur</span> <span class="o">=</span> <span class="n">val</span> <span class="k">if</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;duration&quot;</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;duration&quot;</span><span class="p">,</span> <span class="mf">40.0</span><span class="p">)</span> <span class="c1"># Fixed default?</span>
+                        <span class="n">run_det</span> <span class="o">=</span> <span class="n">val</span> <span class="k">if</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;detuning&quot;</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;detuning&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                        
+                        <span class="c1"># Robust Phase Metric</span>
+                        <span class="n">phase_pi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calculate_interaction_phase_metric</span><span class="p">(</span>
+                            <span class="n">q1_name</span><span class="p">,</span> <span class="n">q2_name</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">,</span> <span class="n">coupling_strength</span><span class="p">,</span> <span class="n">run_dur</span><span class="p">,</span> <span class="n">detuning</span><span class="o">=</span><span class="n">run_det</span>
+                        <span class="p">)</span>
+                        <span class="n">ph</span> <span class="o">=</span> <span class="n">phase_pi</span> <span class="o">%</span> <span class="mf">2.0</span>
+                        <span class="c1"># Distance to 1.0 (Target Pi)</span>
+                        <span class="n">dist</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">ph</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span>
+                        <span class="n">metric</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">dist</span> <span class="c1"># 1 at match, &lt;1 otherwise</span>
+                    
+                    <span class="k">if</span> <span class="n">metric</span> <span class="o">&gt;</span> <span class="n">max_m</span><span class="p">:</span>
+                        <span class="n">max_m</span> <span class="o">=</span> <span class="n">metric</span>
+                        <span class="n">best_v</span> <span class="o">=</span> <span class="n">val</span>
+                <span class="k">except</span><span class="p">:</span> <span class="k">pass</span>
+            <span class="k">return</span> <span class="n">best_v</span><span class="p">,</span> <span class="n">max_m</span>
+
+        <span class="c1"># 1. Coarse Sweep</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; -&gt; Coarse sweep (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">range_vals</span><span class="p">)</span><span class="si">}</span><span class="s2"> points)...&quot;</span><span class="p">)</span>
+        <span class="n">best_val</span><span class="p">,</span> <span class="n">max_metric</span> <span class="o">=</span> <span class="n">run_sweep</span><span class="p">(</span><span class="n">range_vals</span><span class="p">)</span>
+        
+        <span class="c1"># 2. Fine Sweep (if duration)</span>
+        <span class="k">if</span> <span class="n">parameter</span> <span class="o">==</span> <span class="s2">&quot;duration&quot;</span> <span class="ow">and</span> <span class="n">max_metric</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">:</span>
+             <span class="n">center</span> <span class="o">=</span> <span class="n">best_val</span>
+             <span class="n">start</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">center</span> <span class="o">-</span> <span class="mf">5.0</span><span class="p">)</span> <span class="c1"># Tighter fine sweep</span>
+             <span class="n">end</span> <span class="o">=</span> <span class="n">center</span> <span class="o">+</span> <span class="mf">5.0</span>
+             <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                 <span class="c1"># Even tighter for fast gates</span>
+                 <span class="n">start</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">center</span> <span class="o">-</span> <span class="mf">2.0</span><span class="p">)</span>
+                 <span class="n">end</span> <span class="o">=</span> <span class="n">center</span> <span class="o">+</span> <span class="mf">2.0</span>
+                 <span class="n">fine_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span> <span class="c1"># High res</span>
+             <span class="k">else</span><span class="p">:</span>
+                 <span class="n">fine_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>
+                 
+             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot; -&gt; Fine sweep around </span><span class="si">{</span><span class="n">center</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">ns...&quot;</span><span class="p">)</span>
+             <span class="n">best_val</span><span class="p">,</span> <span class="n">max_metric</span> <span class="o">=</span> <span class="n">run_sweep</span><span class="p">(</span><span class="n">fine_vals</span><span class="p">)</span>
+             
+        <span class="k">return</span> <span class="n">best_val</span><span class="p">,</span> <span class="n">max_metric</span></div>
+
+
+<div class="viewcode-block" id="GateEngine.perform_process_tomography">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.perform_process_tomography">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">perform_process_tomography</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q1_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">q2_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">gate_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determine the Process Fidelity of the gate simulation by running</span>
+<span class="sd">        it against a complete basis set.</span>
+<span class="sd">        (Placeholder logic as simpler method calculate_gate_fidelity is preferred)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># ... logic ...</span>
+        <span class="k">return</span> <span class="mf">0.0</span></div>
+
+
+<div class="viewcode-block" id="GateEngine.perform_state_tomography">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.perform_state_tomography">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">perform_state_tomography</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform State Tomography Analysis (Fidelity Check).</span>
+<span class="sd">        </span>
+<span class="sd">        Real tomography involves measuring &lt;P_i&gt; for all Pauli strings.</span>
+<span class="sd">        Here we calculate exact Fidelity and Trace Distance for simulation verification.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            state: Simulation final state (ket or dm)</span>
+<span class="sd">            target: Ideal target state (ket or dm)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Dict with &#39;fidelity&#39;, &#39;trace_distance&#39;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;ket&#39;</span><span class="p">:</span>
+            <span class="n">state_dm</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">ket2dm</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">state_dm</span> <span class="o">=</span> <span class="n">state</span>
+            
+        <span class="k">if</span> <span class="n">target</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;ket&#39;</span><span class="p">:</span>
+            <span class="n">target_dm</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">ket2dm</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">target_dm</span> <span class="o">=</span> <span class="n">target</span>
+            
+        <span class="c1"># 1. Fidelity: F = Tr(sqrt(sqrt(rho) * sigma * sqrt(rho)))^2</span>
+        <span class="c1"># For pure states: |&lt;psi|phi&gt;|^2</span>
+        <span class="n">fid</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">fidelity</span><span class="p">(</span><span class="n">state_dm</span><span class="p">,</span> <span class="n">target_dm</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        
+        <span class="c1"># 2. Trace Distance</span>
+        <span class="n">tr_dist</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tracedist</span><span class="p">(</span><span class="n">state_dm</span><span class="p">,</span> <span class="n">target_dm</span><span class="p">)</span>
+        
+        <span class="c1"># 3. Purity</span>
+        <span class="n">purity</span> <span class="o">=</span> <span class="n">state_dm</span><span class="o">.</span><span class="n">purity</span><span class="p">()</span>
+        
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;fidelity&quot;</span><span class="p">:</span> <span class="n">fid</span><span class="p">,</span>
+            <span class="s2">&quot;trace_distance&quot;</span><span class="p">:</span> <span class="n">tr_dist</span><span class="p">,</span>
+            <span class="s2">&quot;purity&quot;</span><span class="p">:</span> <span class="n">purity</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="GateEngine.simulate_two_qubit_dynamics">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">simulate_two_qubit_dynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit1_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">qubit2_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                   <span class="n">gate_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                   <span class="n">coupling_strength</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> 
+                                   <span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">detuning</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Simulate the dynamics of two coupled qubits under a gate operation.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            detuning: Frequency shift amplitude (GHz) for Flux Pulse (CZ).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># 1. Get Hamiltonian</span>
+        <span class="c1"># Determine static coupling strength (0 if tunable, else fixed)</span>
+        <span class="n">static_g</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span> <span class="k">else</span> <span class="n">coupling_strength</span>
+        <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span> <span class="ow">and</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+             <span class="n">static_g</span> <span class="o">=</span> <span class="mf">0.0</span>
+             
+        <span class="n">H_sys</span><span class="p">,</span> <span class="n">q1</span><span class="p">,</span> <span class="n">q2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_two_qubit_hamiltonian</span><span class="p">(</span><span class="n">qubit1_name</span><span class="p">,</span> <span class="n">qubit2_name</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">,</span> <span class="n">static_g</span><span class="p">)</span>
+        
+        <span class="n">dim1</span> <span class="o">=</span> <span class="n">q1</span><span class="o">.</span><span class="n">truncated_dim</span>
+        <span class="n">dim2</span> <span class="o">=</span> <span class="n">q2</span><span class="o">.</span><span class="n">truncated_dim</span>
+        
+        <span class="c1"># 2. Add Drives / Controls</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">H_total</span> <span class="o">=</span> <span class="n">H_sys</span>  <span class="c1"># Start with static system</span>
+        
+        <span class="c1"># ... (CNOT logic unchanged) ...</span>
+        <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;capacitive&quot;</span><span class="p">:</span>
+                <span class="n">evals2</span> <span class="o">=</span> <span class="n">q2</span><span class="o">.</span><span class="n">eigenvals</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                <span class="n">w2</span> <span class="o">=</span> <span class="n">evals2</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">evals2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">a1</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">destroy</span><span class="p">(</span><span class="n">dim1</span><span class="p">)</span>
+                <span class="n">op_drive</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">a1</span> <span class="o">+</span> <span class="n">a1</span><span class="o">.</span><span class="n">dag</span><span class="p">(),</span> <span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="n">dim2</span><span class="p">))</span>
+                <span class="n">amp</span> <span class="o">=</span> <span class="mf">0.100</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> 
+                <span class="k">def</span><span class="w"> </span><span class="nf">drive_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span> <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;amp&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s1">&#39;w&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">t</span><span class="p">)</span>
+                <span class="n">H_total</span> <span class="o">=</span> <span class="p">[</span><span class="n">H_sys</span><span class="p">,</span> <span class="p">[</span><span class="n">op_drive</span><span class="p">,</span> <span class="n">drive_coeff</span><span class="p">]]</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;amp&#39;</span><span class="p">:</span> <span class="n">amp</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="n">w2</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">}</span>
+                
+            <span class="k">elif</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                <span class="c1"># Exchange Pulse</span>
+                <span class="n">H_int_op</span> <span class="o">=</span> <span class="n">CouplingGenerator</span><span class="o">.</span><span class="n">tunable_coupler</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="n">dim2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">coupling_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span> 
+                    <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;g&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+                <span class="n">H_total</span> <span class="o">=</span> <span class="p">[</span><span class="n">H_sys</span><span class="p">,</span> <span class="p">[</span><span class="n">H_int_op</span><span class="p">,</span> <span class="n">coupling_coeff</span><span class="p">]]</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;g&#39;</span><span class="p">:</span> <span class="n">coupling_strength</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="n">duration</span><span class="p">}</span>
+
+        <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                <span class="c1"># 1. Coupling Pulse (Adiabatic)</span>
+                <span class="n">H_int_op</span> <span class="o">=</span> <span class="n">CouplingGenerator</span><span class="o">.</span><span class="n">tunable_coupler</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="n">dim2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+                
+                <span class="c1"># 2. Flux Pulse (Frequency Shift on Q2)</span>
+                <span class="c1"># Operator: I x number_op</span>
+                <span class="n">n2_op</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="n">dim1</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">num</span><span class="p">(</span><span class="n">dim2</span><span class="p">))</span> 
+                
+                <span class="c1"># Combined Time-Dependent Hamiltonian</span>
+                <span class="c1"># [H0, [H_int, c_g], [H_flux, c_f]]</span>
+                
+                <span class="k">def</span><span class="w"> </span><span class="nf">coupling_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span> 
+                    <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;g&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+                
+                <span class="c1"># Flux pulse matches the window (simplest case: square or same sine-squared)</span>
+                <span class="c1"># Let&#39;s use Square pulse for Flux to hold the resonance? </span>
+                <span class="c1"># Or adiabatic? Usually flux follows coupling envelope or is wider.</span>
+                <span class="c1"># Let&#39;s use the same Sine-Squared envelope for now to act as &quot;AC-Stark-like&quot; shift or just synced.</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">flux_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;det&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+                
+                <span class="n">H_total</span> <span class="o">=</span> <span class="p">[</span><span class="n">H_sys</span><span class="p">,</span> <span class="p">[</span><span class="n">H_int_op</span><span class="p">,</span> <span class="n">coupling_coeff</span><span class="p">],</span> <span class="p">[</span><span class="n">n2_op</span><span class="p">,</span> <span class="n">flux_coeff</span><span class="p">]]</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s1">&#39;g&#39;</span><span class="p">:</span> <span class="n">coupling_strength</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> 
+                    <span class="s1">&#39;det&#39;</span><span class="p">:</span> <span class="n">detuning</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span>
+                    <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="n">duration</span>
+                <span class="p">}</span>
+
+        <span class="c1"># 3. Initial State</span>
+        <span class="n">psi0</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="c1"># Default</span>
+        <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">:</span>
+            <span class="n">psi0</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+            <span class="n">psi0</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="c1"># 4. Evolution</span>
+        <span class="c1"># mesolve automatically handles time-dependent H if format is [H0, [H1, coeff]]</span>
+        
+        <span class="n">times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">duration</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+        
+        <span class="c1"># Options</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;store_states&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;nsteps&quot;</span><span class="p">:</span> <span class="mi">50000</span><span class="p">}</span> <span class="c1"># Ensure states are stored, handle stiffness</span>
+        
+        <span class="n">res</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">mesolve</span><span class="p">(</span><span class="n">H_total</span><span class="p">,</span> <span class="n">psi0</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[],</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">opts</span><span class="p">)</span>
+        
+        <span class="c1"># 5. Process Results</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;times&quot;</span><span class="p">:</span> <span class="n">times</span><span class="p">,</span>
+            <span class="s2">&quot;states&quot;</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> 
+            <span class="s2">&quot;populations&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;00&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">)),</span>
+                <span class="s2">&quot;01&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">)),</span>
+                <span class="s2">&quot;10&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">)),</span>
+                <span class="s2">&quot;11&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">))</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;final_state&quot;</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="p">}</span>
+        
+        <span class="c1"># Post-processing for Tunable CNOT</span>
+        <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span> <span class="ow">and</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+            <span class="c1"># Construct H operator for dim2</span>
+            <span class="c1"># H is 2x2 on subspace 0,1. Identity elsewhere?</span>
+            <span class="c1"># Or assume we only care about qubit subspace.</span>
+            <span class="c1"># Let&#39;s embed 2x2 H into dim2 x dim2 Matrix</span>
+            
+            <span class="n">mat_h</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+            <span class="n">h_sub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]])</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">mat_h</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">h_sub</span>
+            
+            <span class="n">h_obj</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">(</span><span class="n">mat_h</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="p">[[</span><span class="n">dim2</span><span class="p">],</span> <span class="p">[</span><span class="n">dim2</span><span class="p">]])</span>
+            
+            <span class="n">U_H</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="n">dim1</span><span class="p">),</span> <span class="n">h_obj</span><span class="p">)</span>
+            <span class="n">new_final</span> <span class="o">=</span> <span class="n">U_H</span> <span class="o">*</span> <span class="n">res</span><span class="o">.</span><span class="n">states</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;final_state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_final</span>
+            <span class="n">p11</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">expect</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">projection</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">new_final</span><span class="p">)</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;populations&quot;</span><span class="p">][</span><span class="s2">&quot;11&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">p11</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+<div class="viewcode-block" id="GateEngine.calculate_gate_fidelity">
+<a class="viewcode-back" href="../../../api.html#qforge.core.gate_engine.GateEngine.calculate_gate_fidelity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_gate_fidelity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q1_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">q2_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                <span class="n">gate_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                                <span class="n">strength</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate Average Gate Fidelity using the full propagator.</span>
+<span class="sd">        This effectively performs Process Tomography w/o 16 simulations.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calculating Fidelity for </span><span class="si">{</span><span class="n">gate_type</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">coupling_type</span><span class="si">}</span><span class="s2">) on </span><span class="si">{</span><span class="n">q1_name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">q2_name</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+        
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">is_tunable</span> <span class="o">=</span> <span class="p">(</span><span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">)</span>
+            <span class="c1"># If Tunable CZ, we pulse g. Static h_int is 0.</span>
+            <span class="n">static_g</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="k">if</span> <span class="n">is_tunable</span> <span class="k">else</span> <span class="n">strength</span>
+            <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span> <span class="ow">and</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span> 
+                 <span class="c1"># CNOT tunable uses CZ internally? </span>
+                 <span class="n">static_g</span> <span class="o">=</span> <span class="mf">0.0</span>
+            
+            <span class="n">H_sys</span><span class="p">,</span> <span class="n">q1</span><span class="p">,</span> <span class="n">q2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_two_qubit_hamiltonian</span><span class="p">(</span><span class="n">q1_name</span><span class="p">,</span> <span class="n">q2_name</span><span class="p">,</span> <span class="n">coupling_type</span><span class="p">,</span> <span class="n">static_g</span><span class="p">)</span>
+            
+            <span class="n">dim1</span> <span class="o">=</span> <span class="n">q1</span><span class="o">.</span><span class="n">truncated_dim</span>
+            <span class="n">dim2</span> <span class="o">=</span> <span class="n">q2</span><span class="o">.</span><span class="n">truncated_dim</span>
+            
+            <span class="c1"># Control / Pulse</span>
+            <span class="n">args</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">H_total</span> <span class="o">=</span> <span class="n">H_sys</span>
+            
+            <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;capacitive&quot;</span><span class="p">:</span>
+                    <span class="n">evals2</span> <span class="o">=</span> <span class="n">q2</span><span class="o">.</span><span class="n">eigenvals</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">w2</span> <span class="o">=</span> <span class="n">evals2</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">evals2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">a1</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">destroy</span><span class="p">(</span><span class="n">dim1</span><span class="p">)</span>
+                    <span class="n">op_drive</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">a1</span> <span class="o">+</span> <span class="n">a1</span><span class="o">.</span><span class="n">dag</span><span class="p">(),</span> <span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="n">dim2</span><span class="p">))</span>
+                    <span class="n">amp</span> <span class="o">=</span> <span class="mf">0.100</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> 
+                    <span class="k">def</span><span class="w"> </span><span class="nf">drive_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span> <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;amp&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s1">&#39;w&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">t</span><span class="p">)</span>
+                    <span class="n">H_total</span> <span class="o">=</span> <span class="p">[</span><span class="n">H_sys</span><span class="p">,</span> <span class="p">[</span><span class="n">op_drive</span><span class="p">,</span> <span class="n">drive_coeff</span><span class="p">]]</span>
+                    <span class="n">args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;amp&#39;</span><span class="p">:</span> <span class="n">amp</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">:</span> <span class="n">w2</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">}</span>
+                    
+                <span class="k">elif</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                    <span class="c1"># CZ pulse logic</span>
+                    <span class="n">H_int_op</span> <span class="o">=</span> <span class="n">CouplingGenerator</span><span class="o">.</span><span class="n">tunable_coupler</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="n">dim2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+                    <span class="k">def</span><span class="w"> </span><span class="nf">coupling_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span> 
+                        <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;g&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">H_total</span> <span class="o">=</span> <span class="p">[</span><span class="n">H_sys</span><span class="p">,</span> <span class="p">[</span><span class="n">H_int_op</span><span class="p">,</span> <span class="n">coupling_coeff</span><span class="p">]]</span>
+                    <span class="n">args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;g&#39;</span><span class="p">:</span> <span class="n">strength</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="n">duration</span><span class="p">}</span>
+            
+            <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+                 <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                    <span class="n">H_int_op</span> <span class="o">=</span> <span class="n">CouplingGenerator</span><span class="o">.</span><span class="n">tunable_coupler</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="n">dim2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+                    <span class="k">def</span><span class="w"> </span><span class="nf">coupling_coeff</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span> 
+                        <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;g&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="n">args</span><span class="p">[</span><span class="s1">&#39;T&#39;</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">H_total</span> <span class="o">=</span> <span class="p">[</span><span class="n">H_sys</span><span class="p">,</span> <span class="p">[</span><span class="n">H_int_op</span><span class="p">,</span> <span class="n">coupling_coeff</span><span class="p">]]</span>
+                    <span class="n">args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;g&#39;</span><span class="p">:</span> <span class="n">strength</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="n">duration</span><span class="p">}</span>
+            
+            <span class="c1"># 2. Compute Propagator U_sim</span>
+            <span class="c1"># Use increased nsteps for stiff pulses and Dict options</span>
+            <span class="n">opts</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Options</span><span class="p">(</span><span class="n">nsteps</span><span class="o">=</span><span class="mi">50000</span><span class="p">)</span>
+            <span class="n">U_sim</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">propagator</span><span class="p">(</span><span class="n">H_total</span><span class="p">,</span> <span class="n">duration</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">opts</span><span class="p">)</span>
+            
+            <span class="c1"># 3. Project to Computational Subspace (2x2 = 4 states)</span>
+            <span class="n">bases</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+                    <span class="n">bases</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim1</span><span class="p">,</span> <span class="n">i</span><span class="p">),</span> <span class="n">qt</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">dim2</span><span class="p">,</span> <span class="n">j</span><span class="p">)))</span>
+            
+            <span class="n">U_comp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+                    <span class="n">elem</span> <span class="o">=</span> <span class="n">bases</span><span class="p">[</span><span class="n">r</span><span class="p">]</span><span class="o">.</span><span class="n">dag</span><span class="p">()</span> <span class="o">*</span> <span class="n">U_sim</span> <span class="o">*</span> <span class="n">bases</span><span class="p">[</span><span class="n">c</span><span class="p">]</span>
+                    <span class="c1"># Handle both Qobj (1x1) and scalar return types</span>
+                    <span class="n">val</span> <span class="o">=</span> <span class="n">elem</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">elem</span><span class="p">,</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">)</span> <span class="k">else</span> <span class="n">elem</span>
+                    <span class="n">U_comp</span><span class="p">[</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+                    
+            <span class="n">U_sim_qt</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">(</span><span class="n">U_comp</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">],[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]])</span>
+            
+            <span class="c1"># 4. Ideal Unitary</span>
+            <span class="k">if</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CNOT&quot;</span><span class="p">:</span>
+                <span class="c1"># Explicit Qobj for CNOT (|00&gt;,|01&gt; identity; |10&gt;&lt;-&gt;|11&gt; swap)</span>
+                <span class="c1"># Basis order: 00, 01, 10, 11</span>
+                <span class="n">U_ideal</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]],</span> <span class="n">dims</span><span class="o">=</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">],[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]])</span>
+                
+                <span class="k">if</span> <span class="n">coupling_type</span> <span class="o">==</span> <span class="s2">&quot;tunable_coupler&quot;</span><span class="p">:</span>
+                     <span class="n">h_mat</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dims</span><span class="o">=</span><span class="p">[[</span><span class="mi">2</span><span class="p">],[</span><span class="mi">2</span><span class="p">]])</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                     <span class="n">op_H</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">qt</span><span class="o">.</span><span class="n">qeye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">h_mat</span><span class="p">)</span>
+                     <span class="n">U_sim_qt</span> <span class="o">=</span> <span class="n">op_H</span> <span class="o">*</span> <span class="n">U_sim_qt</span> <span class="o">*</span> <span class="n">op_H</span>
+
+            <span class="k">elif</span> <span class="n">gate_type</span> <span class="o">==</span> <span class="s2">&quot;CZ&quot;</span><span class="p">:</span>
+                 <span class="n">U_ideal</span> <span class="o">=</span> <span class="n">qt</span><span class="o">.</span><span class="n">Qobj</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dims</span><span class="o">=</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">],[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]])</span>
+            
+            <span class="c1"># 5. Calculate Average Gate Fidelity</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="mi">4</span>
+            <span class="n">tr</span> <span class="o">=</span> <span class="p">(</span><span class="n">U_ideal</span><span class="o">.</span><span class="n">dag</span><span class="p">()</span> <span class="o">*</span> <span class="n">U_sim_qt</span><span class="p">)</span><span class="o">.</span><span class="n">tr</span><span class="p">()</span>
+            <span class="n">F_avg</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">d</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">d</span> <span class="o">*</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+            
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;average_fidelity&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">F_avg</span><span class="p">)}</span>
+            
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fidelity Calc Failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+            <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;average_fidelity&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Saumya Shah.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,191 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Examples &mdash; QForge 0.2.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=938c9ccc"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Getting Started" href="getting_started.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            QForge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#gate-simulation">Gate Simulation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">QForge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Examples</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/examples.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="examples">
+<h1>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h1>
+<section id="gate-simulation">
+<h2>Gate Simulation<a class="headerlink" href="#gate-simulation" title="Link to this heading"></a></h2>
+<p>This example demonstrates how to simulate a single-qubit gate.</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">examples/gate_simulation.py</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Gate Simulation Example</span>
+<span class="sd">=======================</span>
+
+<span class="sd">This example demonstrates how to use the QForge API to:</span>
+<span class="sd">1. Create a Transmon qubit.</span>
+<span class="sd">2. Analyze its energy spectrum.</span>
+<span class="sd">3. Simulate a quantum gate (X-gate / Pi-pulse).</span>
+<span class="sd">4. Visualize the dynamics directly in the terminal.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="n">matplotlib</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="s1">&#39;Agg&#39;</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">qforge.core.qubit_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">QubitEngine</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">qforge.core.gate_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">GateEngine</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">qforge.utils.terminal_plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">TerminalPlotter</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_simulation</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">=== QForge Gate Simulation Example ===</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 1. Initialize Engines</span>
+    <span class="n">qubit_engine</span> <span class="o">=</span> <span class="n">QubitEngine</span><span class="p">()</span>
+
+
+    <span class="c1"># 2. Create a Transmon Qubit</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&gt; Creating Transmon...&quot;</span><span class="p">)</span>
+    <span class="n">qubit</span> <span class="o">=</span> <span class="n">qubit_engine</span><span class="o">.</span><span class="n">create_qubit</span><span class="p">(</span>
+        <span class="n">qubit_type</span><span class="o">=</span><span class="s2">&quot;transmon&quot;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;example_qubit&quot;</span><span class="p">,</span>
+        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;EJ&quot;</span><span class="p">:</span> <span class="mf">15.0</span><span class="p">,</span> <span class="s2">&quot;EC&quot;</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">}</span>
+    <span class="p">)</span>
+
+    <span class="c1"># 3. Compute and Plot Spectrum</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&gt; Computing Spectrum...&quot;</span><span class="p">)</span>
+    <span class="n">spectrum</span> <span class="o">=</span> <span class="n">qubit_engine</span><span class="o">.</span><span class="n">compute_spectrum</span><span class="p">(</span><span class="n">qubit</span><span class="p">,</span> <span class="n">n_levels</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">subtract_ground</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">TerminalPlotter</span><span class="o">.</span><span class="n">plot_spectrum</span><span class="p">(</span><span class="n">spectrum</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Energy Spectrum (Relative)&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 4. Simulate X Gate (Pi Pulse)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">-&gt; Simulating X Gate (Pi-pulse)...&quot;</span><span class="p">)</span>
+    <span class="n">gate_engine</span> <span class="o">=</span> <span class="n">GateEngine</span><span class="p">()</span>
+    <span class="c1"># For a Pi pulse, duration usually depends on drive amplitude. </span>
+    <span class="c1"># QForge auto-calibrates amplitude based on duration for standard gates.</span>
+    <span class="n">duration</span> <span class="o">=</span> <span class="mf">40.0</span> <span class="c1"># ns</span>
+    
+    <span class="n">result</span> <span class="o">=</span> <span class="n">gate_engine</span><span class="o">.</span><span class="n">simulate_dynamics</span><span class="p">(</span>
+        <span class="n">qubit_name</span><span class="o">=</span><span class="s2">&quot;example_qubit&quot;</span><span class="p">,</span>
+        <span class="n">gate_type</span><span class="o">=</span><span class="s2">&quot;X&quot;</span><span class="p">,</span>
+        <span class="n">duration</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span>
+        <span class="n">noise_model</span><span class="o">=</span><span class="s2">&quot;realistic&quot;</span><span class="p">,</span> <span class="c1"># Uses internal T1 coherence estimates</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">100</span>
+    <span class="p">)</span>
+
+    <span class="c1"># 5. Visualize Dynamics</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&gt; Plotting Dynamics...&quot;</span><span class="p">)</span>
+    <span class="n">TerminalPlotter</span><span class="o">.</span><span class="n">plot_time_evolution</span><span class="p">(</span>
+        <span class="n">times</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;times&quot;</span><span class="p">],</span>
+        <span class="n">expectations</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;expectations&quot;</span><span class="p">],</span>
+        <span class="n">labels</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;labels&quot;</span><span class="p">],</span>
+        <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Rabi Oscillation (X Gate)&quot;</span>
+    <span class="p">)</span>
+    
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">=== Simulation Complete ===&quot;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">run_simulation</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="getting_started.html" class="btn btn-neutral float-left" title="Getting Started" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Saumya Shah.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

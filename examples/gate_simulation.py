@@ -8,6 +8,9 @@ This example demonstrates how to use the QForge API to:
 3. Simulate a quantum gate (X-gate / Pi-pulse).
 4. Visualize the dynamics directly in the terminal.
 """
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine

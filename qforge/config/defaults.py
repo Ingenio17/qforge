@@ -5,6 +5,10 @@ Default configurations and presets for QForge.
 # Qubit parameter presets
 QUBIT_PRESETS = {
     "transmon": {
+        "_info": {
+            "freq": "4-5 GHz",
+            "best_for": "Fast gates, easier control",
+        },
         "typical": {
             "EJ": 15.0,  # GHz
             "EC": 0.3,   # GHz
@@ -25,6 +29,10 @@ QUBIT_PRESETS = {
         },
     },
     "fluxonium": {
+        "_info": {
+            "freq": "0.1-1 GHz",
+            "best_for": "Long coherence, reduced errors",
+        },
         "typical": {
             "EJ": 8.9,   # GHz
             "EC": 2.5,   # GHz
@@ -48,6 +56,10 @@ QUBIT_PRESETS = {
         },
     },
     "flux": {
+        "_info": {
+            "freq": "1-10 GHz",
+            "best_for": "Flux-based control",
+        },
         "typical": {
             "EJ1": 10.0,
             "EJ2": 10.0,
@@ -61,6 +73,10 @@ QUBIT_PRESETS = {
         },
     },
     "zeropi": {
+        "_info": {
+            "freq": "Variable",
+            "best_for": "Noise protection",
+        },
         "typical": {
             "EJ": 10.0,
             "EL": 0.1,

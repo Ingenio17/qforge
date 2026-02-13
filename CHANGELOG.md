@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2026-01-24
+## [0.2.0] - 2026-02-13
+
+### 🚀 New Features
+-   **Expanded Qubit Library**: Added full support for **Fluxonium**, **Flux**, and **Zero-π** qubits alongside Transmons.
+-   **Interactive Mode**: New `qforge --interactive` command launches a guided wizard for creating qubits, simulating gates, and running workflows.
+-   **Gate Dynamics**: Time-domain gate simulation (Rabi oscillations, pulses) backed by QuTiP.
+-   **Comparison Engine**: Compare parameters and coherence times of multiple qubits side-by-side.
+-   **Dynamic Configuration**: CLI options now load dynamically from `defaults.py`, enabling easier extension.
+
+### 🛠️ Developer Tools & Automation
+-   **Docs Sync**: New `qforge dev sync` command automatically updates documentation tables from source code metadata.
+-   **Agent Instructions**: Added `docs/AGENT_INSTRUCTIONS.md` to guide AI agents in adding new features.
+-   **Citations**: New `qforge citations` command outputs BibTeX entries for dependency libraries.
+
+### ⚖️ Compliance
+-   **Licensing**: Added `NOTICE` (Apache 2.0) and `ThirdPartyNotices.md` (BSD-3) for legal compliance.
+-   **Acknowledgments**: Updated `README.md` with explicit credit to scqubits, QuTiP, and Qiskit.
+-   **Runtime Attribution**: Interactive mode now displays attribution at startup.
+
+## [0.1.1] - 2026-01-24
 
 ### Added
 - **Qubit Physics Modeling**: Full support for Transmon, Fluxonium, Flux, and Zero-π qubit architectures with pre-configured parameters
@@ -30,4 +49,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rich terminal UI components using click, rich, and prompt-toolkit
 - Scientific computing stack: numpy, scipy, matplotlib, pandas
 
-[0.1.0]: https://github.com/Ingenio17/qforge/releases/tag/v0.1.0
+[0.1.1]: https://github.com/Ingenio17/qforge/releases/tag/v0.1.1

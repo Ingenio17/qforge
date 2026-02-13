@@ -60,6 +60,47 @@ cli.add_command(compare.compare)
 cli.add_command(workflow.workflow)
 cli.add_command(example.example)
 cli.add_command(clean.clean)
+# Developer tools (hidden by default? No, visible for now as requested)
+from qforge.cli.commands import dev
+cli.add_command(dev.dev)
+
+@cli.command()
+def citations():
+    """Display BibTeX citations for underlying libraries."""
+    console.print("[bold cyan]Please cite the following references in your research:[/bold cyan]\n")
+    
+    citations_map = {
+        "scqubits": """@article{Groszkowski2021,
+  title = {scqubits: a Python package for superconducting qubits},
+  author = {Groszkowski, Peter and Koch, Jens},
+  journal = {Quantum},
+  volume = {5},
+  pages = {583},
+  year = {2021},
+  doi = {10.22331/q-2021-11-17-583},
+  url = {https://doi.org/10.22331/q-2021-11-17-583}
+}""",
+        "qutip": """@article{Johansson2013,
+  title = {QuTiP 2: A Python framework for the dynamics of open quantum systems},
+  author = {Johansson, J.R. and Nation, P.D. and Nori, F.},
+  journal = {Comp. Phys. Comm.},
+  volume = {184},
+  pages = {1234},
+  year = {2013},
+  doi = {10.1016/j.cpc.2012.11.019}
+}""",
+        "qiskit": """@misc{Qiskit,
+    author = {{Qiskit contributors}},
+    title = {Qiskit: An Open-source Framework for Quantum Computing},
+    year = {2023},
+    doi = {10.5281/zenodo.2573505}
+}"""
+    }
+    
+    for name, bib in citations_map.items():
+        console.print(f"[green]{name}[/green]")
+        console.print(Panel(bib, expand=False, border_style="green"))
+
 
 
 @cli.command()

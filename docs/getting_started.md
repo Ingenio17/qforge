@@ -119,12 +119,14 @@ TerminalPlotter.plot_time_evolution(
 
 ## Supported Qubits
 
+<!-- DYNAMIC_TABLE: QUBITS -->
 | Qubit Type | Key Parameters | Typical Frequency | Best For |
 |------------|---------------|-------------------|----------|
 | **Transmon** | EJ, EC | 4-5 GHz | Fast gates, easier control |
 | **Fluxonium** | EJ, EC, EL | 0.1-1 GHz | Long coherence, reduced errors |
-| **Flux** | EJ1, EJ2, EJ3, EC | 1-10 GHz | Flux-based control |
-| **Zero-π** | EJ, EL, ECJ, EC | Variable | Noise protection |
+| **Flux** | EJ1, EJ2, EJ3, ECJ1, ECJ2, ECJ3, ECg1, ECg2 | 1-10 GHz | Flux-based control |
+| **Zeropi** | EJ, EL, ECJ, EC | Variable | Noise protection |
+<!-- END_DYNAMIC_TABLE -->
 
 ## Workflow Stages
 

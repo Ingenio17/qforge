@@ -16,40 +16,55 @@ console = Console()
 @click.command()
 @click.option("--force", "-f", is_flag=True, help="Force deletion without confirmation")
 @click.option("--dry-run", is_flag=True, help="Show what would be deleted without taking action")
+@click.option("--all", "-a", "all_items", is_flag=True, help="Clean ALL outputs (qubits, gates, comparisons, session)")
 @click.option("--days", type=int, default=None, help="Delete runs older than N days")
-def clean(force, dry_run, days):
+def clean(force, dry_run, all_items, days):
     """
     Clean up simulation outputs and logs.
     
-    Removes the contents of the outputs/runs directory.
+    By default, removes 'outputs/runs'. 
+    With --all, removes 'outputs/qubits', 'outputs/gates', 'outputs/hardware', 'outputs/comparisons', and '.qforge_session.json'.
     """
-    runs_dir = Path(OUTPUT_DIRS["base"]) / "runs"
-    
-    if not runs_dir.exists():
-        console.print("[yellow]No runs directory found. Nothing to clean.[/yellow]")
-        return
+    if all_items:
+        dirs_to_clean = [Path(d) for d in OUTPUT_DIRS.values() if d != "outputs"] # Avoid cleaning base if it has other stuff? Actually defaults has base="outputs".
+        # Better to list them explicitly or iterate all keys except base? 
+        # OUTPUT_DIRS has: base, runs, qubits, gates, circuits, hardware, comparisons, plots.
+        dirs_to_clean = [Path(OUTPUT_DIRS[k]) for k in OUTPUT_DIRS if k != "base"]
+        # Add session file
+        session_file = Path(".qforge_session.json")
+    else:
+        dirs_to_clean = [Path(OUTPUT_DIRS.get("runs", "outputs/runs"))]
 
-    # Collect items to delete
     items_to_delete = []
     total_size = 0
     
     import time
     current_time = time.time()
-    
-    for item in runs_dir.iterdir():
-        if days is not None:
-            # Check modification time
-            mtime = item.stat().st_mtime
-            if (current_time - mtime) < (days * 86400):
-                continue
-                
-        items_to_delete.append(item)
-        if item.is_file():
-            total_size += item.stat().st_size
-        elif item.is_dir():
-            for root, _, files in os.walk(item):
-                for f in files:
-                    total_size += os.path.getsize(os.path.join(root, f))
+
+    # Process directories
+    for target_dir in dirs_to_clean:
+        if not target_dir.exists():
+            continue
+            
+        for item in target_dir.iterdir():
+            if days is not None:
+                mtime = item.stat().st_mtime
+                if (current_time - mtime) < (days * 86400):
+                    continue
+            
+            items_to_delete.append(item)
+            if item.is_file():
+                total_size += item.stat().st_size
+            elif item.is_dir():
+                for root, _, files in os.walk(item):
+                    for f in files:
+                        total_size += os.path.getsize(os.path.join(root, f))
+
+    # Process session file (only if --all and exists)
+    if all_items and session_file.exists():
+         items_to_delete.append(session_file)
+         total_size += session_file.stat().st_size
+
     
     if not items_to_delete:
         console.print("[green]Directory is already clean (matching criteria).[/green]")

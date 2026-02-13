@@ -10,6 +10,7 @@ Welcome to QForge's documentation!
    installation
    getting_started
    examples
+   couplings
    api
 
 Indices and tables

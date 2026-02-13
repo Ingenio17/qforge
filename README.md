@@ -91,6 +91,21 @@ QForge is built on industry-standard quantum libraries:
 
 Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md).
 
+## Acknowledgments
+
+QForge relies on the following open-source projects:
+
+*   **[scqubits](https://scqubits.readthedocs.io/)**: Setup and simulation of superconducting qubits.
+    *   Copyright (c) 2019 and later, Jens Koch and Peter Groszkowski. Licensed under BSD 3-Clause.
+*   **[QuTiP](https://qutip.org/)**: Quantum Toolbox in Python for dynamics.
+    *   Copyright (c) 2011-2022 QuTiP developers. Licensed under BSD 3-Clause.
+*   **[Qiskit](https://qiskit.org/)**: Quantum SDK for circuit simulation.
+    *   Copyright IBM Corporation and others. Licensed under Apache 2.0.
+*   **[Qiskit Metal](https://qiskit.org/metal/)**: Hardware design.
+    *   Copyright Qiskit Metal Development Team. Licensed under Apache 2.0.
+
+Please see `NOTICE` and `ThirdPartyNotices.md` for full license details.
+
 ## 📄 License
 
 Apache License 2.0 - see [LICENSE](LICENSE) for details.

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import numpy as np
-import numpy as np
 # Lazy imports for heavy libraries to speed up CLI startup
 # import scqubits as scq
 # import matplotlib.pyplot as plt
@@ -93,9 +92,14 @@ class QubitEngine:
         qubit_type = qubit_type.lower()
         
         if qubit_type == "transmon":
+            ej = params.get("EJ", 15.0)
+            ec = params.get("EC", 0.3)
+            if ej <= 0 or ec <= 0:
+                raise ValueError("Transmon energies (EJ, EC) must be positive.")
+                
             return Transmon(
-                EJ=params.get("EJ", 15.0),
-                EC=params.get("EC", 0.3),
+                EJ=ej,
+                EC=ec,
                 ng=params.get("ng", 0.0),
                 ncut=params.get("ncut", 30),
                 truncated_dim=params.get("truncated_dim", 10)

@@ -77,7 +77,7 @@ Issues = "https://github.com/Ingenio17/qforge/issues"
 where = ["."]
 include = ["qforge*"]
 exclude = ["compliance*"]
-exclude = ["compliance*"]
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,6 +4,13 @@ Terminal plotting utility using plotext.
 
 import plotext as plt
 import numpy as np
+import sys
+
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 
 class TerminalPlotter:

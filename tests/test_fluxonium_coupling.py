@@ -24,7 +24,7 @@ class TestFluxoniumCoupling(unittest.TestCase):
         # Check if Hamiltonian exists
         g = 0.05
         # Use internal method to construct full system Hamiltonian
-        H_sys, _, _ = self.g_eng._get_two_qubit_hamiltonian("f1", "f2", "capacitive", g)
+        H_sys, _, _ = self.g_eng._get_n_qubit_hamiltonian(["f1", "f2"], [{"q1": 0, "q2": 1, "type": "capacitive", "strength": g}])
         
         # Verify dimensions (5*5 = 25)
         self.assertEqual(H_sys.shape, (25, 25))

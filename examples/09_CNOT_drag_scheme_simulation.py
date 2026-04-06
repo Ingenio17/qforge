@@ -36,11 +36,11 @@ def main():
     q_eng.create_qubit("transmon", "T2", {"EJ": 13.5, "EC": 0.3, "truncated_dim": 4})
     
     # We use a tunable coupler to mediate the CNOT entanglement
-    couplings = [{"q1": 0, "q2": 1, "type": "capacitive", "strength": 0.03}]
+    couplings = [{"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.03}]
     
     print(f"\n[CALIBRATION]: Finding optimal CNOT gate duration...")
     best_duration, max_p11 = g_eng.calibrate_gate(
-        "T1", "T2", "CNOT", "capacitive", 0.03, parameter="duration", range_vals=np.linspace(20, 100, 20)
+        "T1", "T2", "CNOT", "tunable_coupler", 0.03, parameter="duration", range_vals=np.linspace(20, 100, 20)
     )
             
     print(f"  -> Calibrated Gate Duration: {best_duration:.1f} ns (Yielding P(|11>) = {max_p11:.4f})")

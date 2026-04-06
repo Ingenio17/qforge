@@ -30,28 +30,26 @@ def main():
     q_eng = QubitEngine()
     g_eng = GateEngine()
 
-    # 1. Initialize with a safe ~1.26 GHz gap to prevent iSWAP collisions
     q_eng.create_qubit("transmon", "T1", {"EJ": 15.0, "EC": 0.3, "truncated_dim": 4})
     q_eng.create_qubit("transmon", "T2", {"EJ": 13.5, "EC": 0.2, "truncated_dim": 4})
-    
-    # 2. Mediate entanglement via a tunable coupler
-    couplings = [{"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.05}]
-    
-    # 3. Calculate theoretical flux pulse amplitude for |11> <-> |02> resonance
+
+    couplings = [{"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.03}]
+
     # roughly: w1 - w2 + alpha2 = 5.70 - 4.44 + 0.30 = 1.56 GHz
     cz_detuning = 1.56 
     
     print(f"\n[CALIBRATION]: Finding optimal H gate duration for T1...")
     best_h_dur, _ = g_eng.calibrate_gate("T1", gate_type="H", parameter="duration")
+
     print(f"  -> Calibrated H Gate Duration: {best_h_dur:.1f} ns")
 
     print(f"\n[CALIBRATION]: Finding optimal CNOT gate duration...")
     # Pass the flux detuning to ensure the CZ gate is properly calibrated
     best_cnot_dur, max_p11 = g_eng.calibrate_gate(
-        "T1", "T2", "CNOT", "tunable_coupler", 0.05, 
+        "T1", "T2", "CNOT", "tunable_coupler", 0.03, 
         parameter="duration", 
-        range_vals=np.linspace(10, 100, 20),
-        detuning=cz_detuning
+        range_vals=np.linspace(20, 100, 20),
+        #detuning=cz_detuning
     )
     print(f"  -> Calibrated CNOT Gate Duration: {best_cnot_dur:.1f} ns")
     
@@ -82,13 +80,15 @@ def main():
         res_H = g_eng.simulate_n_qubit_dynamics(
             ["T1", "T2"], "H_Gate", best_h_dur, [], h_drives, "00", steps=50, use_drag=drag_setting
         )
+
+        print(res_H["final_state"])
         
         # 2. CNOT Gate Sequence
         # Increased steps to 200 for clean Pi/2 plotting, added flux detuning
         res_CNOT = g_eng.simulate_n_qubit_dynamics(
             ["T1", "T2"], "CNOT", best_cnot_dur, couplings, [], res_H["final_state"], 
             steps=200, 
-            detuning=cz_detuning, 
+            #detuning=cz_detuning, 
             use_drag=drag_setting
         )
         

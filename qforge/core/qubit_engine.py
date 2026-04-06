@@ -24,6 +24,10 @@ class QubitEngine:
         self._ensure_output_dirs()
         self._session_file = Path(OUTPUT_DIRS["qubits"]) / ".qforge_session.json"
         self._load_session()  # Load previously created qubits
+
+    def load_session(self):
+        """update session (all qubits) from disk."""
+        self._load_session()
     
     def _ensure_output_dirs(self):
         """Create output directories if they don't exist."""
@@ -102,7 +106,7 @@ class QubitEngine:
                 EC=ec,
                 ng=params.get("ng", 0.0),
                 ncut=params.get("ncut", 30),
-                truncated_dim=params.get("truncated_dim", 10)
+                truncated_dim=params.get("truncated_dim", 4)
             )
         elif qubit_type == "fluxonium":
             return Fluxonium(
@@ -111,7 +115,7 @@ class QubitEngine:
                 EL=params.get("EL", 0.5),
                 flux=params.get("flux", 0.5),
                 cutoff=params.get("cutoff", 110),
-                truncated_dim=params.get("truncated_dim", 10)
+                truncated_dim=params.get("truncated_dim", 4)
             )
         elif qubit_type == "flux":
             return FluxQubit(
@@ -127,7 +131,7 @@ class QubitEngine:
                 ng2=params.get("ng2", 0.0),
                 flux=params.get("flux", 0.5),
                 ncut=params.get("ncut", 10),
-                truncated_dim=params.get("truncated_dim", 10)
+                truncated_dim=params.get("truncated_dim", 4)
             )
         elif qubit_type == "zeropi":
             grid = params.get("grid", (-6.0, 6.0, 100))
@@ -140,7 +144,7 @@ class QubitEngine:
                 flux=params.get("flux", 0.0),
                 grid=scq.Grid1d(*grid),
                 ncut=params.get("ncut", 30),
-                truncated_dim=params.get("truncated_dim", 10)
+                truncated_dim=params.get("truncated_dim", 4)
             )
         else:
             raise ValueError(f"Unknown qubit type: {qubit_type}")

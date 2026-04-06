@@ -86,8 +86,14 @@ def _save_plot(result, qubit, gate):
     ax.legend()
     ax.grid(True, alpha=0.3)
     
-    filename = f"{qubit}_{gate}_dynamics.png"
-    save_path = Path(OUTPUT_DIRS["plots"]) / filename
+    base_filename = f"{qubit}_{gate}_dynamics"
+    save_path = Path(OUTPUT_DIRS["plots"]) / f"{base_filename}_1.png"
+    
+    counter = 2
+    while save_path.exists():
+        save_path = Path(OUTPUT_DIRS["plots"]) / f"{base_filename}_{counter}.png"
+        counter += 1
+        
     plt.savefig(save_path, dpi=150)
     plt.close()
     

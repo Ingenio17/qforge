@@ -14,9 +14,15 @@ qforge qubit create --type transmon --name T2 --EJ 14.5 --EC 0.3
 """
 import numpy as np
 import os
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from qforge.utils.terminal_plot import TerminalPlotter
 from qforge import QubitEngine
 from qforge.core.gate_engine import GateEngine
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 def main():
     print("============================================================")
@@ -33,17 +39,9 @@ def main():
     couplings = [{"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.03}]
     
     print(f"\n[CALIBRATION]: Finding optimal CNOT gate duration...")
-    best_duration = 0
-    max_p11 = -1
-    
-    sweep_times = np.linspace(20, 100, 20)
-    for duration in sweep_times:
-        res = g_eng.simulate_n_qubit_dynamics(["T1", "T2"], "CNOT", duration, couplings, initial_state="10", steps=2)
-        p11 = res["populations"]["11"][-1]
-        
-        if p11 > max_p11:
-            max_p11 = p11
-            best_duration = duration
+    best_duration, max_p11 = g_eng.calibrate_gate(
+        "T1", "T2", "CNOT", "tunable_coupler", 0.03, parameter="duration", range_vals=np.linspace(20, 100, 20)
+    )
             
     print(f"  -> Calibrated Gate Duration: {best_duration:.1f} ns (Yielding P(|11>) = {max_p11:.4f})")
     
@@ -80,10 +78,28 @@ def main():
     # Terminal Plot
     TerminalPlotter.plot_time_evolution(
         times=times,
-        expectations=[p_00, p_01, p_10, p_11, leakage_vals],
-        labels=['P(|00>)', 'P(|01>)', 'P(|10>) (Initial)', 'P(|11>) (Target)', 'P(Leakage)'],
-        title="Two-Qubit CNOT Gate Evolution (Control=T1, Target=T2)"
+        expectations=[p_10, p_11, leakage_vals],
+        labels=['P(|10>) (Init)', 'P(|11>) (Target)', 'Leakage'],
+        title="CNOT Gate Evolution (T1->T2)"
     )
+    
+    # Save high-res plot to outputs/plots
+    os.makedirs(os.path.join("outputs", "plots"), exist_ok=True)
+    save_path = os.path.join("outputs", "plots", "03_two_qubit_gates.png")
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(times, p_10, label='P(|10>) (Init)', linewidth=2)
+    plt.plot(times, p_11, label='P(|11>) (Target)', linewidth=2)
+    plt.plot(times, leakage_vals, label='Leakage', linestyle='--', linewidth=2)
+    plt.xlabel('Time (ns)')
+    plt.ylabel('Population')
+    plt.title('CNOT Gate Evolution (T1->T2)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"\n[INFO]: High-resolution plot saved to {save_path}")
 
 if __name__ == "__main__":
     main()

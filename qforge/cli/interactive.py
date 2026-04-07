@@ -57,6 +57,7 @@ def run_interactive():
     )
     
     while True:
+        engine.load_session()
         console.print("\n[bold]What would you like to do?[/bold]")
         for idx, option in enumerate(menu_options, 1):
             console.print(f"  {idx}. {option}")
@@ -498,6 +499,7 @@ def _wizard_analyze_qubit():
     from qforge.cli.commands.qubit import analyze
     
     # Get available qubits for completion
+    
     qubits = [q["name"] for q in engine.list_qubits()]
     qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
     yn_completer = WordCompleter(['y', 'n'], ignore_case=True)

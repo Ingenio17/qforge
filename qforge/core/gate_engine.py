@@ -18,12 +18,14 @@ class GateEngine:
     def __init__(self):
         """Initialize the gate engine."""
         self.qubit_engine = QubitEngine()
+        self._calib_cache = {}
         
     def _get_qubit_hamiltonian(self, qubit_name: str) -> Tuple[qt.Qobj, Dict[str, qt.Qobj]]:
         """
         Get the Hamiltonian of a qubit in its eigenbasis (truncated),
         along with its physical operators (charge, flux) projected into that same basis.
         """
+        self.qubit_engine.load_session()
         qubit = self.qubit_engine.get_qubit(qubit_name)
         dim = qubit.truncated_dim
         
@@ -62,6 +64,7 @@ class GateEngine:
         Returns:
             QuTiP Qobj operator representing the physical drive
         """
+        self.qubit_engine.load_session()
         gate_type = gate_type.upper()
         
         # Driving a transmon typically acts on the charge operator `n`
@@ -77,10 +80,12 @@ class GateEngine:
         elif gate_type == "Y":
             # 90-degree phase shifted capacitive drive
             if 'n' in operators:
-                return 1j * operators['n'] # Simplified phase representation
+                n_mat = operators['n'].full()
+                # Multiply lower triangle by 1j and upper by -1j to keep the operator Hermitian
+                return qt.Qobj(1j * np.tril(n_mat, -1) - 1j * np.triu(n_mat, 1))
             else:
                 a = qt.destroy(operators['n'].shape[0])
-                return 1j * (a - a.dag())
+                return 1j * (a.dag() - a)
         elif gate_type == "Z":
             # Flux tuning or Stark shift
             if 'phi' in operators:
@@ -103,10 +108,13 @@ class GateEngine:
                           gate_type: str, 
                           duration: float, 
                           noise_model: str = "none",
-                          steps: int = 100) -> Dict[str, Any]:
+                          steps: int = 100,
+                          drag_lambda: float = 0.5,
+                          use_drag: bool = True) -> Dict[str, Any]:
         """
         Simulate single-qubit gate dynamics using extracted scqubits matrices.
         """
+        self.qubit_engine.load_session()
         # 1. Setup System
         qubit = self.qubit_engine.get_qubit(qubit_name)
         dim = qubit.truncated_dim
@@ -116,10 +124,19 @@ class GateEngine:
         
         # Rotating Wave Approximation (RWA)
         # Transform to frame rotating at qubit frequency w01
-        evals = H0.diag() / (2 * np.pi)
-        w01 = evals[1] - evals[0]
+        evals_ang = H0.diag()
+        w01_ang = evals_ang[1] - evals_ang[0]
         
-        evals_rot = np.array([e - i * w01 * 2 * np.pi for i, e in enumerate(evals)])
+        # Calculate Anharmonicity for DRAG
+        if dim >= 3:
+            w12_ang = evals_ang[2] - evals_ang[1]
+            alpha_ang = w12_ang - w01_ang
+        else:
+            alpha_ang = 0.0
+            
+        drag_coef = -drag_lambda / alpha_ang if (use_drag and alpha_ang != 0) else 0.0
+        
+        evals_rot = np.array([e - i * w01_ang for i, e in enumerate(evals_ang)])
         evals_rot = evals_rot - evals_rot[0]
         H0_rot = qt.Qobj(np.diag(evals_rot))
         
@@ -136,16 +153,30 @@ class GateEngine:
         target_rotation = np.pi # Default to pi pulse (flip)
         if gate_type == "H": target_rotation = np.pi / 2 
         
-        # Drive amplitude needed to achieve target rotation in given duration
-        # \int \Omega dt = target_rotation  => \Omega = target / duration
-        # \Omega = 2 * drive_amp * |<0|n|1>| => drive_amp = (target / duration) / (2 * |<0|n|1>|)
-        omega = target_rotation / duration
-        amplitude = omega / (2.0 * matrix_element_01)
-        
         # Time array
         tlist = np.linspace(0, duration, steps)
         
-        # 2. Setup Noise
+        #Gaussian envelope parameters (6-sigma width)
+        sigma = duration / 6.0 if duration > 0 else 1.0
+        mu = duration / 2.0
+        
+        # Calculate the numerical integral of the envelope to properly calibrate the peak amplitude
+        envelope_array = np.exp(-0.5 * ((tlist - mu) / sigma)**2)
+        env_integral = np.trapezoid(envelope_array, tlist)
+        if env_integral == 0: env_integral = 1.0
+        
+        amplitude = target_rotation / (2.0 * matrix_element_01 * env_integral)
+        
+        def drive_shape(t, args):
+            return amplitude * np.exp(-0.5 * ((t - mu) / sigma)**2)
+        
+        def drag_shape(t, args):
+            if drag_coef == 0.0: 
+                return 0.0
+            derivative = amplitude * (-(t - mu) / (sigma**2)) * np.exp(-0.5 * ((t - mu) / sigma)**2)
+            return drag_coef * derivative
+        
+        # Setup Noise
         c_ops = []
         if noise_model == "realistic":
             coherence = self.qubit_engine.estimate_coherence(qubit)
@@ -156,11 +187,18 @@ class GateEngine:
                 # but could use exact loss operators mapped to `n` in the future.
                 c_ops.append(np.sqrt(rate_relax) * qt.destroy(dim))
             
-        # 3. Initial State
+        # Initial State
         psi0 = qt.basis(dim, 0) 
         
-        # 4. Evolve
-        H_total = H0_rot + amplitude * H_ctrl
+        # Evolve
+        H_total = [H0_rot, [H_ctrl, drive_shape]]
+        
+        if use_drag and drag_coef != 0.0:
+            # Create orthogonal RWA operator (90-degree phase shift)
+            H_ctrl_mat = H_ctrl.full()
+            H_drag_mat = 1j * np.tril(H_ctrl_mat, -1) - 1j * np.triu(H_ctrl_mat, 1)
+            H_total.append([qt.Qobj(H_drag_mat), drag_shape])
+            
         result = qt.mesolve(H_total, psi0, tlist, c_ops)
         
         # Calculate expectations
@@ -194,6 +232,7 @@ class GateEngine:
         Returns:
             Tuple of (H_static, list_of_qubit_objects, list_of_operators)
         """
+        self.qubit_engine.load_session()
         N = len(qubit_names)
         qubits = [self.qubit_engine.get_qubit(name) for name in qubit_names]
         dims = [q.truncated_dim for q in qubits]
@@ -272,6 +311,7 @@ class GateEngine:
         Returns:
             Dictionary mapping coupling type to metrics {'population': float, 'phase': float}
         """
+        self.qubit_engine.load_session()
         results = {}
         
         # Define scenarios to compare
@@ -332,6 +372,7 @@ class GateEngine:
         Calculate the interaction phase (normalized to pi) by subtracting reference dynamical phase.
         Returns phase in units of pi (e.g. 1.0 means pi).
         """
+        self.qubit_engine.load_session()
         try:
              # 1. Full Simulation
              # Use enough steps for numerical stability?
@@ -376,117 +417,141 @@ class GateEngine:
         return 0.0
 
     def calibrate_gate(self, 
-                      q1_name: str, 
-                      q2_name: str = None, 
-                      gate_type: str = "X", 
-                      coupling_type: str = None, 
-                      coupling_strength: float = 0.0, 
-                      parameter: str = "duration", 
-                      range_vals: list = [],
-                      **kwargs) -> Tuple[float, float]:
+                       q1_name: str, 
+                       q2_name: str = None, 
+                       gate_type: str = "X", 
+                       coupling_type: str = None, 
+                       coupling_strength: float = 0.0, 
+                       parameter: str = "duration", 
+                       range_vals: list = [],
+                       **kwargs) -> Tuple[float, float]:
         """
         Calibrate a gate by sweeping a parameter to maximize fidelity/population.
         Accepts kwargs (e.g. detuning) passed to simulate().
         """
-        if q2_name:
-            print(f"Calibrating {gate_type} ({coupling_type}) on {q1_name}-{q2_name}...")
-        else:
-            print(f"Calibrating {gate_type} on {q1_name}...")
-        best_val = 0.0
-        max_metric = -1.0
+        self.qubit_engine.load_session()
+        target_str = f"{q1_name}-{q2_name}" if q2_name else q1_name
         
-        # Setup sweep
+        # 1. SETUP RANGES FIRST (Crucial for correct caching behavior)
         if len(range_vals) == 0:
             if parameter == "duration":
                 if gate_type in ["X", "Y", "H"]:
-                     range_vals = np.linspace(5, 50, 40)
+                     range_vals = np.linspace(5, 50, 15)
                 elif coupling_type == "tunable_coupler":
-                     # Fast dynamics: 0.1 to 50ns with high resolution
-                     range_vals = np.linspace(0.1, 50, 100)
-                else:
-                     range_vals = np.linspace(1, 200, 40) 
+                     range_vals = np.linspace(5, 100, 20)
+                else: # Capacitive CR drives
+                     range_vals = np.linspace(50, 400, 20) 
             elif parameter == "amplitude":
-                range_vals = np.linspace(0.01, 0.2, 20)
+                range_vals = np.linspace(0.01, 0.2, 15)
             elif parameter == "detuning":
-                # Sweep -1.0 to 1.0 GHz
-                range_vals = np.linspace(-1.0, 1.0, 50)
+                range_vals = np.linspace(-1.0, 1.0, 20)
 
-        # Helper to run a sweep
-        def run_sweep(vals):
-            best_v = 0.0
-            max_m = -1.0 # 1.0 is max usually? Or maximize closeness?
-            # For CNOT: Maximize Pop (0 to 1)
-            # For CZ: Maximize (1 - dist_to_pi) (0 to 1)
+        # 2. GENERATE CACHE KEY
+        if not hasattr(self, "_calib_cache"):
+            self._calib_cache = {}
             
-            for val in vals:
-                # kwargs = { "duration": val } if parameter == "duration" else { "duration": 100.0 }
-                # ...
-                
-                try:
-                    metric = 0.0
-                    if gate_type in ["X", "Y", "H"]:
-                        evals = self.qubit_engine.get_qubit(q1_name).eigensys(evals_count=2)[0]
-                        w01 = evals[1] - evals[0]
-                        amp = kwargs.get("amplitude", 0.025)
-                        
-                        drives = [{"target": 0, "type": "X", "amplitude": amp, "frequency": w01, "phase": 0.0, "start_time": 0.0, "end_time": val}]
-                        res = self.simulate_n_qubit_dynamics([q1_name], f"Calibrate_{gate_type}", val, [], drives, "0", steps=5)
-                        
-                        p1 = res["populations"]["1"][-1] if "1" in res["populations"] else 0.0
-                        if gate_type in ["X", "Y"]:
-                            metric = p1
-                        elif gate_type == "H":
-                            metric = 1.0 - abs(p1 - 0.5) * 2.0
-                            
-                    elif gate_type == "CNOT":
-                        res = self.simulate_two_qubit_dynamics(
-                            q1_name, q2_name, gate_type, coupling_type, coupling_strength, 
-                            duration=val, steps=40, **kwargs
-                        )
-                        metric = res["populations"]["11"][-1]
-                        
-                    elif gate_type == "CZ":
-                        d_val = val if parameter == "detuning" else kwargs.get("detuning", 0.0)
-                        dur_val = val if parameter == "duration" else kwargs.get("duration", 40.0)
-                        
-                        run_dur = val if parameter == "duration" else kwargs.get("duration", 40.0) # Fixed default?
-                        run_det = val if parameter == "detuning" else kwargs.get("detuning", 0.0)
-                        
-                        # Robust Phase Metric
-                        phase_pi = self._calculate_interaction_phase_metric(
-                            q1_name, q2_name, coupling_type, coupling_strength, run_dur, detuning=run_det
-                        )
-                        ph = phase_pi % 2.0
-                        # Distance to 1.0 (Target Pi)
-                        dist = abs(ph - 1.0)
-                        metric = 1.0 - dist # 1 at match, <1 otherwise
-                    
-                    if metric > max_m:
-                        max_m = metric
-                        best_v = val
-                except: pass
-            return best_v, max_m
-
-        # 1. Coarse Sweep
-        print(f" -> Coarse sweep ({len(range_vals)} points)...")
-        best_val, max_metric = run_sweep(range_vals)
+        kw_tuple = tuple(sorted(kwargs.items()))
+        try:
+            rv_tuple = tuple(float(v) for v in range_vals)
+        except TypeError:
+            rv_tuple = ()
+            
+        cache_key = (q1_name, q2_name, gate_type, coupling_type, coupling_strength, parameter, kw_tuple, rv_tuple)
         
-        # 2. Fine Sweep (if duration)
-        if parameter == "duration" and max_metric > 0.5:
-             center = best_val
-             start = max(1.0, center - 5.0) # Tighter fine sweep
-             end = center + 5.0
-             if coupling_type == "tunable_coupler":
-                 # Even tighter for fast gates
-                 start = max(0.1, center - 2.0)
-                 end = center + 2.0
-                 fine_vals = np.linspace(start, end, 50) # High res
-             else:
-                 fine_vals = np.linspace(start, end, 30)
-                 
-             print(f" -> Fine sweep around {center:.1f}ns...")
-             best_val, max_metric = run_sweep(fine_vals)
+        # --- FIX: Return quietly if in cache to prevent optimization loop spam ---
+        if cache_key in self._calib_cache:
+            return self._calib_cache[cache_key]
+
+        # Only print the banner if we are actually performing a new calibration
+        target_str = f"{q1_name}-{q2_name}" if q2_name else q1_name
+        print(f"Calibrating {gate_type} ({coupling_type or 'local'}) on {target_str}...")
+
+        # 3. EVALUATION FUNCTION
+        def evaluate_metric(val):
+            metric = -1.0 # Default to severe penalty on failure
+            default_dur = 40.0 if gate_type in ["X", "Y", "H"] else 150.0
+            current_dur = val if parameter == "duration" else kwargs.get("duration", default_dur)
+            current_amp = val if parameter == "amplitude" else kwargs.get("amplitude", 0.025)
+            current_det = val if parameter == "detuning" else kwargs.get("detuning", 0.0)
+            
+            try:
+                if gate_type in ["X", "Y", "H"]:
+                    evals = self.qubit_engine.get_qubit(q1_name).eigensys(evals_count=2)[0]
+                    w01 = evals[1] - evals[0]
+                    current_use_drag = kwargs.get("use_drag", True)
+                    current_drag_lambda = kwargs.get("drag_lambda", 0.5)
+                    
+                    drives = [{"target": 0, "type": gate_type, "amplitude": current_amp, "frequency": w01, "phase": 0.0, "start_time": 0.0, "end_time": current_dur}]
+                    res = self.simulate_n_qubit_dynamics([q1_name], f"Calibrate_{gate_type}", current_dur, [], drives, "0", steps=20, use_drag=current_use_drag, drag_lambda=current_drag_lambda)
+                    
+                    p1 = res["populations"]["1"][-1] if "1" in res["populations"] else 0.0
+                    if gate_type in ["X", "Y"]:
+                        metric = p1
+                    elif gate_type == "H":
+                        metric = 1.0 - 4 * (p1 - 0.5)**2
+                        
+                elif gate_type == "CNOT":
+                    current_use_drag = kwargs.get('use_drag', True)
+                    current_drag_lambda = kwargs.get('drag_lambda', 0.5)
+                    res = self.simulate_two_qubit_dynamics(
+                        q1_name, q2_name, gate_type, coupling_type, coupling_strength, 
+                        duration=current_dur, 
+                        steps=40, 
+                        detuning=current_det, 
+                        use_drag=current_use_drag,
+                        drag_lambda=current_drag_lambda,
+                        initial_state="10"
+                    )
+                    metric = res["populations"]["11"][-1]
+                    
+                elif gate_type == "CZ":
+                    phase_pi = self._calculate_interaction_phase_metric(
+                        q1_name, q2_name, coupling_type, coupling_strength, current_dur, detuning=current_det
+                    )
+                    ph = phase_pi % 2.0
+                    metric = 1.0 - (ph - 1.0)**2
+                    
+            except Exception as e:
+                print(f"      [!] Metric eval failed at {parameter}={val:.3f}: {e}")
+                metric = -1.0 
+                
+            return metric
+
+        # 4. COARSE SWEEP
+        print(f" -> Coarse sweep ({len(range_vals)} points)...")
+        metrics = [evaluate_metric(v) for v in range_vals]
+        best_idx = np.argmax(metrics)
+        best_val = range_vals[best_idx]
+        max_metric = metrics[best_idx]
+        
+        # 5. WIDENED FINE SWEEP
+        if max_metric > 0.1:
+             step = abs(range_vals[1] - range_vals[0]) if len(range_vals) > 1 else 5.0
              
+             # Loosen bounds to ±1.5 steps to safely catch offset peaks
+             bound_lower = best_val - (1.5 * step)
+             bound_upper = best_val + (1.5 * step)
+             
+             # Physical bounds clamping
+             if parameter == "duration":
+                 bound_lower = max(0.1, bound_lower) 
+             elif parameter == "amplitude":
+                 bound_lower = max(0.001, bound_lower)
+             
+             # Higher density (50 points) required due to widened search net
+             fine_range = np.linspace(bound_lower, bound_upper, 50)
+             print(f" -> Fine sweep (50 points) widened to [{bound_lower:.2f}, {bound_upper:.2f}]...")
+             
+             fine_metrics = [evaluate_metric(v) for v in fine_range]
+             fine_best_idx = np.argmax(fine_metrics)
+             
+             if fine_metrics[fine_best_idx] > max_metric:
+                 best_val = fine_range[fine_best_idx]
+                 max_metric = fine_metrics[fine_best_idx]
+             
+        # Save the computed value to the cache before returning
+        print(f"  -> Calibrated {parameter.capitalize()}: {best_val:.4f} (Metric: {max_metric:.4f})")
+        self._calib_cache[cache_key] = (best_val, max_metric)
         return best_val, max_metric
 
     def _build_time_dependent_hamiltonian(self,
@@ -498,7 +563,10 @@ class GateEngine:
                                           duration: float,
                                           couplings: List[Dict[str, Any]],
                                           drives: List[Dict[str, Any]],
-                                          detuning: float = 0.0) -> Tuple[List[Any], Dict[str, Any]]:
+                                          detuning: float = 0.0,
+                                          drag_scheme: bool = True,
+                                          drag_lambda: float = 0.5) -> Tuple[List[Any], Dict[str, Any]]:
+        self.qubit_engine.load_session()
         N = len(qubit_names)
         H_total = [H_sys]
         args = {}
@@ -523,6 +591,29 @@ class GateEngine:
                      
                 pulse_func = make_coupler_coeff(g_amp, t_start, pulse_dur)
                 H_total.append([op_int, pulse_func])
+                
+            elif drive.get("type") == "flux_pulse":
+                target_idx = drive["target"]
+                # Safeguard: if a tuple is passed, assume the flux is applied to the target qubit
+                if isinstance(target_idx, (tuple, list)):
+                    target_idx = target_idx[-1]
+                det = drive.get("detuning", 0.0) * 2 * np.pi
+                t_start = drive.get("start_time", 0.0)
+                t_end = drive.get("end_time", duration)
+                pulse_dur = t_end - t_start
+                if pulse_dur <= 0: continue
+                
+                op_list = [qt.qeye(d) for d in dims]
+                op_list[target_idx] = qt.num(dims[target_idx])
+                op_flux = qt.tensor(op_list)
+                
+                def make_flux_coeff(det_val, ts, dur):
+                     mu = ts + dur / 2.0
+                     sigma = dur / 6.0 if dur > 0 else 1.0
+                     return lambda t, args: det_val * np.exp(-0.5 * ((t - mu) / sigma)**2) if (ts <= t <= ts + dur) else 0.0
+                     
+                flux_func = make_flux_coeff(det, t_start, pulse_dur)
+                H_total.append([op_flux, flux_func])
             else:
                 target_idx = drive["target"]
                 d_type = drive.get("type", "X")
@@ -537,10 +628,29 @@ class GateEngine:
                 op_list[target_idx] = op_local
                 op_drive = qt.tensor(op_list)
                 
-                def make_drive_coeff(a, f, p, ts, te):
-                     return lambda t, args: a * np.cos(f * t + p) if (ts <= t <= te) else 0.0
+                # Calculate Anharmonicity for DRAG
+                target_qubit = self.qubit_engine.get_qubit(qubit_names[target_idx])
+                evals_ang = target_qubit.eigenvals(evals_count=3) * 2 * np.pi
+                if len(evals_ang) >= 3:
+                    w01_ang = evals_ang[1] - evals_ang[0]
+                    w12_ang = evals_ang[2] - evals_ang[1]
+                    alpha_ang = w12_ang - w01_ang
+                else:
+                    alpha_ang = 0.0
+                    
+                drag_coef = -drag_lambda / alpha_ang if (drag_scheme and alpha_ang != 0) else 0.0
+                
+                def make_drive_coeff(a, f, p, ts, te, d_coef):
+                     dur = te - ts
+                     mu = ts + dur / 2.0
+                     sigma = dur / 6.0 if dur > 0 else 1.0
+                     return lambda t, args: (
+                         (a * np.exp(-0.5 * ((t - mu) / sigma)**2) * np.cos(f * t + p) - 
+                          d_coef * a * (-(t - mu) / (sigma**2)) * np.exp(-0.5 * ((t - mu) / sigma)**2) * np.sin(f * t + p))
+                         if (ts <= t <= te) else 0.0
+                     )
                          
-                coeff_func = make_drive_coeff(amp, freq, phase, t_start, t_end)
+                coeff_func = make_drive_coeff(amp, freq, phase, t_start, t_end, drag_coef)
                 H_total.append([op_drive, coeff_func])
             
         # B) Tunable Couplers
@@ -556,28 +666,36 @@ class GateEngine:
                 op_int = qt.tensor(op_list)
                 
                 def make_pulse_coeff(g_val, dur):
-                     return lambda t, args: g_val * (np.sin(np.pi * t / dur)**2)
+                     mu = dur / 2.0
+                     sigma = dur / 6.0 if dur > 0 else 1.0
+                     return lambda t, args: g_val * np.exp(-0.5 * ((t - mu) / sigma)**2) if (0 <= t <= dur) else 0.0
                      
                 pulse_func = make_pulse_coeff(g_amp, duration)
                 H_total.append([op_int, pulse_func])
                 
         # C) Specific gate overrides for compatibility with old 2-qubit caller
         if N == 2:
-            if gate_type == "CNOT":
+            if gate_type == "CNOT" and couplings[0].get("type") == "capacitive":
                 H0_2, _ = self._get_qubit_hamiltonian(qubit_names[1])
                 e2 = H0_2.diag() / (2*np.pi)
                 w2 = e2[1] - e2[0]
                 
                 if not any(d["target"] == 1 for d in drives):
                     op_list = [qt.qeye(d) for d in dims]
-                    op_list[1] = self.get_control_hamiltonian("X", local_ops[1])
+                    op_list[0] = self.get_control_hamiltonian("X", local_ops[0])
                     op_drive = qt.tensor(op_list)
-                    amp = 0.100 * 2 * np.pi 
+                    amp = 0.040 * 2 * np.pi 
                     
-                    def cr_drive(t, args): return args['cr_amp'] * np.cos(args['cr_w'] * t)
+                    def cr_drive(t, args):
+                        T = args['dur']
+                        mu = T / 2.0
+                        sigma = T / 6.0 if T > 0 else 1.0
+                        env = np.exp(-0.5 * ((t - mu) / sigma)**2) if (0 <= t <= T) else 0.0
+                        return args['cr_amp'] * env * np.cos(args['cr_w'] * t)
                     H_total.append([op_drive, cr_drive])
                     args['cr_amp'] = amp
                     args['cr_w'] = w2 * 2 * np.pi
+                    args['dur'] = duration
                     
             elif gate_type == "CZ":
                 if couplings[0]["type"] == "tunable_coupler":
@@ -585,7 +703,11 @@ class GateEngine:
                     op_list[1] = qt.num(dims[1]) 
                     n2_op = qt.tensor(op_list)
                     
-                    def flux_coeff(t, args): return args['det'] * (np.sin(np.pi * t / args['T'])**2)
+                    def flux_coeff(t, args):
+                        T = args['T']
+                        mu = T / 2.0
+                        sigma = T / 6.0 if T > 0 else 1.0
+                        return args['det'] * np.exp(-0.5 * ((t - mu) / sigma)**2) if (0 <= t <= T) else 0.0
                     H_total.append([n2_op, flux_coeff])
                     args['det'] = detuning * 2 * np.pi
                     args['T'] = duration
@@ -603,6 +725,7 @@ class GateEngine:
         Generate the process tomography Choi matrix for the gate by computing
         the exact unitary propagator and projecting it onto the computational subspace.
         """
+        self.qubit_engine.load_session()
         import itertools
         import numpy as np
         
@@ -653,6 +776,7 @@ class GateEngine:
         Returns:
             Dict with 'fidelity', 'trace_distance'
         """
+        self.qubit_engine.load_session()
         if state.type == 'ket':
             state_dm = qt.ket2dm(state)
         else:
@@ -679,15 +803,17 @@ class GateEngine:
             "purity": purity
         }
 
-    def simulate_n_qubit_dynamics(self, 
-                                  qubit_names: List[str], 
+    def simulate_n_qubit_dynamics(self,
+                                  qubit_names: List[str],
                                   gate_type: str,
-                                  duration: float, 
+                                  duration: float,
                                   couplings: List[Dict[str, Any]] = [],
                                   drives: List[Dict[str, Any]] = [],
-                                  initial_state: str = None,
-                                  steps: int = 200, 
-                                  detuning: float = 0.0) -> Dict[str, Any]:
+                                  initial_state: Optional[Any] = None,
+                                  steps: int = 200,
+                                  detuning: float = 0.0,
+                                  use_drag: bool = True,
+                                  drag_lambda: float = 0.5) -> Dict[str, Any]:
         """
         Simulate the generalized dynamics of an N-qubit system.
         
@@ -697,69 +823,149 @@ class GateEngine:
             duration: Gate duration in ns
             couplings: Static and tunable couplings between qubits (adjacency list)
             drives: Microwave pulses applied to specific qubits
-            initial_state: String like "011", defaults to "0" * N
+            initial_state: String like "011", or a QuTiP Qobj. Defaults to all-zero state.
+            use_drag: Whether to apply DRAG correction to microwave drives.
         """
+        self.qubit_engine.load_session()
         N = len(qubit_names)
         
+        # For a tunable coupler, a CNOT is physically implemented as an H-CZ-H sequence.
+        # This block compiles that logical gate into a single, continuous physical pulse schedule.
+        if N == 2 and gate_type == "CNOT" and couplings and couplings[0].get("type") == "tunable_coupler":
+            # 1. Calibrate durations
+            t_cz = duration
+            # Calibrate a Pi pulse (X) and halve its duration for a precise Pi/2 pulse (Y)
+            t_x, _ = self.calibrate_gate(
+                qubit_names[1], 
+                gate_type="X", 
+                parameter="duration",
+                use_drag=use_drag,
+                drag_lambda=drag_lambda
+            )
+            t_h = t_x / 2.0
+
+            # 2. Get physical properties needed for drives
+            H0_target, ops_target = self._get_qubit_hamiltonian(qubit_names[1])
+            w01_target = np.real(H0_target.diag()[1] - H0_target.diag()[0]) / (2 * np.pi)
+
+            # 3. Build the chronologically scheduled list
+            full_drives = []
+            current_time = 0.0
+
+            # First Y(pi/2) gate on target qubit (implemented as X drive with -pi/2 phase)
+            full_drives.append({
+                "target": 1, 
+                "type": "X", 
+                "amplitude": 0.025, 
+                "frequency": w01_target, 
+                "phase": -np.pi / 2, 
+                "start_time": current_time, 
+                "end_time": current_time + t_h
+            })
+            current_time += t_h
+
+            # CZ-pulse (implemented as a timed coupler pulse and flux detuning)
+            full_drives.append({
+                "target": (0, 1), 
+                "type": "coupler_pulse", 
+                "strength": couplings[0]["strength"], 
+                "start_time": current_time, 
+                "end_time": current_time + t_cz
+            })
+            full_drives.append({
+                "target": 1, 
+                "type": "flux_pulse", 
+                "detuning": detuning, 
+                "start_time": current_time, 
+                "end_time": current_time + t_cz
+            })
+            current_time += t_cz
+
+            # Second -Y(pi/2) gate on target qubit (implemented as X drive with +pi/2 phase)
+            full_drives.append({
+                "target": 1, 
+                "type": "X", 
+                "amplitude": 0.025, 
+                "frequency": w01_target, 
+                "phase": np.pi / 2, 
+                "start_time": current_time, 
+                "end_time": current_time + t_h
+            })
+            current_time += t_h
+
+            # 4. Execute the entire compiled sequence in a single simulation run.
+            return self.simulate_n_qubit_dynamics(
+                qubit_names=qubit_names,
+                gate_type="CNOT_COMPILED",
+                duration=current_time,
+                couplings=[], 
+                drives=full_drives,
+                initial_state=initial_state,
+                steps=steps,
+                detuning=detuning,
+                use_drag=use_drag,
+                drag_lambda=drag_lambda
+            )
+
+        # --- Original simulation logic for all other gate types ---
+
         # 1. Get Static System Hamiltonian
         H_sys, qubits, local_ops = self._get_n_qubit_hamiltonian(qubit_names, couplings)
         dims = [q.truncated_dim for q in qubits]
-        
+
         # 2. Add Time-Dependent Drives and Tunable Couplers
         H_total, args = self._build_time_dependent_hamiltonian(
-            H_sys, dims, local_ops, qubit_names, gate_type, duration, couplings, drives, detuning
+            H_sys, dims, local_ops, qubit_names, gate_type, duration, couplings, drives, detuning, drag_scheme=use_drag, drag_lambda=drag_lambda
         )
 
         # 3. Initial State
         if initial_state is None:
             initial_state = "0" * N
-            
-        basis_list = []
-        for i, char in enumerate(initial_state):
-             lvl = int(char)
-             if lvl >= dims[i]: lvl = dims[i] - 1
-             basis_list.append(qt.basis(dims[i], lvl))
-        psi0 = qt.tensor(basis_list)
+
+        if isinstance(initial_state, str):
+            basis_list = []
+            for i, char in enumerate(initial_state):
+                 lvl = int(char)
+                 if lvl >= dims[i]: lvl = dims[i] - 1
+                 basis_list.append(qt.basis(dims[i], lvl))
+            psi0 = qt.tensor(basis_list)
+        else:
+            # Assume initial_state is already a precise QuTiP Qobj state
+            psi0 = initial_state
 
         # 4. Evolution
         times = np.linspace(0, duration, steps)
-        opts = {"store_states": True, "nsteps": 10000000} 
-        
+        opts = {"store_states": True, "nsteps": 10000000}
+
         # Warning: H_total must be formatted exactly for QuTiP
         res = qt.mesolve(H_total, psi0, times, [], [], args=args, options=opts)
-        
-        # 5. Process Results (Populations up to 2^N computational space)
-        # For performance, only track max 4 computational states if N=2, or 8 if N=3, or 16 if N=4
+
+        # 5. Process Results (Populations up to 4 states per qubit: 0, 1, 2, 3)
         comp_states = {}
-        if N <= 4:
+        if len(res.states) > 0:
             import itertools
-            for bit_tuple in itertools.product([0, 1], repeat=N):
-                state_str = "".join(str(b) for b in bit_tuple)
-                # Compute projection operator
-                proj_list = [qt.projection(dims[i], b, b) for i, b in enumerate(bit_tuple)]
-                proj_op = qt.tensor(proj_list)
-                comp_states[state_str] = np.real(qt.expect(proj_op, res.states))
-        
+            # Track up to level 3 (ket 0, 1, 2, 3)
+            ranges = [range(min(4, d)) for d in dims]
+
+            is_ket = res.states[0].type == 'ket'
+            if is_ket:
+                state_data = np.array([s.full().flatten() for s in res.states])
+                probs = np.abs(state_data)**2
+            else:
+                state_data = np.array([s.diag() for s in res.states])
+                probs = np.real(state_data)
+
+            for k_tuple in itertools.product(*ranges):
+                state_str = "".join(str(k) for k in k_tuple)
+                idx = np.ravel_multi_index(k_tuple, dims)
+                comp_states[state_str] = probs[:, idx]
+
         result = {
             "times": times,
-            "states": res.states, 
+            "states": res.states,
             "populations": comp_states,
             "final_state": res.states[-1]
         }
-        
-        # Post-processing for Tunable CNOT (legacy compat)
-        if N == 2 and gate_type == "CNOT" and couplings[0]["type"] == "tunable_coupler":
-            mat_h = np.eye(dims[1], dtype=complex)
-            h_sub = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
-            mat_h[0:2, 0:2] = h_sub
-            h_obj = qt.Qobj(mat_h, dims=[[dims[1]], [dims[1]]])
-            
-            U_H = qt.tensor(qt.qeye(dims[0]), h_obj)
-            new_final = U_H * res.states[-1]
-            result["final_state"] = new_final
-            if "11" in result["populations"]:
-                p11 = qt.expect(qt.tensor(qt.projection(dims[0], 1, 1), qt.projection(dims[1], 1, 1)), new_final)
-                result["populations"]["11"][-1] = np.real(p11)
 
         return result
 
@@ -767,12 +973,20 @@ class GateEngine:
     def simulate_two_qubit_dynamics(self, qubit1_name: str, qubit2_name: str, 
                                    gate_type: str, coupling_type: str, 
                                    coupling_strength: float, duration: float, 
-                                   steps: int = 100, detuning: float = 0.0) -> Dict[str, Any]:
+                                   steps: int = 100, detuning: float = 0.0, use_drag: bool = True,
+                                   drag_lambda: float = 0.5,
+                                   initial_state: Optional[Any] = None) -> Dict[str, Any]:
         """Legacy wrapper bridging old tests to the new N-Qubit Engine"""
+        self.qubit_engine.load_session()
         couplings = [{"q1": 0, "q2": 1, "type": coupling_type, "strength": coupling_strength}]
-        init = "10" if gate_type == "CNOT" else "11"
+        
+        # If initial_state is not provided, use legacy defaults.
+        init = initial_state
+        if init is None:
+            init = "10" if gate_type == "CNOT" else "11"
+            
         return self.simulate_n_qubit_dynamics([qubit1_name, qubit2_name], gate_type, duration, 
-                                              couplings, initial_state=init, steps=steps, detuning=detuning)
+                                              couplings, initial_state=init, steps=steps, detuning=detuning, use_drag=use_drag, drag_lambda=drag_lambda)
 
     def calculate_gate_fidelity(self, q1_name: str, q2_name: str, 
                                 gate_type: str, coupling_type: str, 
@@ -781,6 +995,7 @@ class GateEngine:
         Calculate Average Gate Fidelity using the full propagator.
         This effectively performs Process Tomography w/o 16 simulations.
         """
+        self.qubit_engine.load_session()
         import numpy as np
         print(f"Calculating Fidelity for {gate_type} ({coupling_type}) on {q1_name}-{q2_name}...")
         

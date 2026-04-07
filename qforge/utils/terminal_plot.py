@@ -17,7 +17,7 @@ class TerminalPlotter:
     """Helper class for terminal-based plotting."""
     
     @staticmethod
-    def plot_time_evolution(times, expectations, labels, title="Time Evolution"):
+    def plot_time_evolution(times, expectations, labels, title="Time Evolution", ylim=None, height=25):
         """
         Plot time evolution of expectation values.
         
@@ -26,9 +26,14 @@ class TerminalPlotter:
             expectations: List of expectation value arrays
             labels: List of labels for each expectation value
             title: Plot title
+            ylim: Tuple of (min_y, max_y) to force axis limits (optional)
+            height: Maximum vertical lines for the plot (prevents terminal wrapping)
         """
         plt.clear_figure()
         plt.theme("dark")
+        
+        # Force a specific plot size to prevent the terminal buffer from overflowing
+        plt.plotsize(100, height) 
         
         times_list = list(times)
         for i, expect in enumerate(expectations):
@@ -37,6 +42,10 @@ class TerminalPlotter:
         plt.title(title)
         plt.xlabel("Time (ns)")
         plt.ylabel("Expectation Value")
+        
+        if ylim is not None:
+            plt.ylim(ylim[0], ylim[1])
+            
         plt.grid(True, True)
         plt.show()
 

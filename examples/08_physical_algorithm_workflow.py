@@ -20,6 +20,11 @@ Terminal CLI Equivalents:
 import numpy as np
 import fractions
 import time
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from qforge import QubitEngine
 from qforge.core.gate_engine import GateEngine
 from qforge.utils.terminal_plot import TerminalPlotter

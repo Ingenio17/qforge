@@ -13,6 +13,8 @@ import subprocess
 from qforge.cli.commands.example import list_example_files, get_examples_dir
 
 from qforge.core.qubit_engine import QubitEngine
+from qforge.core.gate_engine import GateEngine
+from qforge.core.workflow_engine import PhysicalWorkflowEngine
 
 console = Console()
 engine = QubitEngine()
@@ -355,8 +357,97 @@ def _wizard_run_example():
 def _wizard_full_workflow():
     """Wizard for full workflow."""
     console.print("\n[bold cyan]Full Workflow Wizard[/bold cyan]")
-    console.print("[yellow]This will guide you through: qubit → gate → circuit → hardware.[/yellow]")
-    console.print("[dim]Coming soon in interactive mode. Use: qforge workflow run --help[/dim]")
+    console.print("[yellow]Translating abstract OpenQASM algorithmic circuits to superconducting physical schedules.[/yellow]\n")
+    
+    # Step 1: Qubit Selection
+    available_qubits = [q["name"] for q in engine.list_qubits()]
+    if not available_qubits:
+        console.print("[red]No qubits exist. Go back and Create Qubits first![/red]")
+        return
+        
+    console.print("[bold]1. Available Qubits[/bold]: " + ", ".join(available_qubits))
+    q_str = prompt("Enter comma-separated qubit names to use in order (e.g. Q0, Q1, Q2): ").strip()
+    if not q_str:
+        return
+        
+    qubit_names = [q.strip() for q in q_str.split(',')]
+    for q in qubit_names:
+        if q not in available_qubits:
+            console.print(f"[red]Error: Qubit '{q}' does not exist.[/red]")
+            return
+            
+    # Step 2: Coupling Specification
+    console.print("\n[bold]2. Define Native Coupling Topology[/bold]")
+    console.print("[dim]Enter graph edges connecting the qubits you chose (Couplings are bidirectional, so only specify Q1->Q2 once!).[/dim]")
+    couplings = []
+    
+    ctype_completer = WordCompleter(["capacitive", "inductive", "tunable_coupler"], ignore_case=True)
+    qindex_completer = WordCompleter([str(i) for i in range(len(qubit_names))])
+    
+    while True:
+        console.print("\n   [New Coupling Edge]")
+        c_idx1 = prompt(f"   Enter Logic Index for Q1 (0 to {len(qubit_names)-1}, or leave empty to finish): ", completer=qindex_completer).strip()
+        if not c_idx1:
+            break
+            
+        c_idx2 = prompt(f"   Enter Logic Index for Q2 (0 to {len(qubit_names)-1}): ", completer=qindex_completer).strip()
+        ctype = prompt("   Coupling Type (capacitive/inductive/tunable_coupler) [tunable_coupler]: ", completer=ctype_completer).strip() or "tunable_coupler"
+        cstren = prompt("   Strength in GHz [0.05]: ").strip() or "0.05"
+        
+        try:
+            couplings.append({
+                "q1": int(c_idx1),
+                "q2": int(c_idx2),
+                "type": ctype,
+                "strength": float(cstren)
+            })
+            console.print(f"   [green]Added {ctype} ({cstren} GHz) edge between physical qubits {qubit_names[int(c_idx1)]} and {qubit_names[int(c_idx2)]}.[/green]")
+        except ValueError:
+             console.print("[red]Invalid numerical input.[/red]")
+             
+    # Step 3: Circuit Processing
+    console.print("\n[bold]3. Algorithm Circuit Specification[/bold]")
+    path = prompt("Enter accurate path to OpenQASM (.qasm) file: ").strip().strip("\"'")
+    if not path or not os.path.exists(path):
+        console.print(f"[red]QASM file '{path}' not found.[/red]")
+        return
+        
+    console.print(f"\n[green]Initializing PhysicalWorkflowEngine and orchestrating mappings...[/green]")
+    try:
+        g_eng = GateEngine()
+        wf_eng = PhysicalWorkflowEngine(engine, g_eng)
+        
+        # Simulates inside WorkflowEngine using GateEngine's Hilbert solver
+        res = wf_eng.execute_workflow(qubit_names, couplings, path)
+        
+        # Extract Results
+        console.print("\n[bold]Simulation Complete! Decoding Physical Populations:[/bold]")
+        final_pops = {k: v[-1] for k, v in res["populations"].items()}
+        
+        sorted_pops = sorted(final_pops.items(), key=lambda x: -x[1])
+        top_keys = [k for k, v in sorted_pops[:4]]
+        
+        for state, p in sorted_pops[:8]:
+            if p > 0.01:
+                console.print(f" |{state}>: {p*100:5.2f}%")
+                
+        # Plot continuous timeline
+        from qforge.utils.terminal_plot import TerminalPlotter
+        plot_expectations = [res["populations"][k] for k in top_keys]
+        labels = [f"P(|{k}>)" for k in top_keys]
+        console.print("\n[bold]4. Visual Hardware Timeline Analysis[/bold]")
+        TerminalPlotter.plot_time_evolution(
+            times=res["times"],
+            expectations=plot_expectations,
+            labels=labels,
+            title="Physical Workflow Hardware Execution Timeline"
+        )
+    except Exception as e:
+        console.print(f"[red]Workflow execution failed: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        
+    input("\nPress Enter to continue...")
 
 
 def _show_help():

@@ -608,9 +608,8 @@ class GateEngine:
                 op_flux = qt.tensor(op_list)
                 
                 def make_flux_coeff(det_val, ts, dur):
-                     mu = ts + dur / 2.0
-                     sigma = dur / 6.0 if dur > 0 else 1.0
-                     return lambda t, args: det_val * np.exp(-0.5 * ((t - mu) / sigma)**2) if (ts <= t <= ts + dur) else 0.0
+                     # Synchronize the flux pulse to match the sin^2 coupler pulse
+                     return lambda t, args: det_val * (np.sin(np.pi * (t - ts) / dur)**2) if (ts <= t <= ts + dur) else 0.0
                      
                 flux_func = make_flux_coeff(det, t_start, pulse_dur)
                 H_total.append([op_flux, flux_func])
@@ -852,14 +851,7 @@ class GateEngine:
             auto_detuning = (w01_ctrl - w01_tgt - alpha_tgt) if detuning == 0.0 and alpha_tgt != 0.0 else detuning
 
             # Calculate Virtual Z Phase Correction
-            # The flux pulse alters the target's frequency, causing an anomalous dynamic phase.
-            # We integrate the Gaussian flux pulse exactly to find the precise phase error in radians.
-            t_cz_array = np.linspace(0, t_cz, max(100, int(t_cz * 10)))
-            mu = t_cz / 2.0
-            sigma_cz = t_cz / 6.0 if t_cz > 0 else 1.0
-            env = np.exp(-0.5 * ((t_cz_array - mu) / sigma_cz)**2)
-            integral = np.trapezoid(env, t_cz_array)
-            exact_flux_phase = (auto_detuning * 2 * np.pi) * integral
+            exact_flux_phase = (auto_detuning * 2 * np.pi) * (t_cz / 2.0)
 
             # 3. Build the chronologically scheduled list
             full_drives = []

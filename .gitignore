@@ -82,3 +82,7 @@ outputs/
 # OS specific
 .DS_Store
 Thumbs.db
+docs/superpowers/
+
+# Git worktrees
+.worktrees/

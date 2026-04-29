@@ -56,8 +56,16 @@ class PhysicalWorkflowEngine:
         
         # We auto-calibrate the prime single-qubit primitives for all involved qubits
         for q in qubit_names:
-            best_x, _ = self.g_eng.calibrate_gate(q, gate_type="X", parameter="duration", range_vals=np.linspace(15.0, 25.0, 10), amplitude=0.025)
-            best_h, _ = self.g_eng.calibrate_gate(q, gate_type="H", parameter="duration", range_vals=np.linspace(5.0, 15.0, 10), amplitude=0.025)
+            # Physics-informed X calibration: calibrate_gate uses T_pi = 6/(amp*n01*sqrt(2pi))
+            # as the sweep centre when range_vals is empty (no fixed 15-25 ns range).
+            best_x, _ = self.g_eng.calibrate_gate(q, gate_type="X", parameter="duration", amplitude=0.025)
+            # H = Rz(π/2)·Rx(π/2)·Rz(π/2).  The Rx(π/2) sub-pulse is the same charge-operator
+            # drive as X but at half the rotation angle.  For a Gaussian pulse the rotation angle
+            # scales linearly with duration, so H duration = X duration / 2.
+            # A separate H sweep is not needed and would use a mis-phased operator anyway.
+            # Natively calibrate the H-gate instead of guessing the scaling
+            best_h, _ = self.g_eng.calibrate_gate(q, gate_type="H", parameter="duration", amplitude=0.025)
+            
             calibrations["single_qubit"][q] = {"X": best_x, "H": best_h}
             
         # We auto-calibrate CZ on all defined couplings
@@ -69,10 +77,10 @@ class PhysicalWorkflowEngine:
             ctype = c["type"]
             strength = c["strength"]
             
-            # Using typical sweep bounds for tunable couplers / capacitive coupling phase
-            best_cz, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CZ", ctype, strength, "duration", np.linspace(20, 60, 10))
-            calibrations["two_qubit"][(q1_name, q2_name)] = {"CZ": best_cz}
-            calibrations["two_qubit"][(q2_name, q1_name)] = {"CZ": best_cz}
+            best_cz, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CZ", ctype, strength, "duration")
+            best_cx, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CNOT", ctype, strength, "duration")
+            calibrations["two_qubit"][(q1_name, q2_name)] = {"CZ": best_cz, "CX": best_cx}
+            calibrations["two_qubit"][(q2_name, q1_name)] = {"CZ": best_cz, "CX": best_cx}
             
         return calibrations
 
@@ -90,6 +98,9 @@ class PhysicalWorkflowEngine:
             evals = self.q_eng.get_qubit(q).eigensys(evals_count=2)[0]
             w01_list.append(evals[1] - evals[0])
             
+        # TODO: _add_h is no longer called — H gate scheduling is handled inline in the
+        # op_name == 'h' branch below. _add_cx previously used it as the flanking rotation
+        # in H+CZ+H, but that decomposition is replaced by the physical Ry(±π/2)+coupler sequence.
         def _add_h(targ_idx, t_start):
             dur = calibrations["single_qubit"][qubit_names[targ_idx]]["H"]
             schedule.append({"target": targ_idx, "type": "H", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
@@ -101,12 +112,23 @@ class PhysicalWorkflowEngine:
             return t_start + dur
 
         def _add_cx(ctrl_idx, targ_idx, c_conf, t_start):
-            t1 = _add_h(targ_idx, t_start)
-            # ctrl waits until t1
-            t1_sync = max(t1, qubit_times[ctrl_idx])
-            t2 = _add_cz(ctrl_idx, targ_idx, c_conf, t1_sync)
-            t3 = _add_h(targ_idx, t2)
-            return t2, t3 # ctrl ends at t2, targ ends at t3
+            dur_cx = calibrations["two_qubit"][(qubit_names[ctrl_idx], qubit_names[targ_idx])]["CX"]
+            ctype = c_conf["type"]
+
+            if ctype == "tunable_coupler":
+                # CX = Ry(-π/2)_targ · CZ · Ry(+π/2)_targ — mirrors the sequence in simulate_n_qubit_dynamics.
+                # Ry(±π/2) implemented as X drives with ∓π/2 phase: cos(ωt ∓ π/2) = ±sin(ωt).
+                t_h = calibrations["single_qubit"][qubit_names[targ_idx]]["X"] / 2.0
+                schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": -np.pi / 2, "start_time": t_start, "end_time": t_start + t_h})
+                t1 = t_start + t_h
+                schedule.append({"target": (min(ctrl_idx, targ_idx), max(ctrl_idx, targ_idx)), "type": "coupler_pulse", "strength": c_conf["strength"], "start_time": t1, "end_time": t1 + dur_cx})
+                t2 = t1 + dur_cx
+                schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": np.pi / 2, "start_time": t2, "end_time": t2 + t_h})
+                return t2 + t_h
+            else:
+                # Capacitive CR: drive control qubit at target qubit's transition frequency.
+                schedule.append({"target": ctrl_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur_cx})
+                return t_start + dur_cx
 
         # Parse operations iteratively, extending sequential times 
         for instr in transpiled_circuit.data:
@@ -126,13 +148,17 @@ class PhysicalWorkflowEngine:
                     qubit_times[q] += dur
                 elif op_name == 'h':
                     dur = calibrations["single_qubit"][q_name]["H"]
+                    # Change "type": "H" to "type": "Y"
                     schedule.append({"target": q, "type": "H", "amplitude": 0.025, "frequency": w01_list[q], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
                     qubit_times[q] += dur
                 elif op_name == 'rz':
                     # Abstractly represented by tracking classical phase updates natively, but physical simulation uses
-                    # raw drives. For simplicity without a hardware virtual Z compile, we treat it as an instantaneous frame update 
+                    # raw drives. For simplicity without a hardware virtual Z compile, we treat it as an instantaneous frame update
                     # and omit the physical pulse (fidelity assumes global phase tracking mapping)
-                    pass 
+                    pass
+                elif op_name in ('measure', 'barrier', 'reset'):
+                    # Classical/control-flow operations — not unitary gates, no physical pulse needed.
+                    pass
                 else:
                     print(f"Warning: Single qubit gate {op_name} unsupported in rigorous native basis mapping. Treating it as identity wait.")
                     
@@ -156,9 +182,7 @@ class PhysicalWorkflowEngine:
                     qubit_times[q1] = qubit_times[q2] = t_end
                     
                 elif op_name == 'cx' or op_name == 'cnot':
-                    t_ctrl, t_targ = _add_cx(q1, q2, c_conf, t_start)
-                    qubit_times[q1] = t_ctrl
-                    qubit_times[q2] = t_targ
+                    qubit_times[q1] = qubit_times[q2] = _add_cx(q1, q2, c_conf, t_start)
                     
                 elif op_name == 'cp' or op_name == 'cphase':
                     params = instr.operation.params
@@ -172,19 +196,9 @@ class PhysicalWorkflowEngine:
                     
                 elif op_name == 'swap':
                     # SWAP is 3 CX gates
-                    t1_ctrl, t1_targ = _add_cx(q1, q2, c_conf, t_start)
-                    qubit_times[q1] = t1_ctrl
-                    qubit_times[q2] = t1_targ
-                    
-                    t2_start = max(qubit_times[q1], qubit_times[q2])
-                    t2_ctrl, t2_targ = _add_cx(q2, q1, c_conf, t2_start)
-                    qubit_times[q2] = t2_ctrl
-                    qubit_times[q1] = t2_targ
-                    
-                    t3_start = max(qubit_times[q1], qubit_times[q2])
-                    t3_ctrl, t3_targ = _add_cx(q1, q2, c_conf, t3_start)
-                    qubit_times[q1] = t3_ctrl
-                    qubit_times[q2] = t3_targ
+                    qubit_times[q1] = qubit_times[q2] = _add_cx(q1, q2, c_conf, t_start)
+                    qubit_times[q1] = qubit_times[q2] = _add_cx(q2, q1, c_conf, qubit_times[q1])
+                    qubit_times[q1] = qubit_times[q2] = _add_cx(q1, q2, c_conf, qubit_times[q1])
 
         return schedule, max(qubit_times)
 

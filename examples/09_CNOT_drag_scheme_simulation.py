@@ -90,8 +90,8 @@ def main():
         )
         
         # Save high-res plot to outputs/plots
-        os.makedirs(os.path.join("qforge", "outputs", "plots"), exist_ok=True)
-        save_path = os.path.join("qforge", "outputs", "plots", f"09_CNOT_gates_{drag_label}_DRAG.png")
+        os.makedirs(os.path.join("outputs", "plots"), exist_ok=True)
+        save_path = os.path.join("outputs", "plots", f"09_CNOT_gates_{drag_label}_DRAG.png")
         
         plt.figure(figsize=(10, 6))
         plt.plot(times, p_10, label='P(|10>) (Init)', linewidth=2)

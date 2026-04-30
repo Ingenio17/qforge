@@ -520,9 +520,12 @@ class GateEngine:
         def evaluate_metric(val):
             metric = -1.0 # Default to severe penalty on failure
             default_dur = 40.0 if gate_type in ["X", "Y", "H"] else 150.0
+            default_det = 0.0
+            if gate_type in ["CNOT", "CZ"] and coupling_type == "tunable_coupler":
+                default_det = self._calculate_resonant_flux(q1_name, q2_name)
             current_dur = val if parameter == "duration" else kwargs.get("duration", default_dur)
             current_amp = val if parameter == "amplitude" else kwargs.get("amplitude", 0.025)
-            current_det = val if parameter == "detuning" else kwargs.get("detuning", 0.0)
+            current_det = val if parameter == "detuning" else kwargs.get("detuning", default_det)
             
             try:
                 if gate_type in ["X", "Y", "H"]:
@@ -869,6 +872,17 @@ class GateEngine:
             "trace_distance": tr_dist,
             "purity": purity
         }
+    
+    def _calculate_resonant_flux(self, q_ctrl_name: str, q_targ_name: str) -> float:
+        """Dynamically calculate the flux required to align |11> and |02>."""
+        evals_ctrl = self.qubit_engine.get_qubit(q_ctrl_name).eigensys(evals_count=3)[0]
+        evals_targ = self.qubit_engine.get_qubit(q_targ_name).eigensys(evals_count=3)[0]
+
+        w1 = np.real(evals_ctrl[1] - evals_ctrl[0])
+        w2 = np.real(evals_targ[1] - evals_targ[0])
+        alpha2 = np.real(evals_targ[2] - evals_targ[1] - w2)
+
+        return w1 - w2 - alpha2
 
     def simulate_n_qubit_dynamics(self,
                                   qubit_names: List[str],
@@ -895,6 +909,11 @@ class GateEngine:
         """
         self.qubit_engine.load_session()
         N = len(qubit_names)
+
+        # flux pulse detuning implicit calculation
+        if N == 2 and gate_type in ["CNOT", "CZ"] and couplings and couplings[0].get("type") == "tunable_coupler":
+            if detuning == 0.0:
+                detuning = self._calculate_resonant_flux(qubit_names[0], qubit_names[1])
         
         # For a tunable coupler, a CNOT is physically implemented as an H-CZ-H sequence.
         # This block compiles that logical gate into a single, continuous physical pulse schedule.

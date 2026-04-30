@@ -29,33 +29,22 @@ class PhysicalWorkflowEngine:
         self.g_eng = g_eng
         
         if not QISKIT_AVAILABLE:
-            raise ImportError("Qiskit is required for physical workflow simulation (translating QASM to precise basis). Please install qiskit.")
+            raise ImportError("Qiskit is required for physical workflow simulation.")
 
     def parse_qasm_circuit(self, qasm_path: str) -> 'QuantumCircuit':
-        """
-        Parses an OpenQASM file and transpiles it to a precise native basis.
-        """
         circuit = QuantumCircuit.from_qasm_file(qasm_path)
-        # Precise native superconducting basis for optimal calibration mapping
         basis_gates = ['x', 'h', 'rz', 'cx', 'cz', 'swap', 'cp']
-        
         transpiled = transpile(circuit, basis_gates=basis_gates, optimization_level=2)
         return transpiled
 
     def automate_calibrations(self, qubit_names: List[str], couplings: List[Dict], transpiled_circuit: 'QuantumCircuit', **kwargs) -> Dict:
-        """
-        Dynamically calibrate physical pulses for abstract gates needed.
-        Currently highly automated.
-        
-        TODO: Future introduction of user customization of calibration bounds via **kwargs
-        """
         calibrations = {
             "single_qubit": {},
             "two_qubit": {}
         }
         
-        # We auto-calibrate the prime single-qubit primitives for all involved qubits
         for q in qubit_names:
+<<<<<<< HEAD
             # Physics-informed X calibration: calibrate_gate uses T_pi = 6/(amp*n01*sqrt(2pi))
             # as the sweep centre when range_vals is empty (no fixed 15-25 ns range).
             best_x, _ = self.g_eng.calibrate_gate(q, gate_type="X", parameter="duration", amplitude=0.025)
@@ -66,38 +55,48 @@ class PhysicalWorkflowEngine:
             # Natively calibrate the H-gate instead of guessing the scaling
             best_h, _ = self.g_eng.calibrate_gate(q, gate_type="H", parameter="duration", amplitude=0.025)
             
+=======
+            best_x, _ = self.g_eng.calibrate_gate(q, gate_type="X", parameter="duration", range_vals=np.linspace(5.0, 60.0, 50), amplitude=0.025)
+            best_h, _ = self.g_eng.calibrate_gate(q, gate_type="H", parameter="duration", range_vals=np.linspace(5.0, 60.0, 50), amplitude=0.025)
+>>>>>>> f2b308b3923f4adb88b7f5afaa1c4f3ed215b8df
             calibrations["single_qubit"][q] = {"X": best_x, "H": best_h}
             
-        # We auto-calibrate CZ on all defined couplings
         for c in couplings:
-            q1_idx = c["q1"]
-            q2_idx = c["q2"]
-            q1_name = qubit_names[q1_idx]
-            q2_name = qubit_names[q2_idx]
-            ctype = c["type"]
-            strength = c["strength"]
+            q1_name = qubit_names[c["q1"]]
+            q2_name = qubit_names[c["q2"]]
             
+<<<<<<< HEAD
             best_cz, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CZ", ctype, strength, "duration")
             best_cx, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CNOT", ctype, strength, "duration")
             calibrations["two_qubit"][(q1_name, q2_name)] = {"CZ": best_cz, "CX": best_cx}
             calibrations["two_qubit"][(q2_name, q1_name)] = {"CZ": best_cz, "CX": best_cx}
+=======
+            # FIX 1: Calibrate CNOT directly in the fast-gate regime to catch the correct resonance peak
+            best_cnot, _ = self.g_eng.calibrate_gate(
+                q1_name, q2_name, "CNOT", c["type"], c["strength"], 
+                parameter="duration", range_vals=np.linspace(15, 80, 40)
+            )
+            calibrations["two_qubit"][(q1_name, q2_name)] = {"CNOT": best_cnot}
+            calibrations["two_qubit"][(q2_name, q1_name)] = {"CNOT": best_cnot}
+>>>>>>> f2b308b3923f4adb88b7f5afaa1c4f3ed215b8df
             
         return calibrations
 
     def compile_schedule(self, qubit_names: List[str], couplings: List[Dict], transpiled_circuit: 'QuantumCircuit', calibrations: Dict) -> Tuple[List[Dict], float]:
-        """
-        Builds a chronological microwave drive schedule mapping precise gates to compiled pulses and timings.
-        """
         schedule = []
         num_qubits = len(qubit_names)
         qubit_times = [0.0] * num_qubits
         
-        # Fetch transition frequencies w01 from QubitEngine for parameterization
+        # FIX 2: Virtual Z tracking variables
+        lo_phases = [0.0] * num_qubits 
+        h_counts = [0] * num_qubits 
+        
         w01_list = []
         for q in qubit_names:
             evals = self.q_eng.get_qubit(q).eigensys(evals_count=2)[0]
-            w01_list.append(evals[1] - evals[0])
+            w01_list.append(np.real(evals[1] - evals[0]))
             
+<<<<<<< HEAD
         # TODO: _add_h is no longer called — H gate scheduling is handled inline in the
         # op_name == 'h' branch below. _add_cx previously used it as the flanking rotation
         # in H+CZ+H, but that decomposition is replaced by the physical Ry(±π/2)+coupler sequence.
@@ -129,12 +128,50 @@ class PhysicalWorkflowEngine:
                 # Capacitive CR: drive control qubit at target qubit's transition frequency.
                 schedule.append({"target": ctrl_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur_cx})
                 return t_start + dur_cx
+=======
+        def _add_cx(ctrl_idx, targ_idx, c_conf, t_start):
+            # FIX 3: Recreate exact CNOT_COMPILED physics within the scheduler
+            dur = calibrations["two_qubit"][(qubit_names[ctrl_idx], qubit_names[targ_idx])]["CNOT"]
+            t_x = calibrations["single_qubit"][qubit_names[targ_idx]]["X"]
+            t_h = t_x / 2.0
+            
+            H0_ctrl, _ = self.g_eng._get_qubit_hamiltonian(qubit_names[ctrl_idx])
+            H0_tgt, _ = self.g_eng._get_qubit_hamiltonian(qubit_names[targ_idx])
+            
+            e_ctrl = H0_ctrl.diag() / (2 * np.pi)
+            e_tgt = H0_tgt.diag() / (2 * np.pi)
+            
+            w01_ctrl = np.real(e_ctrl[1] - e_ctrl[0])
+            w01_tgt = np.real(e_tgt[1] - e_tgt[0])
+            
+            alpha_tgt = np.real((e_tgt[2] - e_tgt[1]) - w01_tgt) if len(e_tgt) >= 3 else 0.0
+            auto_detuning = (w01_ctrl - w01_tgt - alpha_tgt) if alpha_tgt != 0.0 else 0.0
+            
+            exact_flux_phase = (auto_detuning * 2 * np.pi) * (dur / 2.0)
+            
+            curr_t = max(t_start, qubit_times[targ_idx], qubit_times[ctrl_idx])
+            
+            # Y(-pi/2) on target
+            schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_tgt, "phase": -np.pi / 2 + lo_phases[targ_idx], "start_time": curr_t, "end_time": curr_t + t_h})
+            curr_t += t_h
+            
+            # CZ (Coupler + Flux)
+            schedule.append({"target": (min(ctrl_idx, targ_idx), max(ctrl_idx, targ_idx)), "type": "coupler_pulse", "strength": c_conf["strength"], "start_time": curr_t, "end_time": curr_t + dur})
+            schedule.append({"target": targ_idx, "type": "flux_pulse", "detuning": auto_detuning, "start_time": curr_t, "end_time": curr_t + dur})
+            curr_t += dur
+            
+            # Apply Virtual Z Phase from the flux pulse directly to the LO clock
+            lo_phases[targ_idx] += exact_flux_phase
+            
+            # Y(pi/2) on target
+            schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_tgt, "phase": np.pi / 2 + lo_phases[targ_idx], "start_time": curr_t, "end_time": curr_t + t_h})
+            curr_t += t_h
+            
+            return curr_t, curr_t 
+>>>>>>> f2b308b3923f4adb88b7f5afaa1c4f3ed215b8df
 
-        # Parse operations iteratively, extending sequential times 
         for instr in transpiled_circuit.data:
             op_name = instr.operation.name
-            
-            # Map qiskit qubits to integers locally
             qargs = [transpiled_circuit.find_bit(q).index for q in instr.qubits]
             
             if len(qargs) == 1:
@@ -144,14 +181,22 @@ class PhysicalWorkflowEngine:
                 
                 if op_name == 'x':
                     dur = calibrations["single_qubit"][q_name]["X"]
-                    schedule.append({"target": q, "type": "X", "amplitude": 0.025, "frequency": w01_list[q], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
+                    schedule.append({"target": q, "type": "X", "amplitude": 0.025, "frequency": w01_list[q], "phase": 0.0 + lo_phases[q], "start_time": t_start, "end_time": t_start + dur})
                     qubit_times[q] += dur
                 elif op_name == 'h':
                     dur = calibrations["single_qubit"][q_name]["H"]
+<<<<<<< HEAD
                     # Change "type": "H" to "type": "Y"
                     schedule.append({"target": q, "type": "H", "amplitude": 0.025, "frequency": w01_list[q], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
+=======
+                    # Logical inversion hack: Flip phase on alternate H applications to satisfy H^2 = I
+                    phase_offset = np.pi if h_counts[q] % 2 == 1 else 0.0
+                    schedule.append({"target": q, "type": "H", "amplitude": 0.025, "frequency": w01_list[q], "phase": phase_offset + lo_phases[q], "start_time": t_start, "end_time": t_start + dur})
+>>>>>>> f2b308b3923f4adb88b7f5afaa1c4f3ed215b8df
                     qubit_times[q] += dur
+                    h_counts[q] += 1
                 elif op_name == 'rz':
+<<<<<<< HEAD
                     # Abstractly represented by tracking classical phase updates natively, but physical simulation uses
                     # raw drives. For simplicity without a hardware virtual Z compile, we treat it as an instantaneous frame update
                     # and omit the physical pulse (fidelity assumes global phase tracking mapping)
@@ -161,22 +206,23 @@ class PhysicalWorkflowEngine:
                     pass
                 else:
                     print(f"Warning: Single qubit gate {op_name} unsupported in rigorous native basis mapping. Treating it as identity wait.")
+=======
+                    params = instr.operation.params
+                    theta = float(params[0]) if params else 0.0
+                    # Instantaneous Virtual Z Native Support
+                    lo_phases[q] += theta 
+>>>>>>> f2b308b3923f4adb88b7f5afaa1c4f3ed215b8df
                     
             elif len(qargs) == 2:
                 q1, q2 = qargs
                 q1_name, q2_name = qubit_names[q1], qubit_names[q2]
-                
                 t_start = max(qubit_times[q1], qubit_times[q2])
                 
-                c_conf = None
-                for c in couplings:
-                    if (c["q1"] == q1 and c["q2"] == q2) or (c["q1"] == q2 and c["q2"] == q1):
-                        c_conf = c
-                        break
-                
+                c_conf = next((c for c in couplings if (c["q1"] == q1 and c["q2"] == q2) or (c["q1"] == q2 and c["q2"] == q1)), None)
                 if not c_conf:
-                    raise ValueError(f"Topology Error: No coupling defined between physically adjacent logic operations on {q1_name} and {q2_name}.")
+                    raise ValueError(f"Topology Error: No coupling between {q1_name} and {q2_name}.")
                 
+<<<<<<< HEAD
                 if op_name == 'cz':
                     t_end = _add_cz(q1, q2, c_conf, t_start)
                     qubit_times[q1] = qubit_times[q2] = t_end
@@ -199,13 +245,16 @@ class PhysicalWorkflowEngine:
                     qubit_times[q1] = qubit_times[q2] = _add_cx(q1, q2, c_conf, t_start)
                     qubit_times[q1] = qubit_times[q2] = _add_cx(q2, q1, c_conf, qubit_times[q1])
                     qubit_times[q1] = qubit_times[q2] = _add_cx(q1, q2, c_conf, qubit_times[q1])
+=======
+                if op_name == 'cx' or op_name == 'cnot':
+                    t_ctrl, t_targ = _add_cx(q1, q2, c_conf, t_start)
+                    qubit_times[q1] = t_ctrl
+                    qubit_times[q2] = t_targ
+>>>>>>> f2b308b3923f4adb88b7f5afaa1c4f3ed215b8df
 
         return schedule, max(qubit_times)
 
     def execute_workflow(self, qubit_names: List[str], couplings: List[Dict], qasm_path: str) -> Dict:
-        """
-        Bundles compiling and simulating into a single execution step, returning the full dynamics payload.
-        """
         print(f"1. Translating Qubit-Agnostic QASM from '{qasm_path}' to precise superconducting native basis...")
         transpiled = self.parse_qasm_circuit(qasm_path)
         
@@ -216,7 +265,6 @@ class PhysicalWorkflowEngine:
         schedule, total_time = self.compile_schedule(qubit_names, couplings, transpiled, calibrations)
         
         print(f"4. Schedular mapping complete! Physical simulation runtime depth: {total_time:.2f} ns.")
-        # Evolve using GatEngine
         initial_state = "0" * len(qubit_names)
         
         print(f"5. Engaging Hilbert-space QuTiP solvers (Simulating continuous Hamiltonian mappings)...")
@@ -227,6 +275,6 @@ class PhysicalWorkflowEngine:
             couplings=couplings,
             drives=schedule,
             initial_state=initial_state,
-            steps=max(10, int(total_time * 2)) 
+            steps=max(50, int(total_time * 2)) 
         )
         return res

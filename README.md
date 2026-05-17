@@ -64,6 +64,13 @@ qforge gate simulate --qubit my_qubit --gate X --duration 40
 ```
  
 ---
+
+## 📖 Documentation
+ 
+Full documentation including API reference and worked examples:
+👉 **[qforge.readthedocs.io](https://qforge.readthedocs.io/en/latest/)**
+ 
+---
  
 ## 🐍 Python API
  
@@ -149,13 +156,6 @@ results = gate_engine.compare_couplings(q1="q1", q2="q2", gate="CNOT")
 | `perform_state_tomography(state, target)` | Fidelity and trace distance analysis |
  
 ---
-
-## 📖 Documentation
- 
-Full documentation including API reference and worked examples:
-👉 **[qforge.readthedocs.io](https://qforge.readthedocs.io/en/latest/)**
- 
----
  
 ## 🧑‍💻 Who Is This For?
  
@@ -173,7 +173,6 @@ QForge is built on industry-standard quantum libraries:
 
 - **[scqubits](https://scqubits.readthedocs.io/)**: Superconducting qubit physics
 - **[QuTiP](https://qutip.org/)**: Quantum dynamics and gate simulation
-- **[Qiskit](https://qiskit.org/)**: Circuit-level quantum computing
 - **[Qiskit Metal](https://qiskit.org/metal/)**: Quantum hardware chip design
 
 ## 🤝 Contributing
@@ -188,8 +187,6 @@ QForge relies on the following open-source projects:
     *   Copyright (c) 2019 and later, Jens Koch and Peter Groszkowski. Licensed under BSD 3-Clause.
 *   **[QuTiP](https://qutip.org/)**: Quantum Toolbox in Python for dynamics.
     *   Copyright (c) 2011-2022 QuTiP developers. Licensed under BSD 3-Clause.
-*   **[Qiskit](https://qiskit.org/)**: Quantum SDK for circuit simulation.
-    *   Copyright IBM Corporation and others. Licensed under Apache 2.0.
 *   **[Qiskit Metal](https://qiskit.org/metal/)**: Hardware design.
     *   Copyright Qiskit Metal Development Team. Licensed under Apache 2.0.
 

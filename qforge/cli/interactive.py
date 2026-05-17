@@ -385,26 +385,38 @@ def _wizard_full_workflow():
     ctype_completer = WordCompleter(["capacitive", "inductive", "tunable_coupler"], ignore_case=True)
     qindex_completer = WordCompleter([str(i) for i in range(len(qubit_names))])
     
+    qname_completer = WordCompleter(qubit_names, ignore_case=True)
+    
     while True:
         console.print("\n   [New Coupling Edge]")
-        c_idx1 = prompt(f"   Enter Logic Index for Q1 (0 to {len(qubit_names)-1}, or leave empty to finish): ", completer=qindex_completer).strip()
-        if not c_idx1:
+        
+        q1_input = prompt(f"   Enter Name for Q1 (or leave empty to finish): ", completer=qname_completer).strip()
+        if not q1_input:
             break
             
-        c_idx2 = prompt(f"   Enter Logic Index for Q2 (0 to {len(qubit_names)-1}): ", completer=qindex_completer).strip()
+        q2_input = prompt(f"   Enter Name for Q2: ", completer=qname_completer).strip()
+        
+        if q1_input not in qubit_names or q2_input not in qubit_names:
+            console.print("[red]Invalid qubit name. Please use the names you defined in Step 1.[/red]")
+            continue
+
         ctype = prompt("   Coupling Type (capacitive/inductive/tunable_coupler) [tunable_coupler]: ", completer=ctype_completer).strip() or "tunable_coupler"
         cstren = prompt("   Strength in GHz [0.05]: ").strip() or "0.05"
         
         try:
+            # Let Python figure out the logic index!
+            c_idx1 = qubit_names.index(q1_input)
+            c_idx2 = qubit_names.index(q2_input)
+            
             couplings.append({
-                "q1": int(c_idx1),
-                "q2": int(c_idx2),
+                "q1": c_idx1,
+                "q2": c_idx2,
                 "type": ctype,
                 "strength": float(cstren)
             })
-            console.print(f"   [green]Added {ctype} ({cstren} GHz) edge between physical qubits {qubit_names[int(c_idx1)]} and {qubit_names[int(c_idx2)]}.[/green]")
+            console.print(f"   [green]Added {ctype} ({cstren} GHz) edge between physical qubits {q1_input} and {q2_input}.[/green]")
         except ValueError:
-             console.print("[red]Invalid numerical input.[/red]")
+             console.print("[red]Invalid numerical input for coupling strength.[/red]")
              
     # Step 3: Circuit Processing
     console.print("\n[bold]3. Algorithm Circuit Specification[/bold]")

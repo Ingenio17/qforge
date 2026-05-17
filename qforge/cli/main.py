@@ -5,6 +5,7 @@ Main CLI entry point for QForge.
 import click
 from rich.console import Console
 from rich.panel import Panel
+from qforge.cli.commands.cache import cache_group
 
 # Enable UTF-8 console for beautiful Unicode output
 from qforge.utils.console import enable_unicode_console
@@ -59,6 +60,7 @@ cli.add_command(hardware.hardware)
 cli.add_command(compare.compare)
 cli.add_command(workflow.workflow)
 cli.add_command(example.example)
+cli.add_command(cache_group)
 cli.add_command(clean.clean)
 # Developer tools (hidden by default? No, visible for now as requested)
 from qforge.cli.commands import dev

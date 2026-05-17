@@ -122,8 +122,8 @@ qforge/
 We especially welcome contributions in these areas:
 
 ### High Priority
-- **Gate Physics**: Implementing quantum gate dynamics with QuTiP
-- **Circuit Simulation**: Multi-qubit circuit simulation with Qiskit
+- **Error Correction**: Implementing Error Correction Codes
+- **Circuit Simulation**: Multi-qubit circuit simulation
 - **Hardware Design**: Chip layout design integration
 - **Additional Qubit Types**: Support for more qubit architectures
 

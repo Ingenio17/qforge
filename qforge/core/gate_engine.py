@@ -562,34 +562,49 @@ class GateEngine:
 
         print(f"Calibrating {gate_type} ({coupling_type or 'local'}) on {target_str}...")
 
-        # 4. SETUP RANGES 
+
+        # 4. SETUP RANGES (Analytical Estimation)
         if len(range_vals) == 0:
             if parameter == "duration":
+                # --- A. Single Qubit Gates ---
                 if gate_type in ["X", "Y", "H"]:
                     try:
                         _, ops = self._get_qubit_hamiltonian(q1_name)
-                        n01 = float(abs(ops['n'].full()[0, 1])) if 'n' in ops else 0.0
+                        n01 = float(abs(ops['n'].full()[0, 1])) if 'n' in ops else 1.0
                     except Exception:
-                        n01 = 0.0
-                    if n01 > 0.01:
-                        T_est = 6.0 / (kwargs["amplitude"] * n01 * np.sqrt(2 * np.pi))
-                        if gate_type == "H": T_est = T_est / 2.0
-                        range_vals = np.linspace(max(2.0, 0.4 * T_est), 1.8 * T_est, 20)
-                    else:
-                        range_vals = np.linspace(5, 80, 20)
+                        n01 = 1.0
+                        
+                    target_theta = np.pi if gate_type in ["X", "Y"] else (np.pi / 2)
+                    
+                    # RESTORED: Your original, mathematically perfect lab-frame formula!
+                    T_est = (3.0 * (target_theta / np.pi)) / (kwargs["amplitude"] * n01 * np.sqrt(2 * np.pi))
+                    
+                    # Sweep a +/- 25% window around the 1-pi peak (safely avoids the 3-pi peak)
+                    range_vals = np.linspace(T_est * 0.75, T_est * 1.25, 20)
+
+                # --- B. Tunable Coupler CZ ---
                 elif coupling_type == "tunable_coupler":
-                     range_vals = np.linspace(5, 100, 20)
+                    if coupling_strength > 0:
+                        T_est = 1.0 / (np.sqrt(2) * coupling_strength)
+                    else:
+                        T_est = 40.0
+                    range_vals = np.linspace(T_est * 0.85, T_est * 1.15, 20)
+
+                # --- C. Capacitive CZ ---
                 elif coupling_type == "capacitive" and gate_type == "CZ" and coupling_strength > 0:
                     T_est = np.pi / (4 * coupling_strength)
-                    range_vals = np.linspace(0.3 * T_est, 2.0 * T_est, 30)
+                    range_vals = np.linspace(T_est * 0.8, T_est * 1.2, 20)
+                    
                 else: 
-                     range_vals = np.linspace(50, 400, 20)
+                     range_vals = np.linspace(10, 100, 20)
+                     
             elif parameter == "amplitude":
-                range_vals = np.linspace(0.01, 0.2, 15)
+                range_vals = np.linspace(0.01, 0.1, 15)
             elif parameter == "virtual_z":
-                range_vals = np.linspace(0, 2 * np.pi, 50)
+                range_vals = np.linspace(0, 2 * np.pi, 30)
             elif parameter == "detuning":
-                range_vals = np.linspace(-1.0, 1.0, 20)
+                range_vals = np.linspace(-0.5, 0.5, 15)
+
 
         # 5. CLEANED EVALUATION FUNCTION
         def evaluate_metric(val):
@@ -636,31 +651,24 @@ class GateEngine:
                 print(f"      [!] Metric eval failed at {parameter}={val:.3f}: {e}")
                 
             return metric
-        
-        # 4. COARSE SWEEP
-        print(f" -> Coarse sweep ({len(range_vals)} points)...")
+
+        # 6. coarse
+        print(f" -> Analytical coarse sweep ({len(range_vals)} points near estimate)...")
         metrics = [evaluate_metric(v) for v in range_vals]
         best_idx = np.argmax(metrics)
         best_val = range_vals[best_idx]
         max_metric = metrics[best_idx]
-        
-        # 5. WIDENED FINE SWEEP
+
+        # 7. Fine sweep 
         if max_metric > 0.1:
              step = abs(range_vals[1] - range_vals[0]) if len(range_vals) > 1 else 5.0
              
-             # Loosen bounds to ±1.5 steps to safely catch offset peaks
-             bound_lower = best_val - (1.5 * step)
-             bound_upper = best_val + (1.5 * step)
+             # Zoom in strictly on the highest point from the coarse sweep
+             bound_lower = max(0.1, best_val - step)
+             bound_upper = best_val + step
              
-             # Physical bounds clamping
-             if parameter == "duration":
-                 bound_lower = max(0.1, bound_lower) 
-             elif parameter == "amplitude":
-                 bound_lower = max(0.001, bound_lower)
-             
-             # Higher density (50 points) required due to widened search net
-             fine_range = np.linspace(bound_lower, bound_upper, 50)
-             print(f" -> Fine sweep (50 points) widened to [{bound_lower:.2f}, {bound_upper:.2f}]...")
+             fine_range = np.linspace(bound_lower, bound_upper, 20)
+             print(f" -> Fine sweep (20 points) zooming in on [{bound_lower:.2f}, {bound_upper:.2f}]...")
              
              fine_metrics = [evaluate_metric(v) for v in fine_range]
              fine_best_idx = np.argmax(fine_metrics)
@@ -1110,7 +1118,7 @@ class GateEngine:
         opts = {"store_states": True, "nsteps": 10000000}
 
         # Warning: H_total must be formatted exactly for QuTiP
-        res = qt.mesolve(H_total, psi0, times, [], [], args=args, options=opts)
+        res = qt.mesolve(H_total, psi0, times, c_ops=[], e_ops=[], args=args, options=opts)
 
         # 5. Process Results (Populations up to 4 states per qubit: 0, 1, 2, 3)
         comp_states = {}

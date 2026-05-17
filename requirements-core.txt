@@ -3,8 +3,6 @@ scipy
 matplotlib
 scqubits
 qutip
-qiskit
-qiskit-aer
 click
 rich
 prompt-toolkit

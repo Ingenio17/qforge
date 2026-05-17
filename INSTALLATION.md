@@ -18,8 +18,6 @@
 - ✅ Installed all core dependencies:
   - scqubits 4.3.1
   - qutip 5.0.4
-  - qiskit (latest)
-  - qiskit-aer 0.17.2
   - pandas, click, rich, prompt-toolkit, plotext
   - All other required packages
 
@@ -155,8 +153,6 @@ Editable Location: C:\Users\sdsha\.gemini\antigravity\playground\silent-cassini
 Dependencies:
 ✅ scqubits>=4.0
 ✅ qutip>=5.0
-✅ qiskit>=1.0
-✅ qiskit-aer>=0.13
 ✅ click>=8.0
 ✅ rich>=13.0
 ✅ prompt-toolkit>=3.0

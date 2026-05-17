@@ -1,1 +1,1 @@
-"""CLI commands for QForge."""
+"""CLI commands for qforge."""

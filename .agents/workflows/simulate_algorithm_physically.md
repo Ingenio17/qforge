@@ -4,7 +4,7 @@ description: Compiles and executes an idealized quantum algorithm on physical su
 
 # Physical Algorithm Simulation Workflow
 
-This workflow guides the AI assistant to perform a full-stack compilation and simulation of an idealized, hardware-agnostic algorithm (e.g., Shor's, Grover's) on a simulated backend of physical QForge qubits.
+This workflow guides the AI assistant to perform a full-stack compilation and simulation of an idealized, hardware-agnostic algorithm (e.g., Shor's, Grover's) on a simulated backend of physical qforge qubits.
 
 ## 📥 Required Inputs
 When invoking this workflow, the user must provide:

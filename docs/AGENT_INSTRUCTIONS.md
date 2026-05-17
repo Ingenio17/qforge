@@ -1,6 +1,6 @@
-# Agent Instructions for QForge
+# Agent Instructions for qforge
 
-Use this file as a prompt for your AI coding assistant (e.g., GitHub Copilot, Cursor, etc.) when you have added a new feature to QForge.
+Use this file as a prompt for your AI coding assistant (e.g., GitHub Copilot, Cursor, etc.) when you have added a new feature to qforge.
 
 ## Workflow: Finalizing a New Feature
 

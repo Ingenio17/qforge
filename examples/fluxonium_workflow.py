@@ -23,7 +23,7 @@ from qforge.utils.terminal_plot import TerminalPlotter
 
 def main():
     print("=" * 60)
-    print("QForge Example: Fluxonium Workflow")
+    print("qforge Example: Fluxonium Workflow")
     print("=" * 60)
     
     # Initialize engine

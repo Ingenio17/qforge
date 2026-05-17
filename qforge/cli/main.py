@@ -1,5 +1,5 @@
 """
-Main CLI entry point for QForge.
+Main CLI entry point for qforge.
 """
 
 import click
@@ -19,7 +19,7 @@ console = Console()
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(version=__version__, prog_name="QForge", message="%(prog)s %(version)s")
+@click.version_option(version=__version__, prog_name="qforge", message="%(prog)s %(version)s")
 @click.option(
     "--interactive",
     "-i",
@@ -29,7 +29,7 @@ console = Console()
 @click.pass_context
 def cli(ctx, interactive):
     """
-    QForge: Quantum Simulation Toolkit
+    qforge: Quantum Simulation Toolkit
     
     End-to-end quantum simulation from qubit physics to hardware design.
     
@@ -107,9 +107,9 @@ def citations():
 
 @cli.command()
 def info():
-    """Display QForge system information."""
+    """Display qforge system information."""
     info_text = f"""
-[bold cyan]QForge Quantum Simulation Toolkit[/bold cyan]
+[bold cyan]qforge Quantum Simulation Toolkit[/bold cyan]
 [green]Version:[/green] {__version__}
 
 [yellow]Installed Components:[/yellow]

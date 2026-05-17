@@ -1,1 +1,1 @@
-"""Comparison engine for QForge."""
+"""Comparison engine for qforge."""

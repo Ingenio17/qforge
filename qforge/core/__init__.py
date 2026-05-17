@@ -1,1 +1,1 @@
-"""Core simulation engines for QForge."""
+"""Core simulation engines for qforge."""

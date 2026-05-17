@@ -1,5 +1,5 @@
 """
-QForge: Quantum Simulation Toolkit
+qforge: Quantum Simulation Toolkit
 
 End-to-end quantum simulation from qubit physics to hardware design.
 """

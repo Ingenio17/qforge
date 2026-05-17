@@ -1,4 +1,4 @@
-# QForge: Quantum Simulation Toolkit
+# qforge: Quantum Simulation Toolkit
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
@@ -6,9 +6,9 @@
 
 **A terminal-native quantum simulation toolkit — from qubit physics to gate-level hardware design.**
  
-QForge lets you model superconducting qubits, simulate quantum gate dynamics, and analyze multi-qubit couplings — all from your terminal or Python scripts, no GUI required.
+qforge lets you model superconducting qubits, simulate quantum gate dynamics, and analyze multi-qubit couplings — all from your terminal or Python scripts, no GUI required.
  
-Whether you're designing a transmon-based processor, sweeping Josephson junction parameters, or benchmarking CNOT fidelity across coupling topologies, QForge gives you the physics simulation layer you need — fast
+Whether you're designing a transmon-based processor, sweeping Josephson junction parameters, or benchmarking CNOT fidelity across coupling topologies, qforge gives you the physics simulation layer you need — fast
 
 ---
 
@@ -74,7 +74,7 @@ Full documentation including API reference and worked examples:
  
 ## 🐍 Python API
  
-For scripting and research workflows, QForge exposes clean Python engines:
+For scripting and research workflows, qforge exposes clean Python engines:
  
 ```python
 from qforge.core.qubit_engine import QubitEngine
@@ -116,7 +116,7 @@ TerminalPlotter.plot_time_evolution(
  
 ## 🔗 Multi-Qubit Couplings
  
-QForge models three physical coupling regimes used in real superconducting hardware:
+qforge models three physical coupling regimes used in real superconducting hardware:
  
 | Coupling Type | Hamiltonian | Best For |
 |---|---|---|
@@ -159,7 +159,7 @@ results = gate_engine.compare_couplings(q1="q1", q2="q2", gate="CNOT")
  
 ## 🧑‍💻 Who Is This For?
  
-QForge is built for:
+qforge is built for:
  
 - **Quantum hardware researchers** designing and characterizing superconducting qubit circuits
 - **Graduate students** exploring qubit physics and gate-level simulation
@@ -169,7 +169,7 @@ QForge is built for:
 
 ## 🏗️ Architecture
 
-QForge is built on industry-standard quantum libraries:
+qforge is built on industry-standard quantum libraries:
 
 - **[scqubits](https://scqubits.readthedocs.io/)**: Superconducting qubit physics
 - **[QuTiP](https://qutip.org/)**: Quantum dynamics and gate simulation
@@ -181,7 +181,7 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md).
 
 ## Acknowledgments
 
-QForge relies on the following open-source projects:
+qforge relies on the following open-source projects:
 
 *   **[scqubits](https://scqubits.readthedocs.io/)**: Setup and simulation of superconducting qubits.
     *   Copyright (c) 2019 and later, Jens Koch and Peter Groszkowski. Licensed under BSD 3-Clause.

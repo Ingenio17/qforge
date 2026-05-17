@@ -72,12 +72,14 @@ env/
 .dmypy.json
 dmypy.json
 
-# QForge specific
+# qforge specific
 *.gds
 *.hdf5
 *.h5
 qforge_state/
 outputs/
+calib_cache.json
+.qforge_session.json
 
 # OS specific
 .DS_Store

@@ -1,516 +1,1262 @@
-
-
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="./">
+
 <head>
-  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>API Reference &mdash; QForge 0.2.0 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+  <title>API Reference &mdash; qforge 0.2.0 documentation</title>
+  <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+  <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
-  
-      <script src="_static/jquery.js?v=5d32c60e"></script>
-      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=938c9ccc"></script>
-      <script src="_static/doctools.js?v=9a2dae69"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Examples" href="examples.html" /> 
+
+  <script src="_static/jquery.js?v=5d32c60e"></script>
+  <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+  <script src="_static/documentation_options.js?v=938c9ccc"></script>
+  <script src="_static/doctools.js?v=9a2dae69"></script>
+  <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+  <script src="_static/js/theme.js"></script>
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" />
+  <link rel="prev" title="Examples" href="examples.html" />
 </head>
 
-<body class="wy-body-for-nav"> 
+<body class="wy-body-for-nav">
   <div class="wy-grid-for-nav">
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
+        <div class="wy-side-nav-search">
 
-          
-          
+
+
           <a href="index.html" class="icon icon-home">
-            QForge
+            qforge
           </a>
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#module-qforge.core.qubit_engine">Core Engines</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine"><code class="docutils literal notranslate"><span class="pre">QubitEngine</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.compute_spectrum"><code class="docutils literal notranslate"><span class="pre">QubitEngine.compute_spectrum()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.create_qubit"><code class="docutils literal notranslate"><span class="pre">QubitEngine.create_qubit()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.delete_qubit"><code class="docutils literal notranslate"><span class="pre">QubitEngine.delete_qubit()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.estimate_coherence"><code class="docutils literal notranslate"><span class="pre">QubitEngine.estimate_coherence()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.export_to_qiskit"><code class="docutils literal notranslate"><span class="pre">QubitEngine.export_to_qiskit()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.export_to_qutip"><code class="docutils literal notranslate"><span class="pre">QubitEngine.export_to_qutip()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.get_qubit"><code class="docutils literal notranslate"><span class="pre">QubitEngine.get_qubit()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.list_qubits"><code class="docutils literal notranslate"><span class="pre">QubitEngine.list_qubits()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.load_qubit"><code class="docutils literal notranslate"><span class="pre">QubitEngine.load_qubit()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.parameter_sweep"><code class="docutils literal notranslate"><span class="pre">QubitEngine.parameter_sweep()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.save_qubit"><code class="docutils literal notranslate"><span class="pre">QubitEngine.save_qubit()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.visualize"><code class="docutils literal notranslate"><span class="pre">QubitEngine.visualize()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.qubit_engine.QubitEngine.visualize_enhanced"><code class="docutils literal notranslate"><span class="pre">QubitEngine.visualize_enhanced()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine"><code class="docutils literal notranslate"><span class="pre">GateEngine</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.calculate_gate_fidelity"><code class="docutils literal notranslate"><span class="pre">GateEngine.calculate_gate_fidelity()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.calibrate_gate"><code class="docutils literal notranslate"><span class="pre">GateEngine.calibrate_gate()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.compare_couplings"><code class="docutils literal notranslate"><span class="pre">GateEngine.compare_couplings()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.get_control_hamiltonian"><code class="docutils literal notranslate"><span class="pre">GateEngine.get_control_hamiltonian()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.perform_process_tomography"><code class="docutils literal notranslate"><span class="pre">GateEngine.perform_process_tomography()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.perform_state_tomography"><code class="docutils literal notranslate"><span class="pre">GateEngine.perform_state_tomography()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.simulate_dynamics"><code class="docutils literal notranslate"><span class="pre">GateEngine.simulate_dynamics()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics"><code class="docutils literal notranslate"><span class="pre">GateEngine.simulate_two_qubit_dynamics()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#module-qforge.utils.terminal_plot">Utilities</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#qforge.utils.terminal_plot.TerminalPlotter"><code class="docutils literal notranslate"><span class="pre">TerminalPlotter</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.utils.terminal_plot.TerminalPlotter.plot_spectrum"><code class="docutils literal notranslate"><span class="pre">TerminalPlotter.plot_spectrum()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#qforge.utils.terminal_plot.TerminalPlotter.plot_time_evolution"><code class="docutils literal notranslate"><span class="pre">TerminalPlotter.plot_time_evolution()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
+          <div role="search">
+            <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+              <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+              <input type="hidden" name="check_keywords" value="yes" />
+              <input type="hidden" name="area" value="default" />
+            </form>
+          </div>
+        </div>
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+          <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+          <ul class="current">
+            <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+            <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+            <li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+            <li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a>
+              <ul>
+                <li class="toctree-l2"><a class="reference internal" href="#module-qforge.core.qubit_engine">Core
+                    Engines</a>
+                  <ul>
+                    <li class="toctree-l3"><a class="reference internal"
+                        href="#qforge.core.qubit_engine.QubitEngine"><code
+                          class="docutils literal notranslate"><span class="pre">QubitEngine</span></code></a>
+                      <ul>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.compute_spectrum"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.compute_spectrum()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.create_qubit"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.create_qubit()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.delete_qubit"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.delete_qubit()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.estimate_coherence"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.estimate_coherence()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.export_to_qiskit"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.export_to_qiskit()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.export_to_qutip"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.export_to_qutip()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.get_qubit"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.get_qubit()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.list_qubits"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.list_qubits()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.load_qubit"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.load_qubit()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.parameter_sweep"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.parameter_sweep()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.save_qubit"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.save_qubit()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.visualize"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.visualize()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.qubit_engine.QubitEngine.visualize_enhanced"><code
+                              class="docutils literal notranslate"><span class="pre">QubitEngine.visualize_enhanced()</span></code></a>
+                        </li>
+                      </ul>
+                    </li>
+                    <li class="toctree-l3"><a class="reference internal"
+                        href="#qforge.core.gate_engine.GateEngine"><code
+                          class="docutils literal notranslate"><span class="pre">GateEngine</span></code></a>
+                      <ul>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.calculate_gate_fidelity"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.calculate_gate_fidelity()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.calibrate_gate"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.calibrate_gate()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.compare_couplings"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.compare_couplings()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.get_control_hamiltonian"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.get_control_hamiltonian()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.perform_process_tomography"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.perform_process_tomography()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.perform_state_tomography"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.perform_state_tomography()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.simulate_dynamics"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.simulate_dynamics()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics"><code
+                              class="docutils literal notranslate"><span class="pre">GateEngine.simulate_two_qubit_dynamics()</span></code></a>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+                <li class="toctree-l2"><a class="reference internal"
+                    href="#module-qforge.utils.terminal_plot">Utilities</a>
+                  <ul>
+                    <li class="toctree-l3"><a class="reference internal"
+                        href="#qforge.utils.terminal_plot.TerminalPlotter"><code
+                          class="docutils literal notranslate"><span class="pre">TerminalPlotter</span></code></a>
+                      <ul>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.utils.terminal_plot.TerminalPlotter.plot_spectrum"><code
+                              class="docutils literal notranslate"><span class="pre">TerminalPlotter.plot_spectrum()</span></code></a>
+                        </li>
+                        <li class="toctree-l4"><a class="reference internal"
+                            href="#qforge.utils.terminal_plot.TerminalPlotter.plot_time_evolution"><code
+                              class="docutils literal notranslate"><span class="pre">TerminalPlotter.plot_time_evolution()</span></code></a>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
 
         </div>
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">QForge</a>
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" aria-label="Mobile navigation menu">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="index.html">qforge</a>
       </nav>
 
       <div class="wy-nav-content">
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
-  <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">API Reference</li>
-      <li class="wy-breadcrumbs-aside">
-            <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
-      </li>
-  </ul>
-  <hr/>
-</div>
-          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-             
-  <section id="api-reference">
-<h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h1>
-<section id="module-qforge.core.qubit_engine">
-<span id="core-engines"></span><h2>Core Engines<a class="headerlink" href="#module-qforge.core.qubit_engine" title="Link to this heading"></a></h2>
-<p>Qubit Engine: Wrapper around scqubits for qubit physics modeling.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">qforge.core.qubit_engine.</span></span><span class="sig-name descname"><span class="pre">QubitEngine</span></span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Engine for qubit modeling and physics calculations using scqubits.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.compute_spectrum">
-<span class="sig-name descname"><span class="pre">compute_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subtract_ground</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.compute_spectrum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.compute_spectrum" title="Link to this definition"></a></dt>
-<dd><p>Compute energy spectrum of the qubit.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>n_levels</strong> – Number of energy levels to compute</p></li>
-<li><p><strong>subtract_ground</strong> – Whether to subtract ground state energy (setting E0 = 0)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Array of energy eigenvalues</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.create_qubit">
-<span class="sig-name descname"><span class="pre">create_qubit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.create_qubit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.create_qubit" title="Link to this definition"></a></dt>
-<dd><p>Create a qubit instance.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit_type</strong> – Type of qubit (transmon, fluxonium, flux, zeropi)</p></li>
-<li><p><strong>name</strong> – Name for the qubit</p></li>
-<li><p><strong>params</strong> – Qubit parameters</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>scqubits qubit object</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.delete_qubit">
-<span class="sig-name descname"><span class="pre">delete_qubit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.delete_qubit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.delete_qubit" title="Link to this definition"></a></dt>
-<dd><p>Delete a qubit by name.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>name</strong> – Name of the qubit to delete</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.estimate_coherence">
-<span class="sig-name descname"><span class="pre">estimate_coherence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.015</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.estimate_coherence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.estimate_coherence" title="Link to this definition"></a></dt>
-<dd><p>Estimate coherence times for the qubit.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>temperature</strong> – Bath temperature in Kelvin</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Dictionary with coherence time estimates</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.export_to_qiskit">
-<span class="sig-name descname"><span class="pre">export_to_qiskit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.export_to_qiskit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.export_to_qiskit" title="Link to this definition"></a></dt>
-<dd><p>Export qubit parameters for Qiskit noise modeling.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>output_path</strong> – Path to save parameters</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.export_to_qutip">
-<span class="sig-name descname"><span class="pre">export_to_qutip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.export_to_qutip"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.export_to_qutip" title="Link to this definition"></a></dt>
-<dd><p>Export qubit Hamiltonian to QuTiP format.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>output_path</strong> – Path to save the Hamiltonian</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.get_qubit">
-<span class="sig-name descname"><span class="pre">get_qubit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.get_qubit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.get_qubit" title="Link to this definition"></a></dt>
-<dd><p>Get a qubit by name.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.list_qubits">
-<span class="sig-name descname"><span class="pre">list_qubits</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.list_qubits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.list_qubits" title="Link to this definition"></a></dt>
-<dd><p>List all created qubits with their properties.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.load_qubit">
-<span class="sig-name descname"><span class="pre">load_qubit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.load_qubit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.load_qubit" title="Link to this definition"></a></dt>
-<dd><p>Load qubit from JSON file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input_path</strong> – Path to qubit file</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>scqubits qubit object</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.parameter_sweep">
-<span class="sig-name descname"><span class="pre">parameter_sweep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_range</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'frequency'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.parameter_sweep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.parameter_sweep" title="Link to this definition"></a></dt>
-<dd><p>Sweep a parameter and compute resulting properties.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit_type</strong> – Type of qubit</p></li>
-<li><p><strong>param_name</strong> – Parameter to sweep</p></li>
-<li><p><strong>param_range</strong> – Range of values (list or array)</p></li>
-<li><p><strong>fixed_params</strong> – Fixed parameters</p></li>
-<li><p><strong>property_name</strong> – Property to compute (frequency, anharmonicity, T1)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>dict with parameter values and property values</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.save_qubit">
-<span class="sig-name descname"><span class="pre">save_qubit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.save_qubit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.save_qubit" title="Link to this definition"></a></dt>
-<dd><p>Save qubit to JSON file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>output_path</strong> – Path to save file</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.visualize">
-<span class="sig-name descname"><span class="pre">visualize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'spectrum'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subtract_ground</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.visualize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.visualize" title="Link to this definition"></a></dt>
-<dd><p>Visualize qubit properties.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>plot_type</strong> – Type of visualization (spectrum, wavefunctions, matrix_elements)</p></li>
-<li><p><strong>save</strong> – Whether to save the plot</p></li>
-<li><p><strong>subtract_ground</strong> – Whether to subtract ground state energy (for spectrum)</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.visualize_enhanced">
-<span class="sig-name descname"><span class="pre">visualize_enhanced</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subtract_ground</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine.visualize_enhanced"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.qubit_engine.QubitEngine.visualize_enhanced" title="Link to this definition"></a></dt>
-<dd><p>Create comprehensive visualizations for a qubit.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit</strong> – scqubits qubit object</p></li>
-<li><p><strong>plot_types</strong> – List of plot types to generate
-Options: “spectrum”, “wavefunctions”, “matrix_elements”, “potential”
-If None, generates all applicable plots</p></li>
-<li><p><strong>save</strong> – Whether to save plots</p></li>
-<li><p><strong>subtract_ground</strong> – Whether to subtract ground state energy (for spectrum)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Mapping plot_type -&gt; file_path</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<p id="module-qforge.core.gate_engine">Gate Engine: Simulation of quantum gates and dynamics using QuTiP.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">qforge.core.gate_engine.</span></span><span class="sig-name descname"><span class="pre">GateEngine</span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Engine for simulating quantum gates and dynamics.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.calculate_gate_fidelity">
-<span class="sig-name descname"><span class="pre">calculate_gate_fidelity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q1_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q2_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coupling_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.calculate_gate_fidelity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.calculate_gate_fidelity" title="Link to this definition"></a></dt>
-<dd><p>Calculate Average Gate Fidelity using the full propagator.
-This effectively performs Process Tomography w/o 16 simulations.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.calibrate_gate">
-<span class="sig-name descname"><span class="pre">calibrate_gate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q1_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q2_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coupling_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coupling_strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'duration'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">range_vals</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.calibrate_gate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.calibrate_gate" title="Link to this definition"></a></dt>
-<dd><p>Calibrate a gate by sweeping a parameter to maximize fidelity/population.
-Accepts kwargs (e.g. detuning) passed to simulate().</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.compare_couplings">
-<span class="sig-name descname"><span class="pre">compare_couplings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'CNOT'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coupling_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.compare_couplings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.compare_couplings" title="Link to this definition"></a></dt>
-<dd><p>Compare different coupling types for a given gate.
-Can optionally run a specific single scenario if arguments are provided.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>q1</strong> – Control qubit name</p></li>
-<li><p><strong>q2</strong> – Target qubit name</p></li>
-<li><p><strong>gate</strong> – Gate type (CNOT, CZ)</p></li>
-<li><p><strong>coupling_type</strong> – Optional override</p></li>
-<li><p><strong>strength</strong> – Optional override</p></li>
-<li><p><strong>duration</strong> – Optional override</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>float, ‘phase’: float}</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Dictionary mapping coupling type to metrics {‘population’</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.get_control_hamiltonian">
-<span class="sig-name descname"><span class="pre">get_control_hamiltonian</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dimension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Qobj</span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.get_control_hamiltonian"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.get_control_hamiltonian" title="Link to this definition"></a></dt>
-<dd><p>Get the control Hamiltonian operator for a specific gate type.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>gate_type</strong> – Type of gate (X, Y, Z, H)</p></li>
-<li><p><strong>dimension</strong> – Dimension of the Hilbert space</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>QuTiP Qobj operator</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.perform_process_tomography">
-<span class="sig-name descname"><span class="pre">perform_process_tomography</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q1_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q2_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'CNOT'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.perform_process_tomography"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.perform_process_tomography" title="Link to this definition"></a></dt>
-<dd><p>Determine the Process Fidelity of the gate simulation by running
-it against a complete basis set.
-(Placeholder logic as simpler method calculate_gate_fidelity is preferred)</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.perform_state_tomography">
-<span class="sig-name descname"><span class="pre">perform_state_tomography</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Qobj</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Qobj</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.perform_state_tomography"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.perform_state_tomography" title="Link to this definition"></a></dt>
-<dd><p>Perform State Tomography Analysis (Fidelity Check).</p>
-<p>Real tomography involves measuring &lt;P_i&gt; for all Pauli strings.
-Here we calculate exact Fidelity and Trace Distance for simulation verification.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>state</strong> – Simulation final state (ket or dm)</p></li>
-<li><p><strong>target</strong> – Ideal target state (ket or dm)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Dict with ‘fidelity’, ‘trace_distance’</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.simulate_dynamics">
-<span class="sig-name descname"><span class="pre">simulate_dynamics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.simulate_dynamics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.simulate_dynamics" title="Link to this definition"></a></dt>
-<dd><p>Simulate single-qubit gate dynamics.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>qubit_name</strong> – Name of the target qubit</p></li>
-<li><p><strong>gate_type</strong> – Gate to simulate (X, Y, Z, H)</p></li>
-<li><p><strong>duration</strong> – Gate duration in ns</p></li>
-<li><p><strong>noise_model</strong> – ‘none’ or ‘realistic’</p></li>
-<li><p><strong>steps</strong> – Number of time steps</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Simulation result dictionary</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics">
-<span class="sig-name descname"><span class="pre">simulate_two_qubit_dynamics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit1_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qubit2_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coupling_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coupling_strength</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detuning</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine.simulate_two_qubit_dynamics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics" title="Link to this definition"></a></dt>
-<dd><p>Simulate the dynamics of two coupled qubits under a gate operation.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>detuning</strong> – Frequency shift amplitude (GHz) for Flux Pulse (CZ).</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-</section>
-<section id="module-qforge.utils.terminal_plot">
-<span id="utilities"></span><h2>Utilities<a class="headerlink" href="#module-qforge.utils.terminal_plot" title="Link to this heading"></a></h2>
-<p>Terminal plotting utility using plotext.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="qforge.utils.terminal_plot.TerminalPlotter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">qforge.utils.terminal_plot.</span></span><span class="sig-name descname"><span class="pre">TerminalPlotter</span></span><a class="reference internal" href="_modules/qforge/utils/terminal_plot.html#TerminalPlotter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.utils.terminal_plot.TerminalPlotter" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Helper class for terminal-based plotting.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.utils.terminal_plot.TerminalPlotter.plot_spectrum">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">plot_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">energies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Energy</span> <span class="pre">Spectrum'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/utils/terminal_plot.html#TerminalPlotter.plot_spectrum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.utils.terminal_plot.TerminalPlotter.plot_spectrum" title="Link to this definition"></a></dt>
-<dd><p>Plot energy spectrum.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>energies</strong> – Array of energy levels</p></li>
-<li><p><strong>title</strong> – Plot title</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="qforge.utils.terminal_plot.TerminalPlotter.plot_time_evolution">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">plot_time_evolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">times</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expectations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Time</span> <span class="pre">Evolution'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/qforge/utils/terminal_plot.html#TerminalPlotter.plot_time_evolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#qforge.utils.terminal_plot.TerminalPlotter.plot_time_evolution" title="Link to this definition"></a></dt>
-<dd><p>Plot time evolution of expectation values.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>times</strong> – Array of time points</p></li>
-<li><p><strong>expectations</strong> – List of expectation value arrays</p></li>
-<li><p><strong>labels</strong> – List of labels for each expectation value</p></li>
-<li><p><strong>title</strong> – Plot title</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-</section>
-</section>
-
-
-           </div>
+            <ul class="wy-breadcrumbs">
+              <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+              <li class="breadcrumb-item active">API Reference</li>
+              <li class="wy-breadcrumbs-aside">
+                <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
+              </li>
+            </ul>
+            <hr />
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-    </div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div itemprop="articleBody">
 
-  <hr/>
+              <section id="api-reference">
+                <h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h1>
+                <section id="module-qforge.core.qubit_engine">
+                  <span id="core-engines"></span>
+                  <h2>Core Engines<a class="headerlink" href="#module-qforge.core.qubit_engine"
+                      title="Link to this heading"></a></h2>
+                  <p>Qubit Engine: Wrapper around scqubits for qubit physics modeling.</p>
+                  <dl class="py class">
+                    <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine">
+                      <em class="property"><span class="pre">class</span><span class="w"> </span></em><span
+                        class="sig-prename descclassname"><span class="pre">qforge.core.qubit_engine.</span></span><span
+                        class="sig-name descname"><span class="pre">QubitEngine</span></span><a
+                        class="reference internal" href="_modules/qforge/core/qubit_engine.html#QubitEngine"><span
+                          class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                        href="#qforge.core.qubit_engine.QubitEngine" title="Link to this definition"></a>
+                    </dt>
+                    <dd>
+                      <p>Bases: <code
+                          class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code>
+                      </p>
+                      <p>Engine for qubit modeling and physics calculations using scqubits.</p>
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.compute_spectrum">
+                          <span class="sig-name descname"><span class="pre">compute_spectrum</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">n_levels</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w">
+                            </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span
+                              class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span
+                              class="n"><span class="pre">subtract_ground</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">bool</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">False</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.compute_spectrum"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.compute_spectrum"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Compute energy spectrum of the qubit.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>n_levels</strong> – Number of energy levels to compute</p>
+                                </li>
+                                <li>
+                                  <p><strong>subtract_ground</strong> – Whether to subtract ground state energy (setting
+                                    E0 = 0)</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>Array of energy eigenvalues</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
 
-  <div role="contentinfo">
-    <p>&#169; Copyright 2026, Saumya Shah.</p>
-  </div>
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.create_qubit">
+                          <span class="sig-name descname"><span class="pre">create_qubit</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">params</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span
+                                class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w">
+                              </span><span class="pre">Any</span><span class="p"><span
+                                  class="pre">]</span></span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.create_qubit"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.create_qubit"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Create a qubit instance.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit_type</strong> – Type of qubit (transmon, fluxonium, flux, zeropi)</p>
+                                </li>
+                                <li>
+                                  <p><strong>name</strong> – Name for the qubit</p>
+                                </li>
+                                <li>
+                                  <p><strong>params</strong> – Qubit parameters</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>scqubits qubit object</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
 
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.delete_qubit">
+                          <span class="sig-name descname"><span class="pre">delete_qubit</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em><span
+                            class="sig-paren">)</span><a class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.delete_qubit"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.delete_qubit"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Delete a qubit by name.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <p><strong>name</strong> – Name of the qubit to delete</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
 
-</footer>
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.estimate_coherence">
+                          <span class="sig-name descname"><span class="pre">estimate_coherence</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">temperature</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">float</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">0.015</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span
+                                  class="pre">[</span></span><span class="pre">str</span><span class="p"><span
+                                  class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span
+                                class="p"><span class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.estimate_coherence"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.estimate_coherence"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Estimate coherence times for the qubit.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>temperature</strong> – Bath temperature in Kelvin</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>Dictionary with coherence time estimates</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.export_to_qiskit">
+                          <span class="sig-name descname"><span class="pre">export_to_qiskit</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">output_path</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.export_to_qiskit"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.export_to_qiskit"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Export qubit parameters for Qiskit noise modeling.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>output_path</strong> – Path to save parameters</p>
+                                </li>
+                              </ul>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.export_to_qutip">
+                          <span class="sig-name descname"><span class="pre">export_to_qutip</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">output_path</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.export_to_qutip"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.export_to_qutip"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Export qubit Hamiltonian to QuTiP format.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>output_path</strong> – Path to save the Hamiltonian</p>
+                                </li>
+                              </ul>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.get_qubit">
+                          <span class="sig-name descname"><span class="pre">get_qubit</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em><span
+                            class="sig-paren">)</span><a class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.get_qubit"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.get_qubit" title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Get a qubit by name.</p>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.list_qubits">
+                          <span class="sig-name descname"><span class="pre">list_qubits</span></span><span
+                            class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span
+                              class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span
+                                class="pre">List</span><span class="p"><span class="pre">[</span></span><span
+                                class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.list_qubits"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.list_qubits"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>List all created qubits with their properties.</p>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.load_qubit">
+                          <span class="sig-name descname"><span class="pre">load_qubit</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">input_path</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Any</span></span></span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.load_qubit"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.load_qubit"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Load qubit from JSON file.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <p><strong>input_path</strong> – Path to qubit file</p>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>scqubits qubit object</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.parameter_sweep">
+                          <span class="sig-name descname"><span class="pre">parameter_sweep</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">param_name</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">param_range</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">fixed_params</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">property_name</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">'frequency'</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.parameter_sweep"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.parameter_sweep"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Sweep a parameter and compute resulting properties.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit_type</strong> – Type of qubit</p>
+                                </li>
+                                <li>
+                                  <p><strong>param_name</strong> – Parameter to sweep</p>
+                                </li>
+                                <li>
+                                  <p><strong>param_range</strong> – Range of values (list or array)</p>
+                                </li>
+                                <li>
+                                  <p><strong>fixed_params</strong> – Fixed parameters</p>
+                                </li>
+                                <li>
+                                  <p><strong>property_name</strong> – Property to compute (frequency, anharmonicity, T1)
+                                  </p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>dict with parameter values and property values</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.save_qubit">
+                          <span class="sig-name descname"><span class="pre">save_qubit</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">output_path</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.save_qubit"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.save_qubit"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Save qubit to JSON file.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>output_path</strong> – Path to save file</p>
+                                </li>
+                              </ul>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.visualize">
+                          <span class="sig-name descname"><span class="pre">visualize</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">plot_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">'spectrum'</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w">
+                            </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span
+                              class="default_value"><span class="pre">True</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">subtract_ground</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">bool</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">False</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.visualize"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.visualize" title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Visualize qubit properties.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>plot_type</strong> – Type of visualization (spectrum, wavefunctions,
+                                    matrix_elements)</p>
+                                </li>
+                                <li>
+                                  <p><strong>save</strong> – Whether to save the plot</p>
+                                </li>
+                                <li>
+                                  <p><strong>subtract_ground</strong> – Whether to subtract ground state energy (for
+                                    spectrum)</p>
+                                </li>
+                              </ul>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.qubit_engine.QubitEngine.visualize_enhanced">
+                          <span class="sig-name descname"><span class="pre">visualize_enhanced</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">plot_types</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">list</span><span class="w"> </span><span class="p"><span
+                                  class="pre">|</span></span><span class="w"> </span><span
+                                class="pre">None</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w">
+                            </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span
+                              class="default_value"><span class="pre">True</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">subtract_ground</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">bool</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">False</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/qubit_engine.html#QubitEngine.visualize_enhanced"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.qubit_engine.QubitEngine.visualize_enhanced"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Create comprehensive visualizations for a qubit.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit</strong> – scqubits qubit object</p>
+                                </li>
+                                <li>
+                                  <p><strong>plot_types</strong> – List of plot types to generate
+                                    Options: “spectrum”, “wavefunctions”, “matrix_elements”, “potential”
+                                    If None, generates all applicable plots</p>
+                                </li>
+                                <li>
+                                  <p><strong>save</strong> – Whether to save plots</p>
+                                </li>
+                                <li>
+                                  <p><strong>subtract_ground</strong> – Whether to subtract ground state energy (for
+                                    spectrum)</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>Mapping plot_type -&gt; file_path</p>
+                            </dd>
+                            <dt class="field-odd">Return type<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <p>dict</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                    </dd>
+                  </dl>
+
+                  <p id="module-qforge.core.gate_engine">Gate Engine: Simulation of quantum gates and dynamics using
+                    QuTiP.</p>
+                  <dl class="py class">
+                    <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine">
+                      <em class="property"><span class="pre">class</span><span class="w"> </span></em><span
+                        class="sig-prename descclassname"><span class="pre">qforge.core.gate_engine.</span></span><span
+                        class="sig-name descname"><span class="pre">GateEngine</span></span><a
+                        class="reference internal" href="_modules/qforge/core/gate_engine.html#GateEngine"><span
+                          class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                        href="#qforge.core.gate_engine.GateEngine" title="Link to this definition"></a>
+                    </dt>
+                    <dd>
+                      <p>Bases: <code
+                          class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code>
+                      </p>
+                      <p>Engine for simulating quantum gates and dynamics.</p>
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.calculate_gate_fidelity">
+                          <span class="sig-name descname"><span class="pre">calculate_gate_fidelity</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">q1_name</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">q2_name</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">gate_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">coupling_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">strength</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">duration</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">float</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span
+                                  class="pre">[</span></span><span class="pre">str</span><span class="p"><span
+                                  class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span
+                                class="p"><span class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.calculate_gate_fidelity"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.calculate_gate_fidelity"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Calculate Average Gate Fidelity using the full propagator.
+                            This effectively performs Process Tomography w/o 16 simulations.</p>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.calibrate_gate">
+                          <span class="sig-name descname"><span class="pre">calibrate_gate</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">q1_name</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">q2_name</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">gate_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">coupling_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">coupling_strength</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">parameter</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">'duration'</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">range_vals</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">list</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">[]</span></span></em>, <em class="sig-param"><span class="o"><span
+                                class="pre">**</span></span><span class="n"><span
+                                class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span
+                                  class="pre">[</span></span><span class="pre">float</span><span class="p"><span
+                                  class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span
+                                class="p"><span class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.calibrate_gate"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.calibrate_gate"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Calibrate a gate by sweeping a parameter to maximize fidelity/population.
+                            Accepts kwargs (e.g. detuning) passed to simulate().</p>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.compare_couplings">
+                          <span class="sig-name descname"><span class="pre">compare_couplings</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">q1</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">q2</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">gate</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w">
+                            </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span
+                              class="default_value"><span class="pre">'CNOT'</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">coupling_type</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span><span class="w"> </span><span class="p"><span
+                                  class="pre">|</span></span><span class="w"> </span><span
+                                class="pre">None</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">strength</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">float</span><span class="w">
+                              </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span
+                                class="pre">None</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">float</span><span class="w">
+                              </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span
+                                class="pre">None</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">None</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span
+                                  class="pre">[</span></span><span class="pre">str</span><span class="p"><span
+                                  class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span
+                                class="p"><span class="pre">[</span></span><span class="pre">str</span><span
+                                class="p"><span class="pre">,</span></span><span class="w"> </span><span
+                                class="pre">float</span><span class="p"><span class="pre">]</span></span><span
+                                class="p"><span class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.compare_couplings"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.compare_couplings"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Compare different coupling types for a given gate.
+                            Can optionally run a specific single scenario if arguments are provided.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>q1</strong> – Control qubit name</p>
+                                </li>
+                                <li>
+                                  <p><strong>q2</strong> – Target qubit name</p>
+                                </li>
+                                <li>
+                                  <p><strong>gate</strong> – Gate type (CNOT, CZ)</p>
+                                </li>
+                                <li>
+                                  <p><strong>coupling_type</strong> – Optional override</p>
+                                </li>
+                                <li>
+                                  <p><strong>strength</strong> – Optional override</p>
+                                </li>
+                                <li>
+                                  <p><strong>duration</strong> – Optional override</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>float, ‘phase’: float}</p>
+                            </dd>
+                            <dt class="field-odd">Return type<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <p>Dictionary mapping coupling type to metrics {‘population’</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.get_control_hamiltonian">
+                          <span class="sig-name descname"><span class="pre">get_control_hamiltonian</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">gate_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">dimension</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">int</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Qobj</span></span></span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.get_control_hamiltonian"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.get_control_hamiltonian"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Get the control Hamiltonian operator for a specific gate type.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>gate_type</strong> – Type of gate (X, Y, Z, H)</p>
+                                </li>
+                                <li>
+                                  <p><strong>dimension</strong> – Dimension of the Hilbert space</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>QuTiP Qobj operator</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py"
+                          id="qforge.core.gate_engine.GateEngine.perform_process_tomography">
+                          <span class="sig-name descname"><span
+                              class="pre">perform_process_tomography</span></span><span class="sig-paren">(</span><em
+                            class="sig-param"><span class="n"><span class="pre">q1_name</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">q2_name</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">gate_type</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">'CNOT'</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">float</span></span></span><a
+                            class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.perform_process_tomography"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.perform_process_tomography"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Determine the Process Fidelity of the gate simulation by running
+                            it against a complete basis set.
+                            (Placeholder logic as simpler method calculate_gate_fidelity is preferred)</p>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.perform_state_tomography">
+                          <span class="sig-name descname"><span class="pre">perform_state_tomography</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">Qobj</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">target</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">Qobj</span></span></em><span class="sig-paren">)</span> <span
+                            class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span
+                              class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span
+                                  class="pre">[</span></span><span class="pre">str</span><span class="p"><span
+                                  class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span
+                                class="p"><span class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.perform_state_tomography"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.perform_state_tomography"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Perform State Tomography Analysis (Fidelity Check).</p>
+                          <p>Real tomography involves measuring &lt;P_i&gt; for all Pauli strings.
+                            Here we calculate exact Fidelity and Trace Distance for simulation verification.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>state</strong> – Simulation final state (ket or dm)</p>
+                                </li>
+                                <li>
+                                  <p><strong>target</strong> – Ideal target state (ket or dm)</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>Dict with ‘fidelity’, ‘trace_distance’</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.core.gate_engine.GateEngine.simulate_dynamics">
+                          <span class="sig-name descname"><span class="pre">simulate_dynamics</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">qubit_name</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">gate_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">noise_model</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w">
+                            </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span
+                              class="default_value"><span class="pre">100</span></span></em><span
+                            class="sig-paren">)</span> <span class="sig-return"><span
+                              class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span
+                                class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span
+                                class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w">
+                              </span><span class="pre">Any</span><span class="p"><span
+                                  class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.simulate_dynamics"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.simulate_dynamics"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Simulate single-qubit gate dynamics.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>qubit_name</strong> – Name of the target qubit</p>
+                                </li>
+                                <li>
+                                  <p><strong>gate_type</strong> – Gate to simulate (X, Y, Z, H)</p>
+                                </li>
+                                <li>
+                                  <p><strong>duration</strong> – Gate duration in ns</p>
+                                </li>
+                                <li>
+                                  <p><strong>noise_model</strong> – ‘none’ or ‘realistic’</p>
+                                </li>
+                                <li>
+                                  <p><strong>steps</strong> – Number of time steps</p>
+                                </li>
+                              </ul>
+                            </dd>
+                            <dt class="field-even">Returns<span class="colon">:</span></dt>
+                            <dd class="field-even">
+                              <p>Simulation result dictionary</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py"
+                          id="qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics">
+                          <span class="sig-name descname"><span
+                              class="pre">simulate_two_qubit_dynamics</span></span><span class="sig-paren">(</span><em
+                            class="sig-param"><span class="n"><span class="pre">qubit1_name</span></span><span
+                              class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">qubit2_name</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">gate_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">coupling_type</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">coupling_strength</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em
+                            class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span
+                                class="pre">:</span></span><span class="w"> </span><span class="n"><span
+                                class="pre">int</span></span><span class="w"> </span><span class="o"><span
+                                class="pre">=</span></span><span class="w"> </span><span class="default_value"><span
+                                class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">detuning</span></span><span class="p"><span class="pre">:</span></span><span
+                              class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w">
+                            </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span
+                              class="default_value"><span class="pre">0.0</span></span></em><span
+                            class="sig-paren">)</span> <span class="sig-return"><span
+                              class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span
+                                class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span
+                                class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w">
+                              </span><span class="pre">Any</span><span class="p"><span
+                                  class="pre">]</span></span></span></span><a class="reference internal"
+                            href="_modules/qforge/core/gate_engine.html#GateEngine.simulate_two_qubit_dynamics"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.core.gate_engine.GateEngine.simulate_two_qubit_dynamics"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Simulate the dynamics of two coupled qubits under a gate operation.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <p><strong>detuning</strong> – Frequency shift amplitude (GHz) for Flux Pulse (CZ).</p>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                    </dd>
+                  </dl>
+
+                </section>
+                <section id="module-qforge.utils.terminal_plot">
+                  <span id="utilities"></span>
+                  <h2>Utilities<a class="headerlink" href="#module-qforge.utils.terminal_plot"
+                      title="Link to this heading"></a></h2>
+                  <p>Terminal plotting utility using plotext.</p>
+                  <dl class="py class">
+                    <dt class="sig sig-object py" id="qforge.utils.terminal_plot.TerminalPlotter">
+                      <em class="property"><span class="pre">class</span><span class="w"> </span></em><span
+                        class="sig-prename descclassname"><span
+                          class="pre">qforge.utils.terminal_plot.</span></span><span class="sig-name descname"><span
+                          class="pre">TerminalPlotter</span></span><a class="reference internal"
+                        href="_modules/qforge/utils/terminal_plot.html#TerminalPlotter"><span
+                          class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                        href="#qforge.utils.terminal_plot.TerminalPlotter" title="Link to this definition"></a>
+                    </dt>
+                    <dd>
+                      <p>Bases: <code
+                          class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code>
+                      </p>
+                      <p>Helper class for terminal-based plotting.</p>
+                      <dl class="py method">
+                        <dt class="sig sig-object py" id="qforge.utils.terminal_plot.TerminalPlotter.plot_spectrum">
+                          <em class="property"><span class="pre">static</span><span class="w"> </span></em><span
+                            class="sig-name descname"><span class="pre">plot_spectrum</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">energies</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span
+                              class="default_value"><span class="pre">'Energy</span> <span
+                                class="pre">Spectrum'</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/utils/terminal_plot.html#TerminalPlotter.plot_spectrum"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.utils.terminal_plot.TerminalPlotter.plot_spectrum"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Plot energy spectrum.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>energies</strong> – Array of energy levels</p>
+                                </li>
+                                <li>
+                                  <p><strong>title</strong> – Plot title</p>
+                                </li>
+                              </ul>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                      <dl class="py method">
+                        <dt class="sig sig-object py"
+                          id="qforge.utils.terminal_plot.TerminalPlotter.plot_time_evolution">
+                          <em class="property"><span class="pre">static</span><span class="w"> </span></em><span
+                            class="sig-name descname"><span class="pre">plot_time_evolution</span></span><span
+                            class="sig-paren">(</span><em class="sig-param"><span class="n"><span
+                                class="pre">times</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">expectations</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span
+                                class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span
+                              class="default_value"><span class="pre">'Time</span> <span
+                                class="pre">Evolution'</span></span></em><span class="sig-paren">)</span><a
+                            class="reference internal"
+                            href="_modules/qforge/utils/terminal_plot.html#TerminalPlotter.plot_time_evolution"><span
+                              class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink"
+                            href="#qforge.utils.terminal_plot.TerminalPlotter.plot_time_evolution"
+                            title="Link to this definition"></a>
+                        </dt>
+                        <dd>
+                          <p>Plot time evolution of expectation values.</p>
+                          <dl class="field-list simple">
+                            <dt class="field-odd">Parameters<span class="colon">:</span></dt>
+                            <dd class="field-odd">
+                              <ul class="simple">
+                                <li>
+                                  <p><strong>times</strong> – Array of time points</p>
+                                </li>
+                                <li>
+                                  <p><strong>expectations</strong> – List of expectation value arrays</p>
+                                </li>
+                                <li>
+                                  <p><strong>labels</strong> – List of labels for each expectation value</p>
+                                </li>
+                                <li>
+                                  <p><strong>title</strong> – Plot title</p>
+                                </li>
+                              </ul>
+                            </dd>
+                          </dl>
+                        </dd>
+                      </dl>
+
+                    </dd>
+                  </dl>
+
+                </section>
+              </section>
+
+
+            </div>
+          </div>
+          <footer>
+            <div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+              <a href="examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span
+                  class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+            </div>
+
+            <hr />
+
+            <div role="contentinfo">
+              <p>&#169; Copyright 2026, Saumya Shah.</p>
+            </div>
+
+            Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+            <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+            provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+          </footer>
         </div>
       </div>
     </section>
   </div>
   <script>
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script> 
+    jQuery(function () {
+      SphinxRtdTheme.Navigation.enable(true);
+    });
+  </script>
 
 </body>
+
 </html>

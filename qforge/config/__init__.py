@@ -1,1 +1,1 @@
-"""Configuration management for QForge."""
+"""Configuration management for qforge."""

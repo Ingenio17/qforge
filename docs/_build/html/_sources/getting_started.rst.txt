@@ -1,7 +1,7 @@
 Getting Started
 ===============
 
-QForge is designed to be user-friendly and interactive.
+qforge is designed to be user-friendly and interactive.
 
 Interactive Mode
 ----------------

@@ -1,5 +1,5 @@
 """
-Developer CLI commands for QForge.
+Developer CLI commands for qforge.
 """
 
 import click
@@ -11,13 +11,13 @@ console = Console()
 
 @click.group()
 def dev():
-    """Developer tools for QForge automation."""
+    """Developer tools for qforge automation."""
     pass
 
 @dev.command("sync")
 def sync():
     """Update documentation tables and internal lists."""
-    console.print("[bold cyan]Syncing QForge documentation...[/bold cyan]")
+    console.print("[bold cyan]Syncing qforge documentation...[/bold cyan]")
     
     _sync_docs_qubits()
     

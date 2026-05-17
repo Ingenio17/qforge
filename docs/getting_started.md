@@ -1,6 +1,6 @@
-# QForge Getting Started Guide
+# qforge Getting Started Guide
 
-Welcome to QForge! This guide will help you get started with quantum simulation from qubit physics to hardware design.
+Welcome to qforge! This guide will help you get started with quantum simulation from qubit physics to hardware design.
 
 ## Installation
 
@@ -82,7 +82,7 @@ qforge compare qubits --qubits transmon,fluxonium --metrics all
 
 ### 3. Python API
 
-Use QForge programmatically. See `examples/gate_simulation.py` for a complete script.
+Use qforge programmatically. See `examples/gate_simulation.py` for a complete script.
 
 ```python
 from qforge.core.qubit_engine import QubitEngine
@@ -130,7 +130,7 @@ TerminalPlotter.plot_time_evolution(
 
 ## Workflow Stages
 
-QForge supports end-to-end workflows:
+qforge supports end-to-end workflows:
 
 1. **Qubit Physics** (`qforge qubit`) - Model superconducting qubits (**Implemented**)
 2. **Gate Dynamics** (`qforge gate`) - Simulate quantum gates (**Implemented**)

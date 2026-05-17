@@ -2,7 +2,7 @@
 Gate Simulation Example
 =======================
 
-This example demonstrates how to use the QForge API to:
+This example demonstrates how to use the qforge API to:
 1. Create a Transmon qubit.
 2. Analyze its energy spectrum.
 3. Simulate a quantum gate (X-gate / Pi-pulse).
@@ -18,7 +18,7 @@ from qforge.utils.terminal_plot import TerminalPlotter
 import numpy as np
 
 def run_simulation():
-    print("\n=== QForge Gate Simulation Example ===\n")
+    print("\n=== qforge Gate Simulation Example ===\n")
 
     # 1. Initialize Engines
     qubit_engine = QubitEngine()
@@ -41,7 +41,7 @@ def run_simulation():
     print("\n-> Simulating X Gate (Pi-pulse)...")
     gate_engine = GateEngine()
     # For a Pi pulse, duration usually depends on drive amplitude. 
-    # QForge auto-calibrates amplitude based on duration for standard gates.
+    # qforge auto-calibrates amplitude based on duration for standard gates.
     duration = 40.0 # ns
     
     result = gate_engine.simulate_dynamics(

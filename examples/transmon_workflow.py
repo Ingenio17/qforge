@@ -22,7 +22,7 @@ from qforge.utils.terminal_plot import TerminalPlotter
 
 def main():
     print("=" * 60)
-    print("QForge Example: Transmon Workflow")
+    print("qforge Example: Transmon Workflow")
     print("=" * 60)
     
     # Initialize engine

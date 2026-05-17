@@ -1,7 +1,7 @@
-Welcome to QForge's documentation!
+Welcome to qforge's documentation!
 ===================================
 
-**QForge** is a comprehensive, terminal-based quantum simulation toolkit logic that bridges qubit physics to hardware design.
+**qforge** is a comprehensive, terminal-based quantum simulation toolkit logic that bridges qubit physics to hardware design.
 
 .. toctree::
    :maxdepth: 2

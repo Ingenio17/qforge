@@ -1,5 +1,5 @@
 """
-Comparison CLI commands for QForge.
+Comparison CLI commands for qforge.
 """
 
 import click

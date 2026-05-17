@@ -1,5 +1,5 @@
 """
-CLI commands for managing QForge internal caches.
+CLI commands for managing qforge internal caches.
 """
 
 import click
@@ -11,7 +11,7 @@ console = Console()
 
 @click.group(name="cache")
 def cache_group():
-    """Manage QForge internal caches (calibrations, compiled circuits)."""
+    """Manage qforge internal caches (calibrations, compiled circuits)."""
     pass
 
 @cache_group.command(name="clear")

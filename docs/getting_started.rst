@@ -2,12 +2,12 @@
 Getting Started
 ===============
 
-QForge is designed to bridge the gap between abstract quantum algorithms and physical microwave physics. Whether you are a beginner prototyping a new transmon architecture or an advanced researcher scheduling hardware pulses, QForge provides both guided and scripted interfaces.
+qforge is designed to bridge the gap between abstract quantum algorithms and physical microwave physics. Whether you are a beginner prototyping a new transmon architecture or an advanced researcher scheduling hardware pulses, qforge provides both guided and scripted interfaces.
 
 Interactive Mode
 ----------------
 
-The easiest way to start exploring QForge without writing any code is through the Interactive Wizard. Powered by ``prompt_toolkit`` and ``rich``, this terminal UI guides you through creating hardware, auto-calibrating gates, and running full physical simulations step-by-step.
+The easiest way to start exploring qforge without writing any code is through the Interactive Wizard. Powered by ``prompt_toolkit`` and ``rich``, this terminal UI guides you through creating hardware, auto-calibrating gates, and running full physical simulations step-by-step.
 
 To launch the interactive wizard, run:
 
@@ -18,31 +18,35 @@ To launch the interactive wizard, run:
 Once inside, you will be presented with a dynamic menu offering several core workflows:
 
 **1. Hardware Prototyping (Create, Analyze, Compare)**
+
 * **Create a Qubit:** Select a predefined architecture (e.g., Transmon, Fluxonium) and the wizard will dynamically prompt you for the necessary circuit parameters (like :math:`E_J`, :math:`E_C`, and :math:`E_L`).
 * **Analyze a Qubit:** Quickly generate energy spectrum plots, calculate anharmonicity, and estimate :math:`T_1`/:math:`T_2` coherence times based on realistic dielectric noise models.
 * **Compare Qubits:** Select multiple defined qubits to generate side-by-side tables comparing their transition frequencies and coherence limits.
 
 **2. Gate Calibration & Simulation**
+
 * **Simulate Gates:** Test physical pulse drives for single-qubit gates (X, Y, Z, H) or two-qubit gates (CZ, CNOT). The wizard allows you to tweak pulse durations, swap between coupling architectures (capacitive, inductive, tunable coupler), and view beautiful ASCII/matplotlib plots of the resulting Rabi oscillations and state populations.
 * **Analyze Multi-Qubit Gates:** A dedicated tool for benchmarking entangling gates. It runs multiple simulations across different coupling strengths and architectures, outputting a detailed terminal table comparing Target Population (Fidelity proxy) and geometric phase accumulation.
 
 **3. The Full Physical Workflow (End-to-End)**
+
 The interactive mode provides direct access to the ``PhysicalWorkflowEngine``. This wizard allows you to:
+
 1. Select which of your defined qubits to use.
 2. Define a custom hardware topology by drawing edges (couplings) between them.
 3. Provide an abstract OpenQASM 2.0 file.
-4. Watch as QForge automatically transpiles the circuit into your native basis, calibrates the :math:`\pi`-pulses, compiles a chronological microwave schedule, and simulates the entire algorithm natively in QuTiP.
+4. Watch as qforge automatically transpiles the circuit into your native basis, calibrates the :math:`\pi`-pulses, compiles a chronological microwave schedule, and simulates the entire algorithm natively in QuTiP.
 
 
 Command Line Interface (CLI)
 ----------------------------
 
-For users looking to integrate QForge into shell scripts, CI/CD pipelines, or batch processing, the CLI exposes all interactive features as direct commands. 
+For users looking to integrate qforge into shell scripts, CI/CD pipelines, or batch processing, the CLI exposes all interactive features as direct commands. 
 
 Here is a standard CLI workflow for creating and testing a two-qubit system:
 
 **1. Create Physical Qubits**
-Define the hardware parameters for your system. These are saved to your active QForge session.
+Define the hardware parameters for your system. These are saved to your active qforge session.
 
 .. code-block:: bash
 
@@ -81,7 +85,8 @@ Bypass manual simulations and let the Workflow Engine compile and simulate a qua
 
 Cache Management
 ----------------
-Note: QForge utilizes a local JSON cache to save computationally expensive pulse calibrations (like optimal gate durations). If you alter a qubit's physical parameters, you may need to clear the cache to force a recalibration:
+
+Note: qforge utilizes a local JSON cache to save computationally expensive pulse calibrations (like optimal gate durations). If you alter a qubit's physical parameters, you may need to clear the cache to force a recalibration:
 
 .. code-block:: bash
 

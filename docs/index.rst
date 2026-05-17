@@ -1,12 +1,12 @@
 ==================================
-Welcome to QForge
+Welcome to qforge
 ==================================
 
-**QForge** is a comprehensive, lightweight quantum simulation toolkit that bridges the gap between abstract quantum logic and physical hardware design. 
+**qforge** is a comprehensive, lightweight quantum simulation toolkit that bridges the gap between abstract quantum logic and physical hardware design. 
 
-What is QForge?
+What is qforge?
 ---------------
-Designed for researchers, engineers, and quantum enthusiasts, QForge moves beyond idealized statevectors to show you how quantum circuits actually execute at the lowest physical layers. QForge provides a rigorous, physics-first approach to quantum software.
+Designed for researchers, engineers, and quantum enthusiasts, qforge moves beyond idealized statevectors to show you how quantum circuits actually execute at the lowest physical layers. qforge provides a rigorous, physics-first approach to quantum software.
 
 Key Features
 ------------
@@ -24,8 +24,10 @@ Key Features
 
 .. toctree::
    :maxdepth: 2
-   :caption: Architecture & Reference
+   :caption: Architecture & Reference  
 
+   info
+   parsing
    couplings
    api
 

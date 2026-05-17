@@ -1,6 +1,6 @@
-# Contributing to QForge
+# Contributing to qforge
 
-Thank you for your interest in contributing to QForge! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to qforge! This document provides guidelines for contributing to the project.
 
 ## Code of Conduct
 
@@ -14,7 +14,7 @@ If you find a bug, please open an issue on GitHub with:
 - A clear, descriptive title
 - Steps to reproduce the issue
 - Expected behavior vs actual behavior
-- Your environment (OS, Python version, QForge version)
+- Your environment (OS, Python version, qforge version)
 - Any relevant code snippets or error messages
 
 ### Suggesting Enhancements
@@ -148,8 +148,8 @@ If you need help with your contribution:
 
 ## License
 
-By contributing to QForge, you agree that your contributions will be licensed under the Apache License 2.0.
+By contributing to qforge, you agree that your contributions will be licensed under the Apache License 2.0.
 
 ## Recognition
 
-All contributors will be recognized in our release notes and documentation. Thank you for making QForge better!
+All contributors will be recognized in our release notes and documentation. Thank you for making qforge better!

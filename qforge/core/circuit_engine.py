@@ -15,7 +15,7 @@ except ImportError:
 
 class CircuitEngine:
     """
-    QForge Circuit Simulation Engine bridging QuTiP physics to Qiskit Aer.
+    qforge Circuit Simulation Engine bridging QuTiP physics to Qiskit Aer.
     """
     
     def __init__(self):

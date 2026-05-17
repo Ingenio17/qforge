@@ -2,7 +2,7 @@
 Comparison of 2-Qubit Gate Performance with Different Couplings
 =============================================================
 
-This example demonstrates how to use QForge to simulate and compare
+This example demonstrates how to use qforge to simulate and compare
 different coupling architectures for two-qubit gates (CNOT, CZ).
 """
 
@@ -13,7 +13,7 @@ import numpy as np
 import qutip as qt
 
 def run_comparison():
-    print("\n=== QForge Coupling Comparison ===\n")
+    print("\n=== qforge Coupling Comparison ===\n")
     
     # 1. Initialize
     qubit_engine = QubitEngine()

@@ -1,7 +1,7 @@
 """
 Comprehensive Qubit Comparison Example
 
-This example demonstrates the advanced comparison capabilities of QForge.
+This example demonstrates the advanced comparison capabilities of qforge.
 It compares Transmon, Fluxonium, and Flux qubits across:
 1. Static Metrics: Frequency, Anharmonicity, Coherence (T1/T2)
 2. Dynamic Metrics: X-Gate Fidelity, Gate Speed
@@ -23,7 +23,7 @@ from qforge.comparison.comparator import Comparator
 
 def main():
     print("=" * 70)
-    print("QForge Example: Comprehensive Qubit Comparison")
+    print("qforge Example: Comprehensive Qubit Comparison")
     print("=" * 70)
 
     # Initialize engine

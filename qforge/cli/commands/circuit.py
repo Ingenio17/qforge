@@ -1,5 +1,5 @@
 """
-Circuit simulation CLI commands for QForge.
+Circuit simulation CLI commands for qforge.
 """
 
 import click

@@ -3,7 +3,7 @@
 
 Description:
 Simulates a native 3-qubit Continuous-Time interaction implementing a Toffoli (CCX) gate.
-In QForge, we simulate multi-qubit topologies dynamically by applying conditional 
+In qforge, we simulate multi-qubit topologies dynamically by applying conditional 
 energy shifts or drives. We will plot the state evolution directly.
 
 Terminal CLI Equivalents:

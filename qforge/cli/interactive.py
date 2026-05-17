@@ -1,5 +1,5 @@
 """
-Interactive terminal interface for QForge.
+Interactive terminal interface for qforge.
 """
 
 from prompt_toolkit import prompt
@@ -21,11 +21,11 @@ engine = QubitEngine()
 
 
 def run_interactive():
-    """Run QForge in interactive mode with guided workflows."""
+    """Run qforge in interactive mode with guided workflows."""
     
     console.print(
         Panel.fit(
-            "[bold cyan]Welcome to QForge Interactive Mode![/bold cyan]\n\n"
+            "[bold cyan]Welcome to qforge Interactive Mode![/bold cyan]\n\n"
             "This guided interface will help you build quantum simulations step-by-step.\n"
             "Perfect for beginners and quick prototyping.\n\n"
             "[yellow]Tip:[/yellow] Type 'help' for assistance, 'exit' to quit.",
@@ -105,14 +105,14 @@ def run_interactive():
             elif choice in ["help", "12"]:
                 _show_help()
             elif choice in ["exit", "13", "quit", "q"]:
-                console.print("\n[cyan]Thank you for using QForge! Goodbye![/cyan]\n")
+                console.print("\n[cyan]Thank you for using qforge! Goodbye![/cyan]\n")
                 break
             else:
                 console.print(f"[red]Invalid choice: '{choice}' (Index: {choice_idx if 'choice_idx' in locals() else 'N/A'}). Please try again.[/red]")
                 console.print(f"[dim]Debug: Options are {[o.lower() for o in menu_options]}[/dim]")
                 
         except (KeyboardInterrupt, EOFError):
-            console.print("\n\n[cyan]Exiting QForge. Goodbye![/cyan]\n")
+            console.print("\n\n[cyan]Exiting qforge. Goodbye![/cyan]\n")
             break
 
 
@@ -466,7 +466,7 @@ def _wizard_full_workflow():
 def _show_help():
     """Show help information."""
     help_md = """
-# QForge Interactive Mode Help
+# qforge Interactive Mode Help
 
 ## Navigation
 - Use **number keys** or **type the option name** to select

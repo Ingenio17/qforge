@@ -1,5 +1,5 @@
 """
-Comparison Engine for QForge.
+Comparison Engine for qforge.
 """
 
 import json
@@ -226,7 +226,7 @@ class Comparator:
         report_path = run_dir / "comparison_report.md"
         
         with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(f"# QForge Comparison Report\n")
+            f.write(f"# qforge Comparison Report\n")
             f.write(f"**Run ID:** `{run_id}`\n\n")
             f.write(f"**Date:** {os.path.basename(str(run_dir)).split('_')[0]}\n\n")
             

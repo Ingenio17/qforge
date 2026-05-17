@@ -1,142 +1,164 @@
-
-
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="./">
+
 <head>
-  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multi-Qubit Couplings &mdash; QForge 0.2.0 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+  <title>Multi-Qubit Couplings &mdash; qforge 0.2.0 documentation</title>
+  <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+  <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
-  
-      <script src="_static/jquery.js?v=5d32c60e"></script>
-      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=938c9ccc"></script>
-      <script src="_static/doctools.js?v=9a2dae69"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script src="_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
+
+  <script src="_static/jquery.js?v=5d32c60e"></script>
+  <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+  <script src="_static/documentation_options.js?v=938c9ccc"></script>
+  <script src="_static/doctools.js?v=9a2dae69"></script>
+  <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+  <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script src="_static/js/theme.js"></script>
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" />
 </head>
 
-<body class="wy-body-for-nav"> 
+<body class="wy-body-for-nav">
   <div class="wy-grid-for-nav">
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
+        <div class="wy-side-nav-search">
 
-          
-          
+
+
           <a href="index.html" class="icon icon-home">
-            QForge
+            qforge
           </a>
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-</ul>
+          <div role="search">
+            <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+              <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+              <input type="hidden" name="check_keywords" value="yes" />
+              <input type="hidden" name="area" value="default" />
+            </form>
+          </div>
+        </div>
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+          <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+          <ul>
+            <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+            <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+            <li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+            <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+          </ul>
 
         </div>
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">QForge</a>
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" aria-label="Mobile navigation menu">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="index.html">qforge</a>
       </nav>
 
       <div class="wy-nav-content">
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
-  <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Multi-Qubit Couplings</li>
-      <li class="wy-breadcrumbs-aside">
-            <a href="_sources/couplings.rst.txt" rel="nofollow"> View page source</a>
-      </li>
-  </ul>
-  <hr/>
-</div>
+            <ul class="wy-breadcrumbs">
+              <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+              <li class="breadcrumb-item active">Multi-Qubit Couplings</li>
+              <li class="wy-breadcrumbs-aside">
+                <a href="_sources/couplings.rst.txt" rel="nofollow"> View page source</a>
+              </li>
+            </ul>
+            <hr />
+          </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-             
-  <section id="multi-qubit-couplings">
-<h1>Multi-Qubit Couplings<a class="headerlink" href="#multi-qubit-couplings" title="Link to this heading"></a></h1>
-<p>QForge provides flexible modeling for multi-qubit interactions, essential for simulating 2-qubit gates like CNOT and CZ. This page details the physical Hamiltonians used in the simulation.</p>
-<section id="capacitive-coupling">
-<h2>Capacitive Coupling<a class="headerlink" href="#capacitive-coupling" title="Link to this heading"></a></h2>
-<p>The most common coupling for fixed-frequency transmons (e.g., in Cross-Resonance gates). The interaction is transverse.</p>
-<div class="math notranslate nohighlight">
-\[H_{int} = g \left( a^\dagger b + a b^\dagger \right)\]</div>
-<p>where:
-* <span class="math notranslate nohighlight">\(a, a^\dagger\)</span> are operators for the control qubit (Q1).
-* <span class="math notranslate nohighlight">\(b, b^\dagger\)</span> are operators for the target qubit (Q2).
-* <span class="math notranslate nohighlight">\(g\)</span> is the coupling strength in GHz.</p>
-<p><strong>Physics:</strong>
-This term represents exchange interaction. In the dispersive limit (<span class="math notranslate nohighlight">\(|\Delta| \gg g\)</span>), it leads to a small hybridization of the states. When driven at the target frequency (Cross-Resonance), it activates a <span class="math notranslate nohighlight">\(ZX\)</span> interaction essential for CNOT.</p>
-</section>
-<section id="inductive-zz-coupling">
-<h2>Inductive / ZZ Coupling<a class="headerlink" href="#inductive-zz-coupling" title="Link to this heading"></a></h2>
-<p>Often an effective model for weak dispersive interactions or residual coupling from higher levels.</p>
-<div class="math notranslate nohighlight">
-\[H_{int} = g \hat{n}_1 \hat{n}_2 = g (a^\dagger a)(b^\dagger b)\]</div>
-<p>where:
-* <span class="math notranslate nohighlight">\(\hat{n}_i\)</span> is the number operator for qubit <span class="math notranslate nohighlight">\(i\)</span>.</p>
-<p><strong>Physics:</strong>
-This is a longitudinal coupling that shifts energy levels depending on the state of the other qubit. It naturally implements a CPHASE (CZ) evolution over time <span class="math notranslate nohighlight">\(T = \pi/g\)</span>.</p>
-</section>
-<section id="tunable-coupler-effective">
-<h2>Tunable Coupler (Effective)<a class="headerlink" href="#tunable-coupler-effective" title="Link to this heading"></a></h2>
-<p>For tunable couplers (like g-mon or transmons with flux loops), the effective coupling <span class="math notranslate nohighlight">\(g\)</span> can be modulated in time. QForge models the identifying interaction Hamiltonian which is then modulated by a pulse envelope <span class="math notranslate nohighlight">\(f(t)\)</span>.</p>
-<p>For a tunable exchange interaction (Swap/iSwap):</p>
-<div class="math notranslate nohighlight">
-\[H(t) = g_{max} f(t) \left( a^\dagger b + a b^\dagger \right)\]</div>
-<p>For a tunable CZ gate (adiabatic or diabatic flux pulse):</p>
-<div class="math notranslate nohighlight">
-\[H(t) = g_{eff}(t) |11\rangle\langle 11|\]</div>
-<p>(Note: The exact Hamiltonian depends on the implementation details, e.g., using a third coupler element vs. direct flux tuning).</p>
-</section>
-</section>
+            <div itemprop="articleBody">
+
+              <section id="multi-qubit-couplings">
+                <h1>Multi-Qubit Couplings<a class="headerlink" href="#multi-qubit-couplings"
+                    title="Link to this heading"></a></h1>
+                <p>qforge provides flexible modeling for multi-qubit interactions, essential for simulating 2-qubit
+                  gates like CNOT and CZ. This page details the physical Hamiltonians used in the simulation.</p>
+                <section id="capacitive-coupling">
+                  <h2>Capacitive Coupling<a class="headerlink" href="#capacitive-coupling"
+                      title="Link to this heading"></a></h2>
+                  <p>The most common coupling for fixed-frequency transmons (e.g., in Cross-Resonance gates). The
+                    interaction is transverse.</p>
+                  <div class="math notranslate nohighlight">
+                    \[H_{int} = g \left( a^\dagger b + a b^\dagger \right)\]</div>
+                  <p>where:
+                    * <span class="math notranslate nohighlight">\(a, a^\dagger\)</span> are operators for the control
+                    qubit (Q1).
+                    * <span class="math notranslate nohighlight">\(b, b^\dagger\)</span> are operators for the target
+                    qubit (Q2).
+                    * <span class="math notranslate nohighlight">\(g\)</span> is the coupling strength in GHz.</p>
+                  <p><strong>Physics:</strong>
+                    This term represents exchange interaction. In the dispersive limit (<span
+                      class="math notranslate nohighlight">\(|\Delta| \gg g\)</span>), it leads to a small hybridization
+                    of the states. When driven at the target frequency (Cross-Resonance), it activates a <span
+                      class="math notranslate nohighlight">\(ZX\)</span> interaction essential for CNOT.</p>
+                </section>
+                <section id="inductive-zz-coupling">
+                  <h2>Inductive / ZZ Coupling<a class="headerlink" href="#inductive-zz-coupling"
+                      title="Link to this heading"></a></h2>
+                  <p>Often an effective model for weak dispersive interactions or residual coupling from higher levels.
+                  </p>
+                  <div class="math notranslate nohighlight">
+                    \[H_{int} = g \hat{n}_1 \hat{n}_2 = g (a^\dagger a)(b^\dagger b)\]</div>
+                  <p>where:
+                    * <span class="math notranslate nohighlight">\(\hat{n}_i\)</span> is the number operator for qubit
+                    <span class="math notranslate nohighlight">\(i\)</span>.</p>
+                  <p><strong>Physics:</strong>
+                    This is a longitudinal coupling that shifts energy levels depending on the state of the other qubit.
+                    It naturally implements a CPHASE (CZ) evolution over time <span
+                      class="math notranslate nohighlight">\(T = \pi/g\)</span>.</p>
+                </section>
+                <section id="tunable-coupler-effective">
+                  <h2>Tunable Coupler (Effective)<a class="headerlink" href="#tunable-coupler-effective"
+                      title="Link to this heading"></a></h2>
+                  <p>For tunable couplers (like g-mon or transmons with flux loops), the effective coupling <span
+                      class="math notranslate nohighlight">\(g\)</span> can be modulated in time. qforge models the
+                    identifying interaction Hamiltonian which is then modulated by a pulse envelope <span
+                      class="math notranslate nohighlight">\(f(t)\)</span>.</p>
+                  <p>For a tunable exchange interaction (Swap/iSwap):</p>
+                  <div class="math notranslate nohighlight">
+                    \[H(t) = g_{max} f(t) \left( a^\dagger b + a b^\dagger \right)\]</div>
+                  <p>For a tunable CZ gate (adiabatic or diabatic flux pulse):</p>
+                  <div class="math notranslate nohighlight">
+                    \[H(t) = g_{eff}(t) |11\rangle\langle 11|\]</div>
+                  <p>(Note: The exact Hamiltonian depends on the implementation details, e.g., using a third coupler
+                    element vs. direct flux tuning).</p>
+                </section>
+              </section>
 
 
-           </div>
+            </div>
           </div>
           <footer>
 
-  <hr/>
+            <hr />
 
-  <div role="contentinfo">
-    <p>&#169; Copyright 2026, Saumya Shah.</p>
-  </div>
+            <div role="contentinfo">
+              <p>&#169; Copyright 2026, Saumya Shah.</p>
+            </div>
 
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
+            Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+            <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+            provided by <a href="https://readthedocs.org">Read the Docs</a>.
 
-</footer>
+
+          </footer>
         </div>
       </div>
     </section>
   </div>
   <script>
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script> 
+    jQuery(function () {
+      SphinxRtdTheme.Navigation.enable(true);
+    });
+  </script>
 
 </body>
+
 </html>

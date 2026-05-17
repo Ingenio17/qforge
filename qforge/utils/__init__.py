@@ -1,1 +1,1 @@
-"""Utility functions for QForge."""
+"""Utility functions for qforge."""

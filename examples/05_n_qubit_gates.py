@@ -2,7 +2,7 @@
 05_n_qubit_gates.py
 
 Description:
-Showcases QForge's Generalized N-Qubit physical mapping.
+Showcases qforge's Generalized N-Qubit physical mapping.
 1) A strong static capacitive coupling demonstrating visual excitation hopping.
 2) An active simulation of a calibrated X-drive applied globally to all 4 qubits.
 

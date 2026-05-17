@@ -13,3 +13,5 @@ pyyaml
 jsonschema
 tqdm
 h5py
+nbsphinx
+ipython

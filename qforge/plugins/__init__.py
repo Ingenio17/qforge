@@ -1,1 +1,1 @@
-"""Plugin system for QForge."""
+"""Plugin system for qforge."""

@@ -1,5 +1,5 @@
 """
-Workflow CLI commands for QForge.
+Workflow CLI commands for qforge.
 """
 
 import click

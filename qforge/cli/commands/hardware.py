@@ -1,5 +1,5 @@
 """
-Hardware design CLI commands for QForge.
+Hardware design CLI commands for qforge.
 """
 
 import click

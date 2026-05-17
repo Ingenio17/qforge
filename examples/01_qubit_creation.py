@@ -2,7 +2,7 @@
 01_qubit_creation.py
 
 Description:
-This example introduces QForge's core feature: treating qubits as physical, multi-level 
+This example introduces qforge's core feature: treating qubits as physical, multi-level 
 superconducting circuits. It creates qubits, calculates their spectrum, and extracts 
 physical operators.
 

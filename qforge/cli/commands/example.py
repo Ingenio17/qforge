@@ -1,5 +1,5 @@
 """
-CLI commands for running QForge examples.
+CLI commands for running qforge examples.
 """
 
 import os
@@ -37,7 +37,7 @@ def list_example_files():
 
 @click.group()
 def example():
-    """Manage and run QForge examples."""
+    """Manage and run qforge examples."""
     pass
 
 @example.command(name="list")
@@ -53,7 +53,7 @@ def list_examples():
         console.print("[yellow]No examples found.[/yellow]")
         return
 
-    table = Table(title="QForge Examples")
+    table = Table(title="qforge Examples")
     table.add_column("Name", style="cyan")
     table.add_column("Description", style="white")
 

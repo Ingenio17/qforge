@@ -1,5 +1,5 @@
 """
-Default configurations and presets for QForge.
+Default configurations and presets for qforge.
 """
 
 # Qubit parameter presets

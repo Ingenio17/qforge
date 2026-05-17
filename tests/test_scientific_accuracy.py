@@ -1,6 +1,6 @@
 """
-Scientific accuracy tests for QForge.
-Compares QForge results directly with scqubits to ensure physics correctness.
+Scientific accuracy tests for qforge.
+Compares qforge results directly with scqubits to ensure physics correctness.
 """
 
 import pytest
@@ -9,7 +9,7 @@ import scqubits as scq
 from qforge import QubitEngine
 
 class TestScientificAccuracy:
-    """Compare QForge results against direct scqubits usage."""
+    """Compare qforge results against direct scqubits usage."""
 
     @pytest.fixture
     def engine(self):
@@ -20,7 +20,7 @@ class TestScientificAccuracy:
         # Parameters
         params = {"EJ": 15.0, "EC": 0.3, "ng": 0.0, "ncut": 30}
         
-        # QForge Transmon
+        # qforge Transmon
         qforge_qubit = engine.create_qubit("transmon", "acc_transmon", params)
         qforge_evals = engine.compute_spectrum(qforge_qubit, n_levels=10)
         
@@ -46,7 +46,7 @@ class TestScientificAccuracy:
         # Parameters
         params = {"EJ": 8.9, "EC": 2.5, "EL": 0.5, "flux": 0.5, "cutoff": 110}
         
-        # QForge Fluxonium
+        # qforge Fluxonium
         qforge_qubit = engine.create_qubit("fluxonium", "acc_fluxonium", params)
         qforge_evals = engine.compute_spectrum(qforge_qubit, n_levels=10)
         
@@ -66,7 +66,7 @@ class TestScientificAccuracy:
     def test_zeropi_accuracy(self, engine):
         """Compare ZeroPi energy levels with direct scqubits implementation."""
         # Parameters
-        # grid must be tuple for QForge params but scqubits needs Grid1d object
+        # grid must be tuple for qforge params but scqubits needs Grid1d object
         grid_min, grid_max, grid_pt = -19.0, 19.0, 200
         params = {
             "EJ": 10.0, "EL": 0.04, "ECJ": 20.0, "EC": 0.04, 
@@ -74,7 +74,7 @@ class TestScientificAccuracy:
             "grid": (grid_min, grid_max, grid_pt)
         }
         
-        # QForge ZeroPi
+        # qforge ZeroPi
         qforge_qubit = engine.create_qubit("zeropi", "acc_zeropi", params)
         qforge_evals = engine.compute_spectrum(qforge_qubit, n_levels=6)
         
@@ -100,7 +100,7 @@ class TestScientificAccuracy:
         params = {"EJ": 15.0, "EC": 0.3}
         qubit = engine.create_qubit("transmon", "coh_check", params)
         
-        # Get QForge estimate
+        # Get qforge estimate
         qforge_coh = engine.estimate_coherence(qubit, temperature=0.015)
         
         # Calculate manually using scqubits

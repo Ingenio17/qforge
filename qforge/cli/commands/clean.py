@@ -1,5 +1,5 @@
 """
-Cleanup CLI command for QForge.
+Cleanup CLI command for qforge.
 """
 
 import click

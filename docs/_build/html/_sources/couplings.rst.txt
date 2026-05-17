@@ -1,7 +1,7 @@
 Multi-Qubit Couplings
 =====================
 
-QForge provides flexible modeling for multi-qubit interactions, essential for simulating 2-qubit gates like CNOT and CZ. This page details the physical Hamiltonians used in the simulation.
+qforge provides flexible modeling for multi-qubit interactions, essential for simulating 2-qubit gates like CNOT and CZ. This page details the physical Hamiltonians used in the simulation.
 
 Capacitive Coupling
 -------------------
@@ -36,7 +36,7 @@ This is a longitudinal coupling that shifts energy levels depending on the state
 Tunable Coupler (Effective)
 ---------------------------
 
-For tunable couplers (like g-mon or transmons with flux loops), the effective coupling :math:`g` can be modulated in time. QForge models the identifying interaction Hamiltonian which is then modulated by a pulse envelope :math:`f(t)`.
+For tunable couplers (like g-mon or transmons with flux loops), the effective coupling :math:`g` can be modulated in time. qforge models the identifying interaction Hamiltonian which is then modulated by a pulse envelope :math:`f(t)`.
 
 For a tunable exchange interaction (Swap/iSwap):
 

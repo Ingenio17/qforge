@@ -1,5 +1,5 @@
 """
-Console utilities for QForge - enables beautiful Unicode output on Windows.
+Console utilities for qforge - enables beautiful Unicode output on Windows.
 """
 
 import sys

@@ -4,18 +4,18 @@ Installation
 Stable Release
 --------------
 
-To install QForge, run this command in your terminal:
+To install qforge, run this command in your terminal:
 
 .. code-block:: bash
 
     $ pip install qforge
 
-This is the preferred method to install QForge, as it will always install the most recent stable release.
+This is the preferred method to install qforge, as it will always install the most recent stable release.
 
 From Source
 -----------
 
-The sources for QForge can be downloaded from the `Github repo <https://github.com/Ingenio17/qforge>`_.
+The sources for qforge can be downloaded from the `Github repo <https://github.com/Ingenio17/qforge>`_.
 
 .. code-block:: bash
 

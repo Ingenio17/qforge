@@ -1,6 +1,6 @@
-# QForge v0.1.0 Release Guide
+# qforge v0.1.0 Release Guide
 
-This guide documents the steps to complete the v0.1.0 release of QForge.
+This guide documents the steps to complete the v0.1.0 release of qforge.
 
 ## ✅ Completed Steps
 

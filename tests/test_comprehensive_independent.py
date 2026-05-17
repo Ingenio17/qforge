@@ -1,5 +1,5 @@
 """
-Comprehensive independent test suite for QForge package.
+Comprehensive independent test suite for qforge package.
 
 This test suite independently validates all claimed functionality
 without relying on developer-provided tests.
@@ -67,7 +67,7 @@ class TestQubitEngineTransmon:
     
     def test_transmon_parameter_validation(self, engine):
         """Test that invalid parameters are rejected."""
-        # QForge uses defaults, so empty params is valid.
+        # qforge uses defaults, so empty params is valid.
         
         # Test with negative energy
         with pytest.raises(ValueError):

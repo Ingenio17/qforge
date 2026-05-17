@@ -1,5 +1,5 @@
 """
-Gate simulation CLI commands for QForge.
+Gate simulation CLI commands for qforge.
 """
 
 import click

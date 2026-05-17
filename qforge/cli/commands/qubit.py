@@ -1,5 +1,5 @@
 """
-Qubit CLI commands for QForge.
+Qubit CLI commands for qforge.
 """
 
 import click

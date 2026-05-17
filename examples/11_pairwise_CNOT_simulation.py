@@ -28,11 +28,11 @@ def main():
     g_eng = GateEngine()
 
     print("\n[INIT]: Creating Qubits Q0 (EJ=15.0), Q1 (EJ=14.5), Q2 (EJ=13.5)...")
-    q_eng.create_qubit("transmon", "Q0", {"EJ": 15.0, "EC": 0.3, "truncated_dim": 4})
-    q_eng.create_qubit("transmon", "Q1", {"EJ": 14.5, "EC": 0.3, "truncated_dim": 4})
-    q_eng.create_qubit("transmon", "Q2", {"EJ": 13.5, "EC": 0.3, "truncated_dim": 4})
+    q_eng.create_qubit("transmon", "Q0_", {"EJ": 17.0, "EC": 0.3, "truncated_dim": 4})
+    q_eng.create_qubit("transmon", "Q1_", {"EJ": 19.0, "EC": 0.3, "truncated_dim": 4})
+    q_eng.create_qubit("transmon", "Q2_", {"EJ": 13.5, "EC": 0.3, "truncated_dim": 4})
     
-    pairs = [("Q0", "Q1"), ("Q1", "Q2"), ("Q0", "Q2")]
+    pairs = [("Q0_", "Q1_"), ("Q1_", "Q2_"), ("Q0_", "Q2_")]
     
     for ctrl, targ in pairs:
         print("\n" + "=" * 60)
@@ -42,10 +42,15 @@ def main():
         couplings = [{"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.03}]
         
         print(f"\n[CALIBRATION]: Finding optimal CNOT gate duration for {ctrl}->{targ}...")
-        # Look how clean this is! No detuning passed, the GateEngine handles it automatically.
+        
         best_duration, max_p11 = g_eng.calibrate_gate(
-            ctrl, targ, "CNOT", "tunable_coupler", 0.03, 
+            ctrl, targ, "CZ", "tunable_coupler", 0.03, 
             parameter="duration", range_vals=np.linspace(20, 100, 20)
+        )
+
+        best_vz, max_p11 = g_eng.calibrate_gate(
+            ctrl, targ, "CNOT", "tunable_coupler", 0.03, 
+            parameter="virtual_z", duration=best_duration
         )
                 
         print(f"  -> Calibrated Gate Duration: {best_duration:.1f} ns (Yielding P(|11>) = {max_p11:.4f})")
@@ -53,7 +58,7 @@ def main():
         
         res = g_eng.simulate_n_qubit_dynamics(
             [ctrl, targ], "CNOT", best_duration, couplings, [], "10", 
-            steps=200, use_drag=True
+            steps=200, use_drag=True, virtual_z=best_vz
         )
         
         times = res["times"]

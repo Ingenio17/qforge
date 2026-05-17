@@ -532,6 +532,7 @@ class GateEngine:
         kwargs["amplitude"] = float(kwargs.get("amplitude", 0.025))
         kwargs["use_drag"] = bool(kwargs.get("use_drag", True))
         kwargs["drag_lambda"] = float(kwargs.get("drag_lambda", 0.5))
+        kwargs["virtual_z"] = float(kwargs.get("virtual_z", 0.0))
         
    
         if "detuning" not in kwargs:
@@ -542,16 +543,17 @@ class GateEngine:
         else:
             kwargs["detuning"] = float(kwargs["detuning"])
 
-        if parameter == "duration":
-            kwargs.pop("duration", None) # Remove duration if sweeping it
-        else:
+        # Ensure we have a default duration if we aren't sweeping it
+        if parameter != "duration":
             kwargs["duration"] = float(kwargs.get("duration", 40.0 if gate_type in ["X", "Y", "H"] else 150.0))
 
-        # 3. BULLETPROOF CACHE KEY
+        # Remove whichever parameter is currently being swept so it doesn't pollute the cache key
+        if parameter in kwargs:
+            kwargs.pop(parameter)
+
         kw_tuple = tuple(sorted(kwargs.items()))
         
-        # Note: We completely remove `range_vals` from the key. 
-        # The physical answer doesn't change just because the search grid changed.
+        # define cache key
         cache_key = (q1_name, q2_name, gate_type, coupling_type, coupling_strength, parameter, kw_tuple)
         
         if cache_key in GateEngine._calib_cache:
@@ -584,6 +586,8 @@ class GateEngine:
                      range_vals = np.linspace(50, 400, 20)
             elif parameter == "amplitude":
                 range_vals = np.linspace(0.01, 0.2, 15)
+            elif parameter == "virtual_z":
+                range_vals = np.linspace(0, 2 * np.pi, 50)
             elif parameter == "detuning":
                 range_vals = np.linspace(-1.0, 1.0, 20)
 
@@ -593,6 +597,7 @@ class GateEngine:
             current_dur = val if parameter == "duration" else kwargs["duration"]
             current_amp = val if parameter == "amplitude" else kwargs["amplitude"]
             current_det = val if parameter == "detuning" else kwargs["detuning"]
+            current_vz = val if parameter == "virtual_z" else kwargs.get("virtual_z", 0.0)
             
             try:
                 if gate_type in ["X", "Y", "H"]:
@@ -616,7 +621,8 @@ class GateEngine:
                         q1_name, q2_name, gate_type, coupling_type, coupling_strength, 
                         duration=current_dur, steps=40, detuning=current_det, 
                         use_drag=kwargs["use_drag"], drag_lambda=kwargs["drag_lambda"], 
-                        initial_state="10"
+                        initial_state="10",
+                        virtual_z = current_vz
                     )
                     metric = res["populations"]["11"][-1]
                     
@@ -970,6 +976,7 @@ class GateEngine:
                                   steps: int = 200,
                                   detuning: float = 0.0,
                                   use_drag: bool = True,
+                                  virtual_z: float = 0.0,
                                   drag_lambda: float = 0.5) -> Dict[str, Any]:
         """
         Simulate the generalized dynamics of an N-qubit system.
@@ -1043,13 +1050,16 @@ class GateEngine:
             })
             current_time += t_cz
 
+            # Calculate the mathematical Stark Shift
+            stark_shift_phase = self._calculate_stark_shift(detuning, t_cz)
+
             # Second -Y(pi/2) gate on target qubit (implemented as X drive with +pi/2 phase)
             full_drives.append({
                 "target": 1, 
                 "type": "X", 
                 "amplitude": 0.025, 
                 "frequency": w01_target, 
-                "phase": np.pi / 2, 
+                "phase": np.pi / 2 + stark_shift_phase + virtual_z, 
                 "start_time": current_time, 
                 "end_time": current_time + t_h
             })
@@ -1137,6 +1147,7 @@ class GateEngine:
                                    coupling_strength: float, duration: float, 
                                    steps: int = 100, detuning: float = 0.0, use_drag: bool = True,
                                    drag_lambda: float = 0.5,
+                                   virtual_z: float = 0.0,
                                    initial_state: Optional[Any] = None) -> Dict[str, Any]:
         """Legacy wrapper bridging old tests to the new N-Qubit Engine"""
         self.qubit_engine.load_session()
@@ -1148,7 +1159,7 @@ class GateEngine:
             init = "10" if gate_type == "CNOT" else "11"
             
         return self.simulate_n_qubit_dynamics([qubit1_name, qubit2_name], gate_type, duration, 
-                                              couplings, initial_state=init, steps=steps, detuning=detuning, use_drag=use_drag, drag_lambda=drag_lambda)
+                                              couplings, initial_state=init, steps=steps, detuning=detuning, use_drag=use_drag, drag_lambda=drag_lambda, virtual_z=virtual_z)
 
     def calculate_gate_fidelity(self, q1_name: str, q2_name: str, 
                                 gate_type: str, coupling_type: str, 

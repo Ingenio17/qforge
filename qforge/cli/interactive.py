@@ -526,6 +526,7 @@ def _wizard_delete_qubit():
     """Wizard for deleting a qubit."""
     console.print("\n[bold cyan]Qubit Deletion Wizard[/bold cyan]")
     from qforge.cli.commands.qubit import delete
+    from qforge.core.gate_engine import GateEngine  # Import the engine
     
     # Get available qubits
     qubits = [q["name"] for q in engine.list_qubits()]
@@ -537,7 +538,26 @@ def _wizard_delete_qubit():
     
     if prompt(f"Are you sure you want to delete '{name}'? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y":
         try:
+            # 1. Delete the physical qubit data
             delete.callback(name=name)
+            
+            # 2. Clean up the GateEngine cache
+            g_eng = GateEngine() # Instantiating loads the cache from disk if it hasn't been already
+            
+            keys_to_remove = []
+            for key in GateEngine._calib_cache.keys():
+                # key[0] is q1_name, key[1] is q2_name
+                if key[0] == name or key[1] == name:
+                    keys_to_remove.append(key)
+            
+            if keys_to_remove:
+                for key in keys_to_remove:
+                    del GateEngine._calib_cache[key]
+                
+                # Force the updated RAM dictionary to overwrite the JSON file
+                g_eng._save_cache_to_disk()
+                console.print(f"[dim green]Cleared {len(keys_to_remove)} cached calibrations involving '{name}'.[/dim green]")
+                
         except Exception as e:
             if "Abort" not in str(type(e)):
                 console.print(f"[red]Error: {e}[/red]")

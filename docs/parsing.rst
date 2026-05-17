@@ -1,11 +1,7 @@
 ====================================
-OpenQASM 2.0 Compatibility & Parsing
+qforge QASM parser
 ====================================
 
-.. contents:: Table of Contents
-   :depth: 2
-   :local:
-   :backlinks: none
 
 Overview
 ========

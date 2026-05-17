@@ -1,11 +1,6 @@
 ======================================
-QForge Gate Engine: Technical Reference
+qforge Gate Engine
 ======================================
-
-.. contents:: Table of Contents
-   :depth: 3
-   :local:
-   :backlinks: none
 
 Introduction
 ============

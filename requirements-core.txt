@@ -4,6 +4,7 @@ matplotlib
 scqubits
 qutip
 click
+furo
 rich
 prompt-toolkit
 plotext

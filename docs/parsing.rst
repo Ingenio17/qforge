@@ -1,7 +1,6 @@
-====================================
+==================
 qforge QASM parser
-====================================
-
+==================
 
 Overview
 ========
@@ -16,7 +15,7 @@ Physical superconducting hardware cannot natively execute arbitrary mathematics.
 ``{'x', 'h', 'rz', 'cx', 'cz', 'swap', 'cp'}``
 
 1. **Virtual Z (``rz``, ``cp``):** Phase updates executed entirely in the software clock frame. They take zero simulation time and cause zero decoherence. The ``cp`` (controlled-phase) gate dynamically scales the duration of a ``cz`` interaction based on the requested angle fraction.
-2. **Microwave Drives (``x``, ``h``):** Fixed-duration, calibrated microwave pulses mapping to $\pi$ and Hadamard rotations. The ``PhysicalWorkflowEngine`` automatically runs optimization sweeps to find the perfect duration and amplitude for these drives before execution.
+2. **Microwave Drives (``x``, ``h``):** Fixed-duration, calibrated microwave pulses mapping to :math:`\pi` and Hadamard rotations. The ``PhysicalWorkflowEngine`` automatically runs optimization sweeps to find the perfect duration and amplitude for these drives before execution.
 3. **Entangling Gates (``cz``, ``cx``, ``swap``):** Time-dependent pulses applied to tunable couplers or via cross-resonance drives. 
 
 Supported QASM Gates & Decompositions
@@ -27,23 +26,22 @@ Native Basis Gates
 ------------------
 These map directly to the engine's pulse scheduler:
 
-* ``x`` : Calibrated $\pi$ microwave pulse.
-* ``h`` : Calibrated Hadamard microwave pulse.
-* ``rz(theta)`` : Pure Virtual Z phase update (includes aliases ``p`` and ``u1``).
-* ``cz`` : Calibrated tunable coupler or cross-resonance interaction pulse.
-* ``cx`` / ``cnot`` : Compiled physically into a $X(-\pi/2) \rightarrow CZ \rightarrow X(+\pi/2)$ schedule.
-* ``swap`` : Decomposed temporally into three alternating ``cx`` sequences.
-* ``cp(theta)`` / ``cphase`` : Executed as a fractional ``cz`` pulse scaled by $|\theta| / \pi$.
+* ``x``: Calibrated :math:`\pi` microwave pulse.
+* ``h``: Calibrated Hadamard microwave pulse.
+* ``rz(theta)``: Pure Virtual Z phase update (includes aliases ``p`` and ``u1``).
+* ``cz``: Calibrated tunable coupler or cross-resonance interaction pulse.
+* ``cx`` / ``cnot``: Compiled physically into a :math:`X(-\pi/2) \rightarrow \text{CZ} \rightarrow X(+\pi/2)` schedule.
+* ``swap``: Decomposed temporally into three alternating ``cx`` sequences.
+* ``cp(theta)`` / ``cphase``: Executed as a fractional ``cz`` pulse scaled by :math:`|\theta| / \pi`.
 
 Single-Qubit Decompositions
 ---------------------------
 Standard QASM phase and rotation gates are mathematically decomposed into the native basis:
 
 * **Pauli Z (``z``):** Decomposed into ``rz(pi)``.
-* **Clifford Phase (``s``, ``sdg``, ``t``, ``tdg``):** Decomposed into pure Virtual ``rz`` operations ($\pi/2$, $-\pi/2$, $\pi/4$, $-\pi/4$).
-* **Pauli Y (``y``):** Decomposed via Virtual Z frames: ``rz(pi/2) -> x -> rz(-pi/2)``.
-* **Continuous X/Y Rotations (``rx``, ``ry``):** Since the engine natively calibrates ``h``, X-axis rotations are wrapped in Hadamards: 
-  ``rx(theta)`` $\rightarrow$ ``h -> rz(theta) -> h``.
+* **Clifford Phase (``s``, ``sdg``, ``t``, ``tdg``):** Decomposed into pure Virtual ``rz`` operations (:math:`\pi/2`, :math:`-\pi/2`, :math:`\pi/4`, :math:`-\pi/4`).
+* **Pauli Y (``y``):** Decomposed via Virtual Z frames: ``rz(pi/2)`` -> ``x`` -> ``rz(-pi/2)``.
+* **Continuous X/Y Rotations (``rx``, ``ry``):** Since the engine natively calibrates ``h``, X-axis rotations are wrapped in Hadamards: ``rx(theta)`` :math:`\rightarrow` ``h`` -> ``rz(theta)`` -> ``h``.
 * **Universal Single Qubit (``u2``, ``u3``, ``u``):** Decomposed using standard Euler angle rotations, resulting in alternating ``rz`` updates and ``rx(pi/2)`` drives (which are recursively decomposed using the ``h`` logic above).
 
 Multi-Qubit Decompositions
@@ -55,11 +53,12 @@ Measurements & Classical Registers
 Because QForge simulates physics at the Hamiltonian level via QuTiP's ``mesolve``, wave-functions are not "collapsed" mid-circuit into classical registers. 
 
 The ``QASMTranspiler`` explicitly **ignores** the following OpenQASM directives:
+
 * ``measure``
 * ``barrier``
 * ``creg`` and ``qreg`` allocations
 
-Instead of writing to a classical bit, QForge computes the continuous density matrix throughout the entire algorithm. At the end of the ``execute_workflow`` simulation, users can extract the exact population probabilities (e.g., the probability of measuring $|11\rangle$) directly from the output states.
+Instead of writing to a classical bit, QForge computes the continuous density matrix throughout the entire algorithm. At the end of the ``execute_workflow`` simulation, users can extract the exact population probabilities (e.g., the probability of measuring :math:`|11\rangle`) directly from the output states.
 
 Unsupported Features
 ====================

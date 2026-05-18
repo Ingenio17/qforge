@@ -4,5 +4,7 @@ scqubits
 qutip
 numpy
 furo
+prompt_toolkit
+rich
 nbsphinx
 ipython

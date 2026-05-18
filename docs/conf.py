@@ -15,11 +15,13 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'nbsphinx', 
+    "sphinx_copybutton",
 ]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
+copybutton_prompt_text = "$ "
 html_theme = 'furo'
 html_static_path = ['_static']
 

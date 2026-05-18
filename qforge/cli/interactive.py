@@ -33,7 +33,7 @@ def run_interactive():
         )
     )
     
-    console.print("[dim]Powered by scqubits, QuTiP, and Qiskit. Please cite these libraries in your research.[/dim]\n")
+    console.print("[dim]Powered by scqubits and QuTiP. Please cite these libraries in your research.[/dim]\n")
 
     # Main menu
     menu_options = [

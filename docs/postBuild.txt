@@ -1,0 +1,3 @@
+pip install -e .
+
+echo "clear && qforge --interactive" >> ~/.bashrc

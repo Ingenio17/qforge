@@ -21,6 +21,7 @@ Key Features
    installation
    getting_started
    examples
+   terminalplay
 
 .. toctree::
    :maxdepth: 2

@@ -15,6 +15,7 @@ from qforge.cli.commands.example import list_example_files, get_examples_dir
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine
 from qforge.core.workflow_engine import PhysicalWorkflowEngine
+from qforge.core.error_correction_engine import ErrorCorrectionEngine
 
 console = Console()
 engine = QubitEngine()
@@ -359,6 +360,8 @@ def _wizard_full_workflow():
     """Wizard for full workflow."""
     console.print("\n[bold cyan]Full Workflow Wizard[/bold cyan]")
     console.print("[yellow]Translating abstract OpenQASM algorithmic circuits to superconducting physical schedules.[/yellow]\n")
+
+    use_error_correction_bool = False
     
     # Step 1: Qubit Selection
     available_qubits = [q["name"] for q in engine.list_qubits()]
@@ -417,50 +420,91 @@ def _wizard_full_workflow():
             console.print(f"   [green]Added {ctype} ({cstren} GHz) edge between physical qubits {q1_input} and {q2_input}.[/green]")
         except ValueError:
              console.print("[red]Invalid numerical input for coupling strength.[/red]")
-             
-    # Step 3: Circuit Processing
-    console.print("\n[bold]3. Algorithm Circuit Specification[/bold]")
-    path = prompt("Enter accurate path to OpenQASM (.qasm) file: ").strip().strip("\"'")
-    if not path or not os.path.exists(path):
-        console.print(f"[red]QASM file '{path}' not found.[/red]")
-        return
+
+    options = WordCompleter(['yes', 'no'], ignore_case=True)
+
+    use_error_correction = prompt("Use Quantum Error Correction? (yes/no) [no]: ", completer=options).strip().lower() or "no"
+
+    if use_error_correction == "yes":
+        # Step 3: EC Mapping
+        console.print("\n[bold]3. Error Correction Setup (3-Qubit Repetition Code)[/bold]")
+        console.print("[dim]The engine will dynamically allocate 3 data and 2 ancilla qubits per logical qubit.[/dim]")
         
-    console.print(f"\n[green]Initializing PhysicalWorkflowEngine and orchestrating mappings...[/green]")
-    try:
-        g_eng = GateEngine()
-        wf_eng = PhysicalWorkflowEngine(engine, g_eng)
-        
-        # Simulates inside WorkflowEngine using GateEngine's Hilbert solver
-        res = wf_eng.execute_workflow(qubit_names, couplings, path)
-        
-        # Extract Results
-        console.print("\n[bold]Simulation Complete! Decoding Physical Populations:[/bold]")
-        final_pops = {k: v[-1] for k, v in res["populations"].items()}
-        
-        sorted_pops = sorted(final_pops.items(), key=lambda x: -x[1])
-        top_keys = [k for k, v in sorted_pops[:4]]
-        
-        for state, p in sorted_pops[:8]:
-            if p > 0.01:
-                console.print(f" |{state}>: {p*100:5.2f}%")
-                
-        # Plot continuous timeline
-        from qforge.utils.terminal_plot import TerminalPlotter
-        plot_expectations = [res["populations"][k] for k in top_keys]
-        labels = [f"P(|{k}>)" for k in top_keys]
-        console.print("\n[bold]4. Visual Hardware Timeline Analysis[/bold]")
-        TerminalPlotter.plot_time_evolution(
-            times=res["times"],
-            expectations=plot_expectations,
-            labels=labels,
-            title="Physical Workflow Hardware Execution Timeline"
-        )
-    except Exception as e:
-        console.print(f"[red]Workflow execution failed: {e}[/red]")
-        import traceback
-        traceback.print_exc()
-        
-    input("\nPress Enter to continue...")
+        path = prompt("Enter path to logical OpenQASM (.qasm) file: ").strip().strip("\"'")
+        if not path or not os.path.exists(path):
+            console.print(f"[red]QASM file '{path}' not found.[/red]")
+            return
+            
+        console.print(f"\n[green]Initializing ErrorCorrectionEngine...[/green]")
+        try:
+            g_eng = GateEngine()
+            ec_eng = ErrorCorrectionEngine(engine, g_eng)
+            
+            # Execute the new workflow (Mapping and decoding are handled internally!)
+            res = ec_eng.execute_3q_repetition_workflow(qubit_names, path)
+            
+            # Extract the already-decoded logical results
+            logical_results = res["logical_populations"]
+            
+            console.print("\n[bold]Workflow Complete! Decoded Logical Populations (Majority Voting & Active Correction):[/bold]")
+            sorted_l = sorted(logical_results.items(), key=lambda x: -x[1])
+            for l_state, prob in sorted_l:
+                if prob > 0.001:
+                    console.print(f" |{l_state}>_L: {prob*100:5.2f}%")
+
+            console.print("\n[dim]Note: Continuous physical timeline plotting is disabled during active error correction due to mid-circuit wave-function collapse.[/dim]")
+
+        except Exception as e:
+            console.print(f"[red]EC Workflow failed: {e}[/red]")
+            import traceback
+            traceback.print_exc()
+            
+    else:
+        use_error_correction_bool = False
+         
+        # Step 3: Circuit Processing for False Error Correction
+        console.print("\n[bold]3. Algorithm Circuit Specification[/bold]")
+        path = prompt("Enter accurate path to OpenQASM (.qasm) file: ").strip().strip("\"'")
+        if not path or not os.path.exists(path):
+            console.print(f"[red]QASM file '{path}' not found.[/red]")
+            return
+            
+        console.print(f"\n[green]Initializing PhysicalWorkflowEngine and orchestrating mappings...[/green]")
+        try:
+            g_eng = GateEngine()
+            wf_eng = PhysicalWorkflowEngine(engine, g_eng)
+            
+            # Simulates inside WorkflowEngine using GateEngine's Hilbert solver
+            res = wf_eng.execute_workflow(qubit_names, couplings, path)
+            
+            # Extract Results
+            console.print("\n[bold]Simulation Complete! Decoding Physical Populations:[/bold]")
+            final_pops = {k: v[-1] for k, v in res["populations"].items()}
+            
+            sorted_pops = sorted(final_pops.items(), key=lambda x: -x[1])
+            top_keys = [k for k, v in sorted_pops[:4]]
+            
+            for state, p in sorted_pops[:8]:
+                if p > 0.01:
+                    console.print(f" |{state}>: {p*100:5.2f}%")
+                    
+            # Plot continuous timeline
+            from qforge.utils.terminal_plot import TerminalPlotter
+            plot_expectations = [res["populations"][k] for k in top_keys]
+            labels = [f"P(|{k}>)" for k in top_keys]
+            console.print("\n[bold]4. Visual Hardware Timeline Analysis[/bold]")
+            TerminalPlotter.plot_time_evolution(
+                times=res["times"],
+                expectations=plot_expectations,
+                labels=labels,
+                title="Physical Workflow Hardware Execution Timeline"
+            )
+        except Exception as e:
+            console.print(f"[red]Workflow execution failed: {e}[/red]")
+            import traceback
+            traceback.print_exc()
+            
+        input("\nPress Enter to continue...")
 
 
 def _show_help():

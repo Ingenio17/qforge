@@ -61,7 +61,7 @@ class ErrorCorrectionEngine:
         current_state = qt.tensor([qt.basis(2, 0) for _ in range(len(physical_names))])
         
         # Simulate circuit step-by-step
-        for step_idx, instruction in enumerate(logical_circuit.instructions):
+        for step_idx, instruction in enumerate(logical_circuit):
             print(f"\n--- [3Q-RepEC] Executing Cycle {step_idx}: {instruction.name} ---")
             
             # 1. Map Logical Instruction

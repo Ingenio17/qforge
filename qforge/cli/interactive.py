@@ -393,11 +393,13 @@ def _wizard_full_workflow():
     while True:
         console.print("\n   [New Coupling Edge]")
         
-        q1_input = prompt(f"   Enter Name for Q1 (or leave empty to finish): ", completer=qname_completer).strip()
+        q1_input = prompt(f"   Enter Name for first qubit in edge (or leave empty to finish): ", completer=qname_completer).strip()
         if not q1_input:
             break
             
-        q2_input = prompt(f"   Enter Name for Q2: ", completer=qname_completer).strip()
+        q2_input = prompt(f"   Enter Name for second qubit in edge: ", completer=qname_completer).strip()
+        if not q2_input:
+            break
         
         if q1_input not in qubit_names or q2_input not in qubit_names:
             console.print("[red]Invalid qubit name. Please use the names you defined in Step 1.[/red]")

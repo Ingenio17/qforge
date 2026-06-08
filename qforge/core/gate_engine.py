@@ -14,6 +14,7 @@ from qforge.core.qubit_engine import QubitEngine
 from qforge.core.coupling import CouplingGenerator, CouplingType
 from qforge.config.defaults import OUTPUT_DIRS
 
+last_print = ""
 
 class GateEngine:
     """Engine for simulating quantum gates and dynamics."""
@@ -41,6 +42,7 @@ class GateEngine:
         return str(key_tuple)
 
     def _load_cache_from_disk(self):
+        global last_print
         """Reads the JSON cache file and populates the class-level RAM dictionary."""
         GateEngine._cache_loaded = True # Prevent subsequent instances from reading disk again
         
@@ -61,14 +63,20 @@ class GateEngine:
                         GateEngine._calib_cache[real_tuple_key] = val_tuple
                     except Exception as e:
                         print(f"[CACHE ERROR] Failed to parse key: {str_key}. Error: {e}")
+                        last_print = f"[CACHE ERROR] Failed to parse key: {str_key}. Error: {e}"
                         
                 print(f"[CACHE INIT] Loaded {len(GateEngine._calib_cache)} calibrations from disk.")
+                last_print = f"[CACHE INIT] Loaded {len(GateEngine._calib_cache)} calibrations from disk."
             except Exception as e:
                 print(f"[CACHE ERROR] Could not read cache file: {e}")
+                last_print = f"[CACHE ERROR] Could not read cache file: {e}"
         else:
             print("[CACHE INIT] No existing cache file found. Starting fresh.")
+            last_print = "[CACHE INIT] No existing cache file found. Starting fresh."
+
 
     def _save_cache_to_disk(self):
+        global last_print
         """Writes the current RAM dictionary out to the JSON file."""
         try:
             # Make sure the directory exists
@@ -82,6 +90,7 @@ class GateEngine:
                 
         except Exception as e:
             print(f"[CACHE ERROR] Could not write to cache file: {e}")
+            last_print = f"[CACHE ERROR] Could not write to cache file: {e}"
 
 
         
@@ -397,6 +406,7 @@ class GateEngine:
         Returns:
             Dictionary mapping coupling type to metrics {'population': float, 'phase': float}
         """
+        global last_print
         self.qubit_engine.load_session()
         results = {}
         
@@ -420,6 +430,7 @@ class GateEngine:
                 ]
             
         print(f"Comparing couplings for {gate} on {q1}-{q2}:")
+        last_print = f"Comparing couplings for {gate} on {q1}-{q2}:"
         
         for c_type, strength, dur in scenarios:
             try:
@@ -444,8 +455,10 @@ class GateEngine:
                 
                 results[c_type] = metrics
                 print(f" -> {c_type}: Target Pop |{target_pop_key}> = {final_pop:.4f}{phase_msg}")
+                last_print = f" -> {c_type}: Target Pop |{target_pop_key}> = {final_pop:.4f}{phase_msg}"
             except Exception as e:
                 print(f" -> {c_type}: Failed ({e})")
+                last_print = f" -> {c_type}: Failed ({e})"
                 import traceback
                 traceback.print_exc()
                 results[c_type] = {"population": -1.0}
@@ -521,6 +534,7 @@ class GateEngine:
         Calibrate a gate by sweeping a parameter to maximize fidelity/population.
         Accepts kwargs (e.g. detuning) passed to simulate().
         """
+        global last_print
         self.qubit_engine.load_session()
         gate_type = gate_type.upper()
         target_str = f"{q1_name}-{q2_name}" if q2_name else q1_name
@@ -557,10 +571,13 @@ class GateEngine:
         cache_key = (q1_name, q2_name, gate_type, coupling_type, coupling_strength, parameter, kw_tuple)
         
         if cache_key in GateEngine._calib_cache:
-            print(f"  [CACHE HIT] Returning saved {parameter} for {gate_type} on {target_str}")
+            if last_print != f"  [CACHE HIT] Returning saved {parameter} for {gate_type} on {target_str}":
+                print(f"  [CACHE HIT] Returning saved {parameter} for {gate_type} on {target_str}")
+                last_print = f"  [CACHE HIT] Returning saved {parameter} for {gate_type} on {target_str}"
             return GateEngine._calib_cache[cache_key]
 
         print(f"Calibrating {gate_type} ({coupling_type or 'local'}) on {target_str}...")
+        last_print = f"Calibrating {gate_type} ({coupling_type or 'local'}) on {target_str}..."
 
 
         # 4. SETUP RANGES (Analytical Estimation)
@@ -649,11 +666,13 @@ class GateEngine:
                     
             except Exception as e:
                 print(f"      [!] Metric eval failed at {parameter}={val:.3f}: {e}")
+                last_print = f"      [!] Metric eval failed at {parameter}={val:.3f}: {e}"
                 
             return metric
 
         # 6. coarse
         print(f" -> Analytical coarse sweep ({len(range_vals)} points near estimate)...")
+        last_print = f" -> Analytical coarse sweep ({len(range_vals)} points near estimate)..."
         metrics = [evaluate_metric(v) for v in range_vals]
         best_idx = np.argmax(metrics)
         best_val = range_vals[best_idx]
@@ -669,6 +688,7 @@ class GateEngine:
              
              fine_range = np.linspace(bound_lower, bound_upper, 20)
              print(f" -> Fine sweep (20 points) zooming in on [{bound_lower:.2f}, {bound_upper:.2f}]...")
+             last_print = f" -> Fine sweep (20 points) zooming in on [{bound_lower:.2f}, {bound_upper:.2f}]..."
              
              fine_metrics = [evaluate_metric(v) for v in fine_range]
              fine_best_idx = np.argmax(fine_metrics)
@@ -678,6 +698,7 @@ class GateEngine:
                  max_metric = fine_metrics[fine_best_idx]
              
         print(f"  -> Calibrated {parameter.capitalize()}: {best_val:.4f} (Metric: {max_metric:.4f})")
+        last_print = f"  -> Calibrated {parameter.capitalize()}: {best_val:.4f} (Metric: {max_metric:.4f})"
         GateEngine._calib_cache[cache_key] = (best_val, max_metric)
         self._save_cache_to_disk()
         return best_val, max_metric
@@ -1160,7 +1181,7 @@ class GateEngine:
         """Legacy wrapper bridging old tests to the new N-Qubit Engine"""
         self.qubit_engine.load_session()
         couplings = [{"q1": 0, "q2": 1, "type": coupling_type, "strength": coupling_strength}]
-        
+        global last_print
         # If initial_state is not provided, use legacy defaults.
         init = initial_state
         if init is None:
@@ -1176,9 +1197,11 @@ class GateEngine:
         Calculate Average Gate Fidelity using the full propagator.
         This effectively performs Process Tomography w/o 16 simulations.
         """
+        global last_print
         self.qubit_engine.load_session()
         import numpy as np
         print(f"Calculating Fidelity for {gate_type} ({coupling_type}) on {q1_name}-{q2_name}...")
+        last_print = f"Calculating Fidelity for {gate_type} ({coupling_type}) on {q1_name}-{q2_name}..."
         
         try:
             is_tunable = (coupling_type == "tunable_coupler")
@@ -1271,6 +1294,7 @@ class GateEngine:
             
         except Exception as e:
             print(f"Fidelity Calc Failed: {e}")
+            last_print = f"Fidelity Calc Failed: {e}"
             import traceback
             traceback.print_exc()
             return {"average_fidelity": 0.0}

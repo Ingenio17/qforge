@@ -994,6 +994,54 @@ class GateEngine:
         # Integrate the frequency shift over time to get total accumulated phase
         accumulated_phase = np.trapezoid(envelope, tlist)
         return accumulated_phase
+    
+    def _apply_ideal_cx(self,
+                        state: qt.Qobj,
+                        dims: List[int],
+                        control_idx: int,
+                        target_idx: int) -> qt.Qobj:
+        """
+        Apply an ideal instantaneous CX gate.
+
+        Works on arbitrary qubit indices inside an N-qubit system.
+
+        Example:
+            control_idx = 3
+            target_idx = 7
+
+        in a 10-qubit register.
+        """
+
+        import itertools
+
+        total_dim = int(np.prod(dims))
+
+        U = np.eye(total_dim, dtype=complex)
+
+        computational_states = list(
+            itertools.product([0, 1], repeat=len(dims))
+        )
+
+        U[:] = 0
+
+        for bits in computational_states:
+
+            output_bits = list(bits)
+
+            if bits[control_idx] == 1:
+                output_bits[target_idx] ^= 1
+
+            in_idx = np.ravel_multi_index(bits, dims)
+            out_idx = np.ravel_multi_index(tuple(output_bits), dims)
+
+            U[out_idx, in_idx] = 1.0
+
+        # Preserve all leakage states |2>,|3>,...
+        for idx in range(total_dim):
+            if np.allclose(U[:, idx], 0):
+                U[idx, idx] = 1.0
+
+        return qt.Qobj(U) * state
 
     def simulate_n_qubit_dynamics(self,
                                   qubit_names: List[str],
@@ -1021,6 +1069,85 @@ class GateEngine:
         """
         self.qubit_engine.load_session()
         N = len(qubit_names)
+
+        # IDEAL CX GATE
+        if gate_type == "ICX":
+
+            H_sys, qubits, local_ops = self._get_n_qubit_hamiltonian(
+                qubit_names,
+                couplings
+            )
+            dims = [q.truncated_dim for q in qubits]
+            if isinstance(initial_state, str):
+                basis_list = []
+                for i, char in enumerate(initial_state):
+                    lvl = int(char)
+
+                    if lvl >= dims[i]:
+                        lvl = dims[i] - 1
+
+                    basis_list.append(
+                        qt.basis(dims[i], lvl)
+                    )
+                psi0 = qt.tensor(basis_list)
+            else:
+                psi0 = initial_state
+            # search drive list for ICX specification
+            control_idx = None
+            target_idx = None
+
+            for drive in drives:
+
+                if drive.get("type") == "ICX":
+
+                    control_idx = drive["control"]
+                    target_idx = drive["target"]
+                    break
+
+            if control_idx is None:
+                raise ValueError(
+                    "ICX requires drive specification "
+                    "{'type':'ICX','control':i,'target':j}"
+                )
+
+            psi_final = self._apply_ideal_cx(
+                psi0,
+                dims,
+                control_idx,
+                target_idx
+            )
+
+            populations = {}
+
+            probs = np.abs(
+                psi_final.full().flatten()
+            )**2
+
+            import itertools
+
+            ranges = [range(min(4, d)) for d in dims]
+
+            for state_tuple in itertools.product(*ranges):
+
+                state_str = "".join(
+                    str(x) for x in state_tuple
+                )
+
+                idx = np.ravel_multi_index(
+                    state_tuple,
+                    dims
+                )
+
+                populations[state_str] = np.array(
+                    [probs[idx]]
+                )
+
+            return {
+                "times": np.array([0.0]),
+                "states": [psi_final],
+                "populations": populations,
+                "final_state": psi_final
+            }
 
         # flux pulse detuning implicit calculation
         if N == 2 and gate_type in ["CNOT", "CZ"] and couplings and couplings[0].get("type") == "tunable_coupler":

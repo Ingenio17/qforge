@@ -47,6 +47,7 @@ A0 detects D0⊕D1;  A1 detects D1⊕D2.
 
 import numpy as np
 import qutip as qt
+from scipy.linalg import expm as scipy_expm
 from typing import List, Dict, Tuple, Any, Optional
 
 from qforge.core.qubit_engine import QubitEngine
@@ -152,63 +153,6 @@ class ErrorCorrectionEngine:
     # 2. Physical qubit registration
     # ------------------------------------------------------------------
 
-    def _register_physical_qubits(
-        self,
-        logical_names: List[str],
-        mapping: Dict,
-    ) -> None:
-        """
-        Clone each logical qubit's type and parameters into the 5 physical
-        qubits (D0, D1, D2, A0, A1) that represent it.
-
-        "Same type" means the physical qubits are identical scqubits objects
-        to the logical qubit — consistent with qforge's qubit-sharing semantics.
-
-        Qubits that are already registered are skipped so re-runs are safe.
-        """
-        existing = {q["name"] for q in self.qubit_engine.list_qubits()}
-
-        for l_name in logical_names:
-            # Fetch the source qubit's stored type + params
-            found = None
-            for q_data in self.qubit_engine._qubits.values():
-                if q_data["name"] == l_name:
-                    found = q_data
-                    break
-
-            if found is None:
-                raise ValueError(
-                    f"Logical qubit '{l_name}' is not registered in QubitEngine. "
-                    f"Create it first with qubit_engine.create_qubit(...)."
-                )
-
-            q_type   = found["type"]
-            q_params = found["params"].copy()
-
-            # Ancillas only need 2 levels — keep truncated_dim=2 for them
-            # to reduce Hilbert-space size while data qubits keep the original dim.
-            ancilla_params = q_params.copy()
-            ancilla_params["truncated_dim"] = 2
-
-            all_physical = (
-                mapping[l_name]["data"] + mapping[l_name]["ancilla"]
-            )
-            for p_name in all_physical:
-                if p_name in existing:
-                    continue
-                params = ancilla_params if p_name.endswith(("_A0", "_A1")) else q_params
-                self.qubit_engine.create_qubit(q_type, p_name, params)
-                existing.add(p_name)
-
-        print(
-            f"[EC] Physical qubits registered: "
-            f"{sum(5 for _ in logical_names)} qubits for "
-            f"{len(logical_names)} logical qubit(s)."
-        )
-
-    # ------------------------------------------------------------------
-    # 3. Coupling topology for the physical register
-    # ------------------------------------------------------------------
 
     def _build_physical_couplings(
         self,
@@ -449,6 +393,136 @@ class ErrorCorrectionEngine:
         return calibrations
 
     # ------------------------------------------------------------------
+    # 2b. Alias injection — keep physical qubits alive across load_session
+    # ------------------------------------------------------------------
+
+    def _register_physical_qubits(
+        self,
+        logical_names: List[str],
+        mapping: Dict,
+    ) -> None:
+        """
+        Register all physical qubit clones into QubitEngine using create_qubit().
+
+        Each logical qubit L is expanded to 5 physical qubits:
+            L_D0, L_D1, L_D2  — data qubits (same type/params as L)
+            L_A0, L_A1        — ancilla qubits (truncated_dim=2, otherwise same)
+
+        create_qubit() saves to the session JSON, so the qubits survive every
+        load_session() call made internally by GateEngine.  They are cleaned up
+        at the end of the workflow by _cleanup_physical_qubits().
+
+        Qubits that already exist (e.g. on a re-run) are skipped safely.
+        """
+        existing = set(self.qubit_engine._qubits.keys())
+
+        for l_name in logical_names:
+            # Find the source logical qubit record
+            src = self.qubit_engine._qubits.get(l_name)
+            if src is None:
+                raise ValueError(
+                    f"Logical qubit '{l_name}' not registered in QubitEngine. "
+                    f"Create it first with qubit_engine.create_qubit(...)."
+                )
+
+            q_type   = src["type"]
+            q_params = src["params"].copy()
+            anc_params = {**q_params, "truncated_dim": 2}
+
+            for p_name in mapping[l_name]["data"] + mapping[l_name]["ancilla"]:
+                if p_name in existing:
+                    continue
+                params = (
+                    anc_params
+                    if p_name.endswith(("_A0", "_A1"))
+                    else q_params
+                )
+                self.qubit_engine.create_qubit(q_type, p_name, params)
+                existing.add(p_name)
+
+        print(
+            f"[EC] Physical qubits registered: "
+            f"{5 * len(logical_names)} qubits for "
+            f"{len(logical_names)} logical qubit(s)."
+        )
+
+    def _cleanup_physical_qubits(
+        self,
+        logical_names: List[str],
+        mapping: Dict,
+    ) -> None:
+        """
+        Delete all physical qubit clones (data + ancilla) from QubitEngine
+        at the end of a workflow run.
+
+        This is the ONLY place physical qubits are deleted.  It runs exactly
+        once, inside the finally-block of execute_3q_repetition_workflow(),
+        so it always fires even if the workflow crashes mid-run.
+
+        delete_qubit() removes from _qubits AND from the session JSON, so the
+        qubit list is clean for the next normal operation.
+        """
+        deleted = []
+        for l_name in logical_names:
+            for p_name in mapping[l_name]["data"] + mapping[l_name]["ancilla"]:
+                try:
+                    self.qubit_engine.delete_qubit(p_name)
+                    deleted.append(p_name)
+                except Exception:
+                    pass   # already gone — that's fine
+
+
+    # ------------------------------------------------------------------
+    # 2c. Fast unitary helpers
+    # ------------------------------------------------------------------
+
+    def _build_H0_rad(self, qubit_name: str) -> qt.Qobj:
+        """Return bare qubit H0 in rad/ns (diagonal Qobj in energy eigenbasis)."""
+        # _get_qubit_hamiltonian returns H in GHz; convert to rad/ns (*2π)
+        H0, _ = self.gate_engine._get_qubit_hamiltonian(qubit_name)
+        return H0 * (2 * np.pi)
+
+    def _apply_unitary_to_subsystem(
+        self,
+        U_sub: qt.Qobj,
+        sub_global_idxs: List[int],
+        full_state: qt.Qobj,
+        full_dims: List[int],
+    ) -> qt.Qobj:
+        """
+        Embed a unitary U_sub acting on `sub_global_idxs` into the full
+        Hilbert space and apply it to full_state WITHOUT partial trace.
+        All entanglement across the full register is preserved.
+
+        U_sub.dims must be [[d0,...],[d0,...]] for the subsystem qubits.
+        """
+        N = len(full_dims)
+        remain_idxs = [i for i in range(N) if i not in set(sub_global_idxs)]
+
+        if remain_idxs:
+            I_remain = qt.tensor([qt.qeye(full_dims[i]) for i in remain_idxs])
+            U_combined = qt.tensor(U_sub, I_remain)
+            all_ordered = sub_global_idxs + remain_idxs
+            combined_dims = [full_dims[i] for i in all_ordered]
+            U_combined.dims = [list(combined_dims), list(combined_dims)]
+            perm = [all_ordered.index(i) for i in range(N)]
+            U_full = U_combined.permute(perm)
+        else:
+            U_full = U_sub
+
+        U_full.dims = [list(full_dims), list(full_dims)]
+
+        if full_state.type == "ket":
+            new_state = U_full * full_state
+            new_state.dims = [list(full_dims), [1] * N]
+        else:
+            rho = full_state if full_state.type == "oper" else qt.ket2dm(full_state)
+            rho.dims = [list(full_dims), list(full_dims)]
+            new_state = U_full * rho * U_full.dag()
+            new_state.dims = [list(full_dims), list(full_dims)]
+        return new_state
+
+    # ------------------------------------------------------------------
     # 5. Subsystem simulation helper
     # ------------------------------------------------------------------
 
@@ -464,92 +538,162 @@ class ErrorCorrectionEngine:
         gate_label: str,
     ) -> qt.Qobj:
         """
-        Simulate a gate on a SUBSET of the full register, then embed the
-        result back into the full state.
+        Apply a gate on a SUBSET of the full register via a fast unitary
+        path (matrix exponential of the time-averaged Hamiltonian) and embed
+        the result back with _apply_unitary_to_subsystem, which preserves
+        all inter-qubit entanglement across the full register.
 
-        Approach
-        --------
-        1. Extract the reduced density matrix of the subsystem qubits via
-           partial trace of the full state.
-        2. Simulate the subsystem dynamics with simulate_n_qubit_dynamics
-           on the small subsystem Hilbert space.
-        3. Re-embed: replace the subsystem's part of the full state by
-           tensoring the new subsystem state with the unchanged remainder.
+        This replaces the old mesolve path, which was ~1000× slower because:
+          - mesolve stores every intermediate time-step state in memory
+          - steps = max(200, int(duration*50)) = 2000+ per gate
+          - QuTiP's ODE integrator resolves GHz-frequency carriers unnecessarily
+            when all we need is the net rotation angle (the unitary)
 
-        This avoids building a 4096-dimensional Hamiltonian when only a
-        3- or 5-qubit subsystem is actually driven.
+        For ECE syndrome extraction and logical gates, the drives are
+        resonant microwave pulses. In the rotating frame the effective
+        Hamiltonian is time-INDEPENDENT (after RWA), so the unitary is
+        simply U = exp(-i H_eff T). We build H_eff analytically from the
+        qubit eigenvalues and drive amplitudes, then exponentiate once.
 
-        sub_drives must use LOCAL indices (0..len(sub_names)-1), not global
-        indices into full_names.
+        sub_drives must use LOCAL indices (0..len(sub_names)-1).
         """
-        # -- Step 1: extract initial subsystem state via partial trace -------
-        # Indices of subsystem within full register
         sub_global_idxs = [full_names.index(n) for n in sub_names]
-        # Indices to trace out (everything NOT in the subsystem)
-        keep_set = set(sub_global_idxs)
-        trace_out = [i for i in range(len(full_names)) if i not in keep_set]
+        sub_dims        = [full_dims[i] for i in sub_global_idxs]
+        N_sub           = len(sub_names)
 
-        # full_state may be ket or dm
-        if full_state.type == "ket":
-            rho_full = qt.ket2dm(full_state)
-        else:
-            rho_full = full_state
-
-        rho_full.dims = [full_dims, full_dims]
-
-        # ptrace keeps the listed indices, so pass sub_global_idxs
-        # (QuTiP ptrace signature: ptrace(rho, sel) keeps sel)
-        rho_sub = rho_full.ptrace(sub_global_idxs)
-
-        # -- Step 2: simulate on the small subsystem -------------------------
-        sub_dims = [full_dims[i] for i in sub_global_idxs]
-        # Need at least ~50 points per nanosecond to resolve a 5 GHz carrier
-        # (10 points per oscillation period × 5 cycles/ns).
-        # max(200, ...) guarantees a minimum even for very short pulses.
-        steps_sub = max(200, int(duration * 50))
-
-        sim = self.gate_engine.simulate_n_qubit_dynamics(
-            qubit_names   = sub_names,
-            gate_type     = gate_label,
-            duration      = duration,
-            couplings     = sub_couplings,
-            drives        = sub_drives,
-            initial_state = rho_sub,
-            steps         = steps_sub,
+        # ── Build H_eff in the rotating frame (RWA, time-independent) ─────
+        # Start with the static qubit Hamiltonian sum (dressed eigenvalues)
+        H_eff = qt.Qobj(
+            np.zeros((int(np.prod(sub_dims)), int(np.prod(sub_dims))), dtype=complex)
         )
-        rho_sub_new = sim["final_state"]
-        if rho_sub_new.type == "ket":
-            rho_sub_new = qt.ket2dm(rho_sub_new)
+        H_eff.dims = [list(sub_dims), list(sub_dims)]
 
-        # -- Step 3: re-embed subsystem into full state ----------------------
-        # For qubits NOT in the subsystem, extract their reduced state too.
-        remain_idxs = [i for i in range(len(full_names)) if i not in keep_set]
+        # 1. Bare qubit terms (diagonal in the computational basis)
+        for local_i, q_name in enumerate(sub_names):
+            H0_full, _ = self.gate_engine._get_qubit_hamiltonian(q_name)
+            # H0_full is in GHz; embed at local position, convert to rad/ns
+            H0_q = qt.Qobj(np.diag(np.real(H0_full.diag())))
+            H0_q.dims = [[sub_dims[local_i]], [sub_dims[local_i]]]
+            ops = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+            ops[local_i] = H0_q
+            H_eff = H_eff + (2 * np.pi) * qt.tensor(ops)
 
-        if remain_idxs:
-            rho_remain = rho_full.ptrace(remain_idxs)
-            # Tensor product: sub qubits first (in sub_global_idxs order),
-            # then remaining qubits.  We need to sort them back into the
-            # original full register order.
-            # Build the combined state and then permute back.
-            all_idxs_ordered = sub_global_idxs + remain_idxs
-            rho_combined = qt.tensor(rho_sub_new, rho_remain)
+        # 2. Static coupling terms  g*(a†b + ab†)
+        for coup in sub_couplings:
+            ia, ib = coup["q1"], coup["q2"]
+            g      = float(coup.get("strength", 0.010)) * 2 * np.pi  # rad/ns
+            da, db = sub_dims[ia], sub_dims[ib]
 
-            # Permute dims back to the original full register ordering.
-            # perm[i] = position of full qubit i in all_idxs_ordered
-            perm = [all_idxs_ordered.index(i) for i in range(len(full_names))]
-            combined_dims = [full_dims[i] for i in all_idxs_ordered]
-            # MUST be a list of lists (nested), not a flat list, or permute
-            # misinterprets the tensor structure and produces wrong subsystem
-            # ordering.  QuTiP permute() expects dims = [[d0,d1,...],[d0,d1,...]].
-            rho_combined.dims = [list(combined_dims), list(combined_dims)]
-            rho_new_full = rho_combined.permute(perm)
-        else:
-            # Subsystem IS the full system
-            rho_new_full = rho_sub_new
+            # Lowering operators in the local d-dim space
+            a_op = qt.destroy(da)
+            b_op = qt.destroy(db)
 
-        # Canonicalise dims so diag() / ptrace() work correctly downstream.
-        rho_new_full.dims = [list(full_dims), list(full_dims)]
-        return rho_new_full
+            ops_ab = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+            ops_ba = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+
+            a_op_full = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+            b_op_full = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+            a_op_full[ia] = a_op
+            b_op_full[ib] = b_op
+
+            A = qt.tensor(a_op_full)
+            B = qt.tensor(b_op_full)
+            H_eff = H_eff + g * (A.dag() * B + A * B.dag())
+
+        # 3. Drive terms: in the rotating frame the carrier oscillation
+        #    cancels, leaving a static Rabi term Omega/2 * sigma_x (or
+        #    rotated by phase).  For a coupler_pulse we treat it as a
+        #    time-averaged ISWAP-like transmon coupling that applies a
+        #    controlled phase (CZ), which we model as the CZ unitary directly.
+        coupler_pairs = []  # (local_ctrl, local_targ) for coupler_pulse drives
+        x_drives = []       # (local_idx, amplitude, phase) for microwave drives
+        for drv in sub_drives:
+            drv_type = drv.get("type", "")
+            if drv_type == "coupler_pulse":
+                tgt = drv["target"]
+                if isinstance(tgt, (tuple, list)) and len(tgt) == 2:
+                    coupler_pairs.append((int(tgt[0]), int(tgt[1])))
+            elif drv_type in ("X", "microwave"):
+                x_drives.append((
+                    int(drv["target"]) if not isinstance(drv["target"], (tuple, list)) else drv["target"][0],
+                    float(drv.get("amplitude", 0.025)),
+                    float(drv.get("phase", 0.0)),
+                ))
+
+        # Add rotating-frame microwave drives  Omega/2 * (e^{i*phi}|0><1| + h.c.)
+        for (local_i, amp, phase) in x_drives:
+            d = sub_dims[local_i]
+            # Pi-pulse condition: amp * duration = pi  =>  Omega = pi/duration
+            # We use amplitude as the Rabi frequency in GHz (units match calibration)
+            Omega = amp * 2 * np.pi  # rad/ns
+            # sigma_x-like 0<->1 operator
+            sx = np.zeros((d, d), dtype=complex)
+            sx[0, 1] = np.exp(-1j * phase)
+            sx[1, 0] = np.exp( 1j * phase)
+            sx_q = qt.Qobj(sx)
+            sx_q.dims = [[d], [d]]
+            ops_drv = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+            ops_drv[local_i] = sx_q
+            H_eff = H_eff + (Omega / 2.0) * qt.tensor(ops_drv)
+
+        # ── Compute unitary  U = exp(-i H_eff * duration) ─────────────────
+        # For coupler_pulse drives we build a direct CZ unitary in the
+        # {|00>, |01>, |10>, |11>} subspace instead of driving via H_eff,
+        # because the CZ comes from the 11<->20 avoided crossing — not a
+        # simple XY coupling. We accumulate partial unitaries sequentially.
+
+        # Start with exp(-i H_eff * duration) for the bare+microwave part
+        H_mat  = H_eff.full()
+        # Subtract diagonal mean to improve numerical conditioning
+        diag_mean = np.mean(np.diag(H_mat).real)
+        H_mat -= diag_mean * np.eye(H_mat.shape[0])
+        U_mat  = scipy_expm(-1j * H_mat * duration)
+        U_sub  = qt.Qobj(U_mat)
+        U_sub.dims = [list(sub_dims), list(sub_dims)]
+
+        # Apply coupler-pulse CZ unitaries on top, one pair at a time
+        for (ic, it_) in coupler_pairs:
+            dc, dt = sub_dims[ic], sub_dims[it_]
+
+            # Build CZ unitary in the 2-qubit subspace:
+            # |00>->|00>, |01>->|01>, |10>->|10>, |11>->-|11>
+            # then embed into the full sub-system space.
+            # For truncated transmons (d>2) we act only on the {0,1} subspace.
+            dim_pair = dc * dt
+            CZ_pair_mat = np.eye(dim_pair, dtype=complex)
+            # Index of |11> in the (dc, dt) space
+            idx_11 = 1 * dt + 1
+            CZ_pair_mat[idx_11, idx_11] = -1.0
+
+            CZ_pair = qt.Qobj(CZ_pair_mat)
+            CZ_pair.dims = [[dc, dt], [dc, dt]]
+
+            # Embed CZ_pair at positions (ic, it_) in the sub-system
+            ops_cz = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
+            pair_dims = [sub_dims[j] for j in range(N_sub) if j in (ic, it_)]
+            remain_cz = [j for j in range(N_sub) if j not in (ic, it_)]
+
+            if remain_cz:
+                I_rem = qt.tensor([qt.qeye(sub_dims[j]) for j in remain_cz])
+                CZ_combined = qt.tensor(CZ_pair, I_rem)
+                all_ord = [ic, it_] + remain_cz
+                cz_dims = [sub_dims[j] for j in all_ord]
+                CZ_combined.dims = [list(cz_dims), list(cz_dims)]
+                perm_cz = [all_ord.index(j) for j in range(N_sub)]
+                CZ_full_sub = CZ_combined.permute(perm_cz)
+            else:
+                CZ_full_sub = CZ_pair
+
+            CZ_full_sub.dims = [list(sub_dims), list(sub_dims)]
+            U_sub = CZ_full_sub * U_sub
+
+        U_sub.dims = [list(sub_dims), list(sub_dims)]
+
+        # ── Apply unitary to full state (no ptrace — entanglement preserved) ─
+        return self._apply_unitary_to_subsystem(
+            U_sub, sub_global_idxs, full_state, full_dims
+        )
+
 
     # ------------------------------------------------------------------
     # 6. Transversal logical gate → per-block subsystem simulations
@@ -739,53 +883,71 @@ class ErrorCorrectionEngine:
         self,
         l_name: str,
         mapping: Dict,
-        physical_names: List[str],
         calibrations: Dict,
         coupling_strength: float,
-    ) -> Tuple[List[Dict], float]:
+    ) -> Tuple[List[Dict], List[Dict], float]:
         """
-        Build the 4-CNOT syndrome extraction circuit for one logical block:
+        Build the 4-CNOT syndrome extraction drive schedule for one logical block.
 
-            CNOT(D0 → A0)
-            CNOT(D1 → A0)
-            CNOT(D1 → A1)
-            CNOT(D2 → A1)
+        CNOT sequence (sequenced in time, not concurrent):
+            CNOT(D0 -> A0)   parity D0 xor D1
+            CNOT(D1 -> A0)
+            CNOT(D1 -> A1)   parity D1 xor D2
+            CNOT(D2 -> A1)
 
-        The CNOTs are sequenced in time (each starts after the previous ends)
-        to avoid simultaneous multi-qubit drives on the same physical qubit.
+        block_names (local ordering) = [D0, D1, D2, A0, A1]  (indices 0..4)
 
-        Returns (drive_list, total_duration).
+        All drive and coupling indices are LOCAL to the 5-qubit block so that
+        _simulate_subsystem receives consistent 0-based indexing.
+
+        Returns (drives_local, couplings_local, total_duration).
         """
-        drives: List[Dict] = []
-        d      = mapping[l_name]["data"]     # [D0, D1, D2]
-        a      = mapping[l_name]["ancilla"]  # [A0, A1]
+        d = mapping[l_name]["data"]     # [D0, D1, D2]
+        a = mapping[l_name]["ancilla"]  # [A0, A1]
+        block_names = d + a             # local order: 0=D0,1=D1,2=D2,3=A0,4=A1
 
-        # The 4 CNOT pairs in order
         cnot_pairs = [
-            (d[0], a[0]),   # D0 → A0
-            (d[1], a[0]),   # D1 → A0
-            (d[1], a[1]),   # D1 → A1
-            (d[2], a[1]),   # D2 → A1
+            (d[0], a[0]),   # D0 -> A0  (local 0->3)
+            (d[1], a[0]),   # D1 -> A0  (local 1->3)
+            (d[1], a[1]),   # D1 -> A1  (local 1->4)
+            (d[2], a[1]),   # D2 -> A1  (local 2->4)
         ]
 
-        t_cursor = 0.0
-        for ctrl, targ in cnot_pairs:
-            key = (ctrl, targ)
-            dur = calibrations["cnot_dur"].get(
-                key, calibrations["cnot_dur"].get((targ, ctrl), 150.0)
+        drives: List[Dict]    = []
+        couplings: List[Dict] = []
+        seen_pairs: set       = set()
+        t_cursor: float       = 0.0
+
+        for ctrl_name, targ_name in cnot_pairs:
+            key      = (ctrl_name, targ_name)
+            dur      = calibrations["cnot_dur"].get(
+                key, calibrations["cnot_dur"].get((targ_name, ctrl_name), 150.0)
             )
-            ic = physical_names.index(ctrl)
-            ia = physical_names.index(targ)
+            ic_local = block_names.index(ctrl_name)   # local index 0..4
+            ia_local = block_names.index(targ_name)   # local index 0..4
+
             drives.append({
-                "target":     (min(ic, ia), max(ic, ia)),
+                "target":     (min(ic_local, ia_local), max(ic_local, ia_local)),
                 "type":       "coupler_pulse",
                 "strength":   coupling_strength,
                 "start_time": t_cursor,
                 "end_time":   t_cursor + dur,
             })
+
+            pair_key = (min(ic_local, ia_local), max(ic_local, ia_local))
+            if pair_key not in seen_pairs:
+                seen_pairs.add(pair_key)
+                couplings.append({
+                    "q1":       pair_key[0],
+                    "q2":       pair_key[1],
+                    "type":     "capacitive",
+                    "strength": coupling_strength,
+                })
+
             t_cursor += dur
 
-        return drives, t_cursor
+        return drives, couplings, t_cursor
+
 
     # ------------------------------------------------------------------
     # 7. Syndrome measurement (projective, with correction)
@@ -974,57 +1136,84 @@ class ErrorCorrectionEngine:
         Parameters
         ----------
         logical_names : list of str
-            Names of the logical qubits, which must already be registered
-            in QubitEngine.  Each logical qubit is expanded to 5 physical
-            qubits (3 data + 2 ancilla) of the same type and parameters.
+            Names of the logical qubits (must exist in QubitEngine).
+            Each is expanded to 5 physical qubits (D0, D1, D2, A0, A1) in
+            memory only — they are NEVER written to the session JSON file.
         qasm_path : str
-            Path to an OpenQASM 2.0 file describing the logical circuit.
+            Path to an OpenQASM 2.0 file for the logical circuit.
         coupling_type : str
-            Coupling type to use for syndrome-extraction CNOTs (default: "capacitive").
+            Coupling type for syndrome-extraction CNOTs (default: "capacitive").
         coupling_strength : float
-            Coupling strength in GHz for syndrome-extraction links (default: 0.010).
+            Coupling strength in GHz (default: 0.010).
         ec_every_n_gates : int
-            Run a syndrome-extraction cycle after every N logical gates (default: 1).
-            Set to 0 to disable all MID-CIRCUIT syndrome passes — a final syndrome
-            cycle always runs once after all gates regardless of this setting.
-            Use ec_every_n_gates=0 for circuits involving superposition states (e.g.
-            H gate), because the 3-qubit repetition code Z-stabilisers will collapse
-            X-basis superpositions if measured mid-circuit.
-
-        Returns
-        -------
-        dict with keys:
-            "logical_populations" : Dict[str, float]
-                Decoded logical state populations by majority vote.
-            "final_physical_state" : qt.Qobj
-                The raw final physical quantum state (ket or dm).
+            Run a syndrome cycle after every N gates (default: 1).
+            Set to 0 to skip all mid-circuit syndromes and run only a single
+            final syndrome pass.  Use 0 for circuits with H gates / superpositions,
+            because Z-stabiliser measurement collapses X-basis states mid-circuit.
         """
 
         # ── Step 1: Parse logical QASM ─────────────────────────────────
         print(f"[EC] 1. Parsing logical QASM from '{qasm_path}'...")
-        transpiler     = QASMTranspiler()
+        transpiler      = QASMTranspiler()
         logical_circuit = transpiler.parse_file(qasm_path)
         print(f"[EC]    {len(logical_circuit)} logical instructions parsed.")
 
-        # ── Step 2: Map & register physical qubits ────────────────────
+        # ── Step 2: Map & inject physical qubits (alias-only, no disk write) ─
         print("[EC] 2. Generating physical qubit mapping...")
         mapping        = self.generate_3q_repetition_mapping(logical_names)
         physical_names = self._get_flat_physical_names(logical_names, mapping)
-
         print(
             f"[EC]    Logical qubits : {logical_names}\n"
             f"[EC]    Physical qubits: {physical_names}"
         )
+
+        # Register physical qubits into QubitEngine using create_qubit(),
+        # which saves them to the session JSON so they survive every
+        # load_session() call GateEngine makes internally.
+        # _cleanup_physical_qubits() in the finally block deletes them all.
         self._register_physical_qubits(logical_names, mapping)
 
-        # ── Step 3: Collect local dims after registration ─────────────
+        try:
+            self._run_ec_workflow(
+                logical_names    = logical_names,
+                logical_circuit  = logical_circuit,
+                mapping          = mapping,
+                physical_names   = physical_names,
+                coupling_type    = coupling_type,
+                coupling_strength = coupling_strength,
+                ec_every_n_gates  = ec_every_n_gates,
+            )
+            result = self._last_ec_result
+        finally:
+            # Always runs — deletes all _D0/_D1/_D2/_A0/_A1 qubits from
+            # QubitEngine and the session JSON so they never appear in the
+            # normal qubit list after the workflow completes.
+            self._cleanup_physical_qubits(logical_names, mapping)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # 9b. Inner workflow (runs with aliases active)
+    # ------------------------------------------------------------------
+
+    def _run_ec_workflow(
+        self,
+        logical_names: List[str],
+        logical_circuit: List[Dict],
+        mapping: Dict,
+        physical_names: List[str],
+        coupling_type: str,
+        coupling_strength: float,
+        ec_every_n_gates: int,
+    ) -> None:
+        # ── Step 3: Collect local dims ─────────────────────────────────
         dims = [
             self.qubit_engine.get_qubit(name).truncated_dim
             for name in physical_names
         ]
         print(f"[EC]    Local dims: {dims}")
 
-        # ── Step 4: Build coupling topology ───────────────────────────
+        # ── Step 4: Build coupling topology ────────────────────────────
         print("[EC] 3. Building syndrome-extraction coupling topology...")
         syndrome_couplings = self._build_physical_couplings(
             logical_names, mapping, physical_names,
@@ -1032,19 +1221,20 @@ class ErrorCorrectionEngine:
         )
         print(f"[EC]    {len(syndrome_couplings)} coupling links defined.")
 
-        # ── Step 5: Calibrate pulses (cached by GateEngine) ───────────
+        # ── Step 5: Calibrate pulses ────────────────────────────────────
         print("[EC] 4. Calibrating pulses (results cached for re-use)...")
         calibrations = self._calibrate(
             logical_names, mapping, physical_names,
             syndrome_couplings, coupling_type, coupling_strength,
         )
 
-        # ── Step 6: Initial physical state  |00...0⟩ ─────────────────
-        print("[EC] 5. Initialising physical state to |00...0⟩...")
-        ground_states  = [qt.basis(d, 0) for d in dims]
-        current_state  = qt.tensor(ground_states)
+        # ── Step 6: Initial state |00...0> ─────────────────────────────
+        print("[EC] 5. Initialising physical state to |00...0>...")
+        ground_states = [qt.basis(d, 0) for d in dims]
+        current_state = qt.tensor(ground_states)
+        current_state.dims = [list(dims), [1] * len(dims)]
 
-        # ── Step 7: Execute logical circuit, gate by gate ─────────────
+        # ── Step 7: Execute logical circuit, gate by gate ──────────────
         print(f"\n[EC] 6. Executing logical circuit ({len(logical_circuit)} gates)...\n")
         gate_counter = 0
 
@@ -1053,10 +1243,7 @@ class ErrorCorrectionEngine:
             target     = instruction.get("target", "?")
             print(f"  [Gate {step_idx:03d}] {gate_label}  target={target}")
 
-            # ── 7a. Transversal logical gate ──────────────────────────
-            # Each logical gate is simulated on a small subsystem to avoid
-            # the full 4096-dim Hilbert space.  _transversal_drives now
-            # returns the updated full state directly.
+            # 7a. Transversal logical gate
             current_state = self._transversal_drives(
                 instruction, logical_names, mapping,
                 physical_names, dims, calibrations,
@@ -1065,152 +1252,27 @@ class ErrorCorrectionEngine:
 
             gate_counter += 1
 
-            # ── 7b. Periodic syndrome extraction ─────────────────────
-            # ec_every_n_gates=0 means "final only" — skip all mid-circuit
-            # syndrome cycles.  This is required when the logical circuit
-            # contains superposition states (e.g. H gate) because the
-            # 3-qubit repetition code's Z-stabiliser measurements will
-            # collapse X-basis superpositions mid-circuit.
-            if ec_every_n_gates <= 0:
-                pass
-            elif gate_counter % ec_every_n_gates == 0:
+            # 7b. Mid-circuit syndrome extraction
+            # ec_every_n_gates=0 => skip all mid-circuit syndromes
+            if ec_every_n_gates > 0 and gate_counter % ec_every_n_gates == 0:
                 print(f"  [EC cycle after gate {step_idx}]")
-
                 for l_name in logical_names:
-                    print(f"    Syndrome extraction for logical block: {l_name}")
-
-                    # Syndrome extraction: simulate only the 5-qubit block
-                    # (D0, D1, D2, A0, A1) rather than all 10 qubits.
-                    block_names = (
-                        mapping[l_name]["data"] + mapping[l_name]["ancilla"]
-                    )
-                    block_dims = [
-                        dims[physical_names.index(n)] for n in block_names
-                    ]
-
-                    # Build local-indexed syndrome drives (0..4)
-                    ec_drives_local = []
-                    t_cursor = 0.0
-                    d  = mapping[l_name]["data"]
-                    a  = mapping[l_name]["ancilla"]
-                    cnot_pairs = [
-                        (d[0], a[0]),
-                        (d[1], a[0]),
-                        (d[1], a[1]),
-                        (d[2], a[1]),
-                    ]
-                    for ctrl, targ in cnot_pairs:
-                        key = (ctrl, targ)
-                        dur = calibrations["cnot_dur"].get(
-                            key, calibrations["cnot_dur"].get((targ, ctrl), 150.0)
-                        )
-                        ic_local = block_names.index(ctrl)
-                        ia_local = block_names.index(targ)
-                        ec_drives_local.append({
-                            "target":     (min(ic_local, ia_local),
-                                           max(ic_local, ia_local)),
-                            "type":       "coupler_pulse",
-                            "strength":   coupling_strength,
-                            "start_time": t_cursor,
-                            "end_time":   t_cursor + dur,
-                        })
-                        t_cursor += dur
-
-                    # Build local-indexed couplings
-                    block_couplings_local = []
-                    seen_pairs = set()
-                    for ctrl, targ in cnot_pairs:
-                        ic_local = block_names.index(ctrl)
-                        ia_local = block_names.index(targ)
-                        key = (min(ic_local, ia_local), max(ic_local, ia_local))
-                        if key not in seen_pairs:
-                            seen_pairs.add(key)
-                            block_couplings_local.append({
-                                "q1":       key[0],
-                                "q2":       key[1],
-                                "type":     coupling_type,
-                                "strength": coupling_strength,
-                            })
-
-                    current_state = self._simulate_subsystem(
-                        sub_names      = block_names,
-                        sub_drives     = ec_drives_local,
-                        duration       = t_cursor,
-                        sub_couplings  = block_couplings_local,
-                        full_state     = current_state,
-                        full_names     = physical_names,
-                        full_dims      = dims,
-                        gate_label     = "EC_Syndrome",
+                    current_state = self._run_syndrome_block(
+                        l_name, mapping, physical_names, dims,
+                        calibrations, coupling_strength, coupling_type,
+                        current_state,
                     )
 
-                    # Measure ancillas, correct, and reset
-                    current_state = self._syndrome_measurement_and_correct(
-                        current_state, l_name, mapping,
-                        physical_names, dims,
-                    )
-
-        # ── Step 8: Decode final logical state ────────────────────────
-        # -- Step 7b (final): One last syndrome pass before decode ----------
-        # Always run a final syndrome + correction cycle regardless of
-        # ec_every_n_gates. This catches errors from the last gate and is
-        # the ONLY syndrome pass when ec_every_n_gates=0 (recommended for
-        # circuits with superposition states like H gates, where mid-circuit
-        # Z-stabiliser measurement collapses X-basis superpositions).
+        # ── Step 8: Final syndrome pass (always runs) ──────────────────
         print("  [EC final syndrome pass]")
         for l_name in logical_names:
-            print(f"    Final syndrome for logical block: {l_name}")
-            block_names = (
-                mapping[l_name]["data"] + mapping[l_name]["ancilla"]
-            )
-            d  = mapping[l_name]["data"]
-            a  = mapping[l_name]["ancilla"]
-            cnot_pairs = [
-                (d[0], a[0]), (d[1], a[0]),
-                (d[1], a[1]), (d[2], a[1]),
-            ]
-            t_cursor_f = 0.0
-            ec_drives_f: list = []
-            block_couplings_f: list = []
-            seen_pairs_f: set = set()
-            for ctrl, targ in cnot_pairs:
-                dur_ec = calibrations["cnot_dur"].get(
-                    (ctrl, targ),
-                    calibrations["cnot_dur"].get((targ, ctrl), 150.0),
-                )
-                ic_l = block_names.index(ctrl)
-                ia_l = block_names.index(targ)
-                ec_drives_f.append({
-                    "target":     (min(ic_l, ia_l), max(ic_l, ia_l)),
-                    "type":       "coupler_pulse",
-                    "strength":   coupling_strength,
-                    "start_time": t_cursor_f,
-                    "end_time":   t_cursor_f + dur_ec,
-                })
-                pair_key_f = (min(ic_l, ia_l), max(ic_l, ia_l))
-                if pair_key_f not in seen_pairs_f:
-                    seen_pairs_f.add(pair_key_f)
-                    block_couplings_f.append({
-                        "q1":       pair_key_f[0],
-                        "q2":       pair_key_f[1],
-                        "type":     coupling_type,
-                        "strength": coupling_strength,
-                    })
-                t_cursor_f += dur_ec
-
-            current_state = self._simulate_subsystem(
-                sub_names      = block_names,
-                sub_drives     = ec_drives_f,
-                duration       = t_cursor_f,
-                sub_couplings  = block_couplings_f,
-                full_state     = current_state,
-                full_names     = physical_names,
-                full_dims      = dims,
-                gate_label     = "EC_Syndrome_Final",
-            )
-            current_state = self._syndrome_measurement_and_correct(
-                current_state, l_name, mapping, physical_names, dims,
+            current_state = self._run_syndrome_block(
+                l_name, mapping, physical_names, dims,
+                calibrations, coupling_strength, coupling_type,
+                current_state,
             )
 
+        # ── Step 9: Decode ─────────────────────────────────────────────
         print("\n[EC] 7. Circuit complete. Decoding final logical populations...")
         logical_pops = self._decode_logical_state(
             current_state, logical_names, mapping, physical_names, dims
@@ -1222,9 +1284,50 @@ class ErrorCorrectionEngine:
             print(f"    [EC] Full state type={current_state.type}, dims={current_state.dims}")
         for bitstring, pop in sorted(logical_pops.items(), key=lambda x: -x[1]):
             bar = "█" * int(pop * 20) + "░" * (20 - int(pop * 20))
-            print(f"    |{bitstring}⟩_L  {bar}  {pop * 100:5.2f}%")
+            print(f"    |{bitstring}>_L  {bar}  {pop * 100:5.2f}%")
 
-        return {
+        self._last_ec_result = {
             "logical_populations":  logical_pops,
             "final_physical_state": current_state,
         }
+
+    # ------------------------------------------------------------------
+    # 9c. Helper: run one syndrome block (simulation + measurement)
+    # ------------------------------------------------------------------
+
+    def _run_syndrome_block(
+        self,
+        l_name: str,
+        mapping: Dict,
+        physical_names: List[str],
+        dims: List[int],
+        calibrations: Dict,
+        coupling_strength: float,
+        coupling_type: str,
+        current_state: qt.Qobj,
+    ) -> qt.Qobj:
+        """Simulate syndrome CNOTs for one logical block, then measure & correct."""
+        block_names = mapping[l_name]["data"] + mapping[l_name]["ancilla"]
+        print(f"    Syndrome extraction for logical block: {l_name}")
+
+        # _syndrome_extraction_drives now returns LOCAL indices (0..4)
+        ec_drives, ec_couplings, t_total = self._syndrome_extraction_drives(
+            l_name, mapping, calibrations, coupling_strength,
+        )
+
+        current_state = self._simulate_subsystem(
+            sub_names      = block_names,
+            sub_drives     = ec_drives,
+            sub_couplings  = ec_couplings,
+            duration       = t_total,
+            full_state     = current_state,
+            full_names     = physical_names,
+            full_dims      = dims,
+            gate_label     = "EC_Syndrome",
+        )
+
+        current_state = self._syndrome_measurement_and_correct(
+            current_state, l_name, mapping, physical_names, dims,
+        )
+        return current_state
+

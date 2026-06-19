@@ -5,6 +5,7 @@ Main CLI entry point for qforge.
 import click
 from rich.console import Console
 from rich.panel import Panel
+
 from qforge.cli.commands.cache import cache_group
 
 # Enable UTF-8 console for beautiful Unicode output
@@ -14,6 +15,8 @@ enable_unicode_console()
 from qforge.cli.commands import qubit, gate, circuit, hardware, compare, workflow, example, clean
 from qforge.cli.interactive import run_interactive
 from qforge import __version__
+
+from pathlib import Path
 
 console = Console()
 
@@ -26,8 +29,18 @@ console = Console()
     is_flag=True,
     help="Launch interactive mode with guided workflows",
 )
+@click.option(
+    "--gui",
+    is_flag=True,
+    help="Launch the qforge graphical interface",
+)
+@click.option(
+    "--cache-clear",
+    is_flag=True,
+    help="Clear the calibration cache.",
+)
 @click.pass_context
-def cli(ctx, interactive):
+def cli(ctx, interactive, gui, cache_clear):
     """
     qforge: Quantum Simulation Toolkit
     
@@ -42,12 +55,31 @@ def cli(ctx, interactive):
       qforge workflow run --interactive
     
     For guided experience, use: qforge --interactive
+    For graphical interface, use: qforge --gui
     """
+    if cache_clear:
+        # qforge/cli/main.py -> qforge -> project root
+        project_root = Path(__file__).resolve().parents[2]
+        cache_file = project_root / "outputs" / "calib_cache.json"
+
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(cache_file, "w", encoding="utf-8") as f:
+            f.write("{}")
+
+        click.echo(f"Cache cleared: {cache_file}")
+        ctx.exit()
+    if gui:
+        from qforge.cli.gui import QForgeGUI
+        app = QForgeGUI()
+        app.protocol("WM_DELETE_WINDOW", app._safe_quit)
+        app.mainloop()
+        ctx.exit()
+
     if interactive:
         run_interactive()
         ctx.exit()
     
-    # If no command and not interactive, show help
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
@@ -62,9 +94,10 @@ cli.add_command(workflow.workflow)
 cli.add_command(example.example)
 cli.add_command(cache_group)
 cli.add_command(clean.clean)
-# Developer tools (hidden by default? No, visible for now as requested)
+
 from qforge.cli.commands import dev
 cli.add_command(dev.dev)
+
 
 @cli.command()
 def citations():
@@ -104,7 +137,6 @@ def citations():
         console.print(Panel(bib, expand=False, border_style="green"))
 
 
-
 @cli.command()
 def info():
     """Display qforge system information."""
@@ -129,6 +161,7 @@ def info():
 
 [magenta]Quick Start:[/magenta]
   qforge --interactive    # Launch guided mode
+  qforge --gui            # Launch GUI
   qforge qubit --help     # View qubit commands
   qforge workflow run     # Run end-to-end workflow
 """

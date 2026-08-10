@@ -1081,6 +1081,73 @@ class GateEngine:
         return op
 
 
+    def _build_ideal_single_qubit_operator(
+        self,
+        dims: List[int],
+        target_idx: int,
+        gate_name: str,
+    ) -> qt.Qobj:
+        """
+        Build an ideal single-qubit gate acting on one qubit in an N-qubit register.
+        The operation acts only on the computational subspace {|0>,|1>} and leaves
+        states outside that subspace unchanged.
+        """
+        if not (0 <= target_idx < len(dims)):
+            raise IndexError(f"Target index {target_idx} outside register.")
+
+        gate_name = gate_name.upper()
+        if gate_name not in {"X", "H"}:
+            raise ValueError(f"Unsupported ideal single-qubit gate: {gate_name}")
+
+        total_dim = int(np.prod(dims))
+        U = np.zeros((total_dim, total_dim), dtype=complex)
+
+        import itertools
+
+        computational_states = list(itertools.product([0, 1], repeat=len(dims)))
+
+        for bits in computational_states:
+            in_idx = np.ravel_multi_index(bits, dims)
+
+            if gate_name == "X":
+                output_bits = list(bits)
+                output_bits[target_idx] = 1 - output_bits[target_idx]
+                out_idx = np.ravel_multi_index(tuple(output_bits), dims)
+                U[out_idx, in_idx] = 1.0
+            else:  # H
+                output_bits = list(bits)
+                if bits[target_idx] == 0:
+                    # |0> -> (|0> + |1>)/sqrt(2)
+                    U[in_idx, in_idx] = 1.0 / np.sqrt(2.0)
+                    output_bits[target_idx] = 1
+                    out_idx = np.ravel_multi_index(tuple(output_bits), dims)
+                    U[out_idx, in_idx] = 1.0 / np.sqrt(2.0)
+                else:
+                    # |1> -> (|0> - |1>)/sqrt(2)
+                    U[in_idx, in_idx] = -1.0 / np.sqrt(2.0)
+                    output_bits[target_idx] = 0
+                    out_idx = np.ravel_multi_index(tuple(output_bits), dims)
+                    U[out_idx, in_idx] = 1.0 / np.sqrt(2.0)
+
+        for idx in range(total_dim):
+            if np.allclose(U[:, idx], 0):
+                U[idx, idx] = 1.0
+
+        op = qt.Qobj(U)
+        op.dims = [list(dims), list(dims)]
+        return op
+
+    def _apply_ideal_single_qubit_gate(
+        self,
+        state: qt.Qobj,
+        dims: List[int],
+        target_idx: int,
+        gate_name: str,
+    ) -> qt.Qobj:
+        """Apply an ideal single-qubit gate to the full state."""
+        U = self._build_ideal_single_qubit_operator(dims, target_idx, gate_name)
+        return U * state
+
     def _apply_ideal_cx(
             self,
             state: qt.Qobj,
@@ -1321,7 +1388,7 @@ class GateEngine:
         # 4. Evolution
         times = np.linspace(0, duration, steps)
         opts = {"store_states": True, "nsteps": 10000000}
-
+ 
         # Warning: H_total must be formatted exactly for QuTiP
         res = qt.mesolve(H_total, psi0, times, c_ops=[], e_ops=[], args=args, options=opts)
 

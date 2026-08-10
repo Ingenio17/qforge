@@ -48,7 +48,7 @@ A0 detects D0⊕D1;  A1 detects D1⊕D2.
 import numpy as np
 import qutip as qt
 from scipy.linalg import expm as scipy_expm
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Any
 
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine
@@ -72,13 +72,21 @@ def _tensor_op_at(op: qt.Qobj, idx: int, dims: List[int]) -> qt.Qobj:
 
 def _sigmax_dim(d: int) -> qt.Qobj:
     """
-    X-like flip operator in a d-dimensional space: only |0>↔|1> subspace.
-    For d==2 this is the standard Pauli-X.
-    For d>2 (truncated transmon) we want the same |0>↔|1> action.
+    Pauli-X on the computational subspace of a d-dimensional system.
+
+    Leakage levels are left untouched.  The previous implementation filled
+    the rest of the matrix with zeroes, which made a correction non-unitary
+    and silently discarded population in |2>, |3>, ... .  A logical recovery
+    operation must never make leakage disappear.
     """
-    mat = np.zeros((d, d), dtype=complex)
+    if d < 2:
+        raise ValueError("A computational qubit needs at least two levels.")
+
+    mat = np.eye(d, dtype=complex)
     mat[0, 1] = 1.0
     mat[1, 0] = 1.0
+    mat[0, 0] = 0.0
+    mat[1, 1] = 0.0
     return qt.Qobj(mat)
 
 
@@ -206,69 +214,6 @@ class ErrorCorrectionEngine:
     # 4. Calibration (run once, cached by GateEngine)
     # ------------------------------------------------------------------
 
-    def _seed_gate_engine_cache(
-        self,
-        gate_type: str,
-        q1_name: str,
-        q2_name: Optional[str],
-        parameter: str,
-        result: Tuple[float, float],
-        coupling_type: Optional[str] = None,
-        coupling_strength: float = 0.0,
-        amplitude: float = 0.025,
-        use_drag: bool = True,
-        drag_lambda: float = 0.5,
-        virtual_z: float = 0.0,
-        detuning: float = 0.0,
-        duration: float = 40.0,
-    ) -> None:
-        """
-        Directly write a calibration result into GateEngine._calib_cache so
-        that a subsequent calibrate_gate() call for these exact arguments is
-        a zero-cost cache hit.
-
-        The cache key must match exactly what calibrate_gate() constructs:
-            (q1_name, q2_name, gate_type, coupling_type, coupling_strength,
-             parameter, kw_tuple)
-        where kw_tuple = tuple(sorted(kwargs.items())) after calibrate_gate
-        has normalised kwargs and removed the swept parameter.
-        """
-        from qforge.core.gate_engine import GateEngine
-
-        # Reproduce the kwargs normalisation inside calibrate_gate()
-        kwargs: Dict[str, Any] = {
-            "amplitude":   amplitude,
-            "use_drag":    use_drag,
-            "drag_lambda": drag_lambda,
-            "virtual_z":   virtual_z,
-        }
-
-        # detuning is set to 0.0 unless this is a tunable-coupler 2Q gate
-        if gate_type in ("CNOT", "CZ") and coupling_type == "tunable_coupler":
-            kwargs["detuning"] = detuning
-        else:
-            kwargs["detuning"] = 0.0
-
-        # When sweeping 'duration', calibrate_gate pops it from kwargs before
-        # building the key; for other parameters it keeps duration in kwargs.
-        if parameter != "duration":
-            kwargs["duration"] = duration
-
-        # Remove the swept parameter (calibrate_gate pops it)
-        kwargs.pop(parameter, None)
-
-        kw_tuple  = tuple(sorted(kwargs.items()))
-        cache_key = (
-            q1_name,
-            q2_name,
-            gate_type.upper(),
-            coupling_type,
-            float(coupling_strength),
-            parameter,
-            kw_tuple,
-        )
-        GateEngine._calib_cache[cache_key] = result
-
     def _calibrate(
         self,
         logical_names: List[str],
@@ -280,23 +225,22 @@ class ErrorCorrectionEngine:
         calibrate_cnot: bool = False,
     ) -> Dict:
         """
-        Calibrate X and CNOT durations, exploiting the fact that every
-        physical qubit in a logical block is a perfect clone of its parent.
+        Calibrate X durations, exploiting the fact that every physical qubit
+        in a logical block is a perfect clone of its parent.
 
         Strategy
         --------
         Single-qubit X
             Calibrate once per unique (qubit_type, params) fingerprint.
-            For every clone, seed GateEngine._calib_cache directly so its
-            calibrate_gate() call is an instant cache hit — no sweep runs.
+            Reuse the representative result directly.  The EC simulator does
+            not call ``calibrate_gate`` for every clone, so it must not rely on
+            GateEngine's private cache-key format.
 
         CNOT syndrome pairs
-            All syndrome pairs share the same qubit physics and coupling
-            strength, so they produce identical calibrated durations.
-            Calibrate the first pair only; seed the cache for the rest.
+            Retained for callers that explicitly request calibration.  Normal
+            EC execution uses ideal logical CX instructions for syndrome
+            extraction and therefore does not need a physical CNOT duration.
         """
-        from qforge.core.gate_engine import GateEngine
-
         # x_amp stores the amplitude used for the X-pi calibration.
         # H uses amp_h = x_amp / 2 with the same duration (t_h = t_x).
         calibrations: Dict[str, Any] = {"x_dur": {}, "x_amp": {}, "cnot_dur": {}}
@@ -321,16 +265,9 @@ class ErrorCorrectionEngine:
                     )
                     x_results[fp] = (dur, metric)
                 else:
-                    # Clone — pre-seed the cache so no sweep runs
+                    # Clone — reuse the representative result directly.
                     dur, metric = x_results[fp]
-                    self._seed_gate_engine_cache(
-                        gate_type="X",
-                        q1_name=p_name,
-                        q2_name=None,
-                        parameter="duration",
-                        result=(dur, metric),
-                    )
-                    print(f"[EC]   {p_name}: clone → cache seeded "
+                    print(f"[EC]   {p_name}: clone → calibration reused "
                           f"(dur={dur:.4f}, metric={metric:.4f})")
 
                 calibrations["x_dur"][p_name] = dur
@@ -377,19 +314,9 @@ class ErrorCorrectionEngine:
                 )
                 cnot_results[fp] = (dur, metric)
             else:
-                # Clone pair — seed cache for both directions
+                # Clone pair — reuse the representative result directly.
                 dur, metric = cnot_results[fp]
-                for a, b in [(q1n, q2n), (q2n, q1n)]:
-                    self._seed_gate_engine_cache(
-                        gate_type="CNOT",
-                        q1_name=a,
-                        q2_name=b,
-                        parameter="duration",
-                        result=(dur, metric),
-                        coupling_type=coupling_type,
-                        coupling_strength=coupling_strength,
-                    )
-                print(f"[EC]   {q1n}-{q2n}: clone → cache seeded "
+                print(f"[EC]   {q1n}-{q2n}: clone → calibration reused "
                       f"(dur={dur:.4f}, metric={metric:.4f})")
 
             calibrations["cnot_dur"][key_fwd] = dur
@@ -576,27 +503,30 @@ class ErrorCorrectionEngine:
         sub_dims        = [full_dims[i] for i in sub_global_idxs]
         N_sub           = len(sub_names)
 
-        ideal_cx_pairs = []  # (local_ctrl, local_targ) for coupler_pulse drives
-        has_only_icx = True
-        x_drives = []       # (local_idx, amplitude, phase) for microwave drives
+        ideal_cx_pairs = []  # (local_ctrl, local_targ) for ideal CX drives
+        ideal_single_qubit_ops = []  # (gate_name, local_idx) for ideal X/H drives
+        has_only_ideal = True
+        x_drives = []  # (local_idx, amplitude, phase) for microwave drives
 
-        
         for drv in sub_drives:
             drv_type = drv.get("type", "")
 
             if drv_type == "ICX":
-
                 ideal_cx_pairs.append(
                     (
                         int(drv["control"]),
                         int(drv["target"]),
                     )
                 )
-
-            elif drv_type in ("X", "microwave"):
-
-                has_only_icx = False
-
+            elif drv_type in ("X", "H"):
+                target_val = drv.get("target")
+                if isinstance(target_val, (tuple, list)):
+                    target_idx = int(target_val[0])
+                else:
+                    target_idx = int(target_val)
+                ideal_single_qubit_ops.append((drv_type, target_idx))
+            elif drv_type in ("microwave",):
+                has_only_ideal = False
                 x_drives.append(
                     (
                         int(drv["target"])
@@ -606,36 +536,32 @@ class ErrorCorrectionEngine:
                         float(drv.get("phase", 0.0)),
                     )
                 )
-
             else:
-
-                has_only_icx = False
+                has_only_ideal = False
 
         #
         # Fast path:
-        # if the subsystem only contains ideal CX gates,
-        # skip all Hamiltonian construction.
+        # if the subsystem only contains ideal gates, skip Hamiltonian construction.
         #
-
-        if has_only_icx:
-
+        if has_only_ideal:
             U_sub = qt.qeye(int(np.prod(sub_dims)))
             U_sub.dims = [list(sub_dims), list(sub_dims)]
 
+            for drv_type, target_idx in ideal_single_qubit_ops:
+                U_step = self.gate_engine._build_ideal_single_qubit_operator(
+                    sub_dims,
+                    target_idx,
+                    drv_type,
+                )
+                U_sub = U_step * U_sub
 
             for control_idx, target_idx in ideal_cx_pairs:
-
-                U_icx = self.gate_engine._build_ideal_cx_operator(
+                U_step = self.gate_engine._build_ideal_cx_operator(
                     sub_dims,
                     control_idx,
                     target_idx,
                 )
-
-                U_sub = U_icx * U_sub
-
-            #DEBUG
-            print("Subsystem unitary deviation from identity:", np.linalg.norm(U_sub.full() - np.eye(U_sub.shape[0])))
-            #END DEBUG
+                U_sub = U_step * U_sub
 
             return self._apply_unitary_to_subsystem(
                 U_sub,
@@ -901,28 +827,17 @@ class ErrorCorrectionEngine:
                     )
                     dur = max(dur, key_dur)
 
-                # Build three independent coupler drives in local indices:
-                # (0,3), (1,4), (2,5) — all run concurrently (same time window)
+                # Build three ideal CX gates in local indices:
+                # (0,3), (1,4), (2,5) — each acts on the corresponding data qubits
+                # across the two logical blocks.
                 combined_drives = []
                 combined_couplings = []
-                seen_coup_pairs = set()
                 for local_ctrl, local_targ in [(0, 3), (1, 4), (2, 5)]:
                     combined_drives.append({
-                        "target":     (local_ctrl, local_targ),
-                        "type":       "coupler_pulse",
-                        "strength":   0.010,
-                        "start_time": 0.0,
-                        "end_time":   dur,
+                        "type": "ICX",
+                        "control": local_ctrl,
+                        "target": local_targ,
                     })
-                    pair_key = (local_ctrl, local_targ)
-                    if pair_key not in seen_coup_pairs:
-                        seen_coup_pairs.add(pair_key)
-                        combined_couplings.append({
-                            "q1":       local_ctrl,
-                            "q2":       local_targ,
-                            "type":     "capacitive",
-                            "strength": 0.010,
-                        })
 
                 current_state = self._simulate_subsystem(
                     sub_names=combined_names,

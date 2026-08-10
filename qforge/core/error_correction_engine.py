@@ -156,12 +156,13 @@ class ErrorCorrectionEngine:
 
     def _build_physical_couplings(
         self,
-        logical_names: List[str],
-        mapping: Dict,
-        physical_names: List[str],
-        coupling_type: str = "capacitive",
-        coupling_strength: float = 0.010,
-    ) -> List[Dict[str, Any]]:
+        logical_names,
+        mapping,
+        physical_names,
+        physical_index,
+        coupling_type,
+        coupling_strength,
+    )-> List[Dict[str, Any]]:
         """
         Build capacitive couplings needed for syndrome extraction CNOTs.
 
@@ -178,8 +179,8 @@ class ErrorCorrectionEngine:
         seen = set()
 
         def _add(qa, qb):
-            ia = physical_names.index(qa)
-            ib = physical_names.index(qb)
+            ia = physical_index[qa]
+            ib = physical_index[qb]
             key = (min(ia, ib), max(ia, ib))
             if key not in seen:
                 seen.add(key)
@@ -276,6 +277,7 @@ class ErrorCorrectionEngine:
         syndrome_couplings: List[Dict],
         coupling_type: str,
         coupling_strength: float,
+        calibrate_cnot: bool = False,
     ) -> Dict:
         """
         Calibrate X and CNOT durations, exploiting the fact that every
@@ -333,6 +335,9 @@ class ErrorCorrectionEngine:
 
                 calibrations["x_dur"][p_name] = dur
                 calibrations["x_amp"][p_name] = 0.025  # amplitude used for pi-pulse calibration
+
+        if not calibrate_cnot:
+            return calibrations
 
         # ── CNOT syndrome-pair calibration ─────────────────────────── #
         print("[EC] Calibrating CNOT syndrome links "
@@ -520,6 +525,16 @@ class ErrorCorrectionEngine:
             rho.dims = [list(full_dims), list(full_dims)]
             new_state = U_full * rho * U_full.dag()
             new_state.dims = [list(full_dims), list(full_dims)]
+
+        #DEBUG PRINT
+
+        print(
+            "State change:",
+            (new_state - full_state).norm()
+        )
+
+        #DEBUG END
+        
         return new_state
 
     # ------------------------------------------------------------------
@@ -560,6 +575,74 @@ class ErrorCorrectionEngine:
         sub_global_idxs = [full_names.index(n) for n in sub_names]
         sub_dims        = [full_dims[i] for i in sub_global_idxs]
         N_sub           = len(sub_names)
+
+        ideal_cx_pairs = []  # (local_ctrl, local_targ) for coupler_pulse drives
+        has_only_icx = True
+        x_drives = []       # (local_idx, amplitude, phase) for microwave drives
+
+        
+        for drv in sub_drives:
+            drv_type = drv.get("type", "")
+
+            if drv_type == "ICX":
+
+                ideal_cx_pairs.append(
+                    (
+                        int(drv["control"]),
+                        int(drv["target"]),
+                    )
+                )
+
+            elif drv_type in ("X", "microwave"):
+
+                has_only_icx = False
+
+                x_drives.append(
+                    (
+                        int(drv["target"])
+                        if not isinstance(drv["target"], (tuple, list))
+                        else drv["target"][0],
+                        float(drv.get("amplitude", 0.025)),
+                        float(drv.get("phase", 0.0)),
+                    )
+                )
+
+            else:
+
+                has_only_icx = False
+
+        #
+        # Fast path:
+        # if the subsystem only contains ideal CX gates,
+        # skip all Hamiltonian construction.
+        #
+
+        if has_only_icx:
+
+            U_sub = qt.qeye(int(np.prod(sub_dims)))
+            U_sub.dims = [list(sub_dims), list(sub_dims)]
+
+
+            for control_idx, target_idx in ideal_cx_pairs:
+
+                U_icx = self.gate_engine._build_ideal_cx_operator(
+                    sub_dims,
+                    control_idx,
+                    target_idx,
+                )
+
+                U_sub = U_icx * U_sub
+
+            #DEBUG
+            print("Subsystem unitary deviation from identity:", np.linalg.norm(U_sub.full() - np.eye(U_sub.shape[0])))
+            #END DEBUG
+
+            return self._apply_unitary_to_subsystem(
+                U_sub,
+                sub_global_idxs,
+                full_state,
+                full_dims,
+            )
 
         # ── Build H_eff in the rotating frame (RWA, time-independent) ─────
         # Start with the static qubit Hamiltonian sum (dressed eigenvalues)
@@ -605,20 +688,7 @@ class ErrorCorrectionEngine:
         #    rotated by phase).  For a coupler_pulse we treat it as a
         #    time-averaged ISWAP-like transmon coupling that applies a
         #    controlled phase (CZ), which we model as the CZ unitary directly.
-        coupler_pairs = []  # (local_ctrl, local_targ) for coupler_pulse drives
-        x_drives = []       # (local_idx, amplitude, phase) for microwave drives
-        for drv in sub_drives:
-            drv_type = drv.get("type", "")
-            if drv_type == "coupler_pulse":
-                tgt = drv["target"]
-                if isinstance(tgt, (tuple, list)) and len(tgt) == 2:
-                    coupler_pairs.append((int(tgt[0]), int(tgt[1])))
-            elif drv_type in ("X", "microwave"):
-                x_drives.append((
-                    int(drv["target"]) if not isinstance(drv["target"], (tuple, list)) else drv["target"][0],
-                    float(drv.get("amplitude", 0.025)),
-                    float(drv.get("phase", 0.0)),
-                ))
+
 
         # Add rotating-frame microwave drives  Omega/2 * (e^{i*phi}|0><1| + h.c.)
         for (local_i, amp, phase) in x_drives:
@@ -651,41 +721,28 @@ class ErrorCorrectionEngine:
         U_sub  = qt.Qobj(U_mat)
         U_sub.dims = [list(sub_dims), list(sub_dims)]
 
+        # DEBUG
+        print(
+            "Hamiltonian unitary deviation from identity:",
+            np.linalg.norm(U_sub.full() - np.eye(U_sub.shape[0]))
+        )
+        # END DEBUG
+
         # Apply coupler-pulse CZ unitaries on top, one pair at a time
-        for (ic, it_) in coupler_pairs:
-            dc, dt = sub_dims[ic], sub_dims[it_]
+        #
+        # Apply ideal CX operators.
+        #
 
-            # Build CZ unitary in the 2-qubit subspace:
-            # |00>->|00>, |01>->|01>, |10>->|10>, |11>->-|11>
-            # then embed into the full sub-system space.
-            # For truncated transmons (d>2) we act only on the {0,1} subspace.
-            dim_pair = dc * dt
-            CZ_pair_mat = np.eye(dim_pair, dtype=complex)
-            # Index of |11> in the (dc, dt) space
-            idx_11 = 1 * dt + 1
-            CZ_pair_mat[idx_11, idx_11] = -1.0
+        for control_idx, target_idx in ideal_cx_pairs:
 
-            CZ_pair = qt.Qobj(CZ_pair_mat)
-            CZ_pair.dims = [[dc, dt], [dc, dt]]
+            U_icx = self.gate_engine._build_ideal_cx_operator(
+                sub_dims,
+                control_idx,
+                target_idx,
+            )
 
-            # Embed CZ_pair at positions (ic, it_) in the sub-system
-            ops_cz = [qt.qeye(sub_dims[j]) for j in range(N_sub)]
-            pair_dims = [sub_dims[j] for j in range(N_sub) if j in (ic, it_)]
-            remain_cz = [j for j in range(N_sub) if j not in (ic, it_)]
+            U_sub = U_icx * U_sub
 
-            if remain_cz:
-                I_rem = qt.tensor([qt.qeye(sub_dims[j]) for j in remain_cz])
-                CZ_combined = qt.tensor(CZ_pair, I_rem)
-                all_ord = [ic, it_] + remain_cz
-                cz_dims = [sub_dims[j] for j in all_ord]
-                CZ_combined.dims = [list(cz_dims), list(cz_dims)]
-                perm_cz = [all_ord.index(j) for j in range(N_sub)]
-                CZ_full_sub = CZ_combined.permute(perm_cz)
-            else:
-                CZ_full_sub = CZ_pair
-
-            CZ_full_sub.dims = [list(sub_dims), list(sub_dims)]
-            U_sub = CZ_full_sub * U_sub
 
         U_sub.dims = [list(sub_dims), list(sub_dims)]
 
@@ -776,6 +833,13 @@ class ErrorCorrectionEngine:
                     drv, dur = _make_x_drive(local_idx, p)
                     drives_sub.append(drv)
                     duration = max(duration, dur)
+
+                #DEBUG PRINT
+                print("\nDEBUG H drives:")
+                for d in drives_sub:
+                    print(d)
+                
+                #END DEBUG
 
                 current_state = self._simulate_subsystem(
                     sub_names=sub_names,
@@ -913,40 +977,22 @@ class ErrorCorrectionEngine:
             (d[2], a[1]),   # D2 -> A1  (local 2->4)
         ]
 
-        drives: List[Dict]    = []
+        drives: List[Dict] = []
         couplings: List[Dict] = []
-        seen_pairs: set       = set()
-        t_cursor: float       = 0.0
+        t_cursor = 0.0
 
         for ctrl_name, targ_name in cnot_pairs:
-            key      = (ctrl_name, targ_name)
-            dur      = calibrations["cnot_dur"].get(
-                key, calibrations["cnot_dur"].get((targ_name, ctrl_name), 150.0)
-            )
-            ic_local = block_names.index(ctrl_name)   # local index 0..4
-            ia_local = block_names.index(targ_name)   # local index 0..4
+
+            ic_local = block_names.index(ctrl_name)
+            ia_local = block_names.index(targ_name)
 
             drives.append({
-                "target":     (min(ic_local, ia_local), max(ic_local, ia_local)),
-                "type":       "coupler_pulse",
-                "strength":   coupling_strength,
-                "start_time": t_cursor,
-                "end_time":   t_cursor + dur,
+                "type": "ICX",
+                "control": ic_local,
+                "target": ia_local,
             })
 
-            pair_key = (min(ic_local, ia_local), max(ic_local, ia_local))
-            if pair_key not in seen_pairs:
-                seen_pairs.add(pair_key)
-                couplings.append({
-                    "q1":       pair_key[0],
-                    "q2":       pair_key[1],
-                    "type":     "capacitive",
-                    "strength": coupling_strength,
-                })
-
-            t_cursor += dur
-
-        return drives, couplings, t_cursor
+        return drives, [], 0.0
 
 
     # ------------------------------------------------------------------
@@ -955,12 +1001,13 @@ class ErrorCorrectionEngine:
 
     def _syndrome_measurement_and_correct(
         self,
-        state: qt.Qobj,
-        l_name: str,
-        mapping: Dict,
-        physical_names: List[str],
-        dims: List[int],
-    ) -> qt.Qobj:
+        state,
+        l_name,
+        mapping,
+        physical_names,
+        physical_index,
+        dims,
+    )-> qt.Qobj:
         """
         Measure ancillas A0 and A1 for a single logical block, collapse the
         wavefunction, apply the appropriate X correction, and reset ancillas.
@@ -973,11 +1020,11 @@ class ErrorCorrectionEngine:
         """
         N    = len(physical_names)
 
-        idx_D0 = physical_names.index(mapping[l_name]["data"][0])
-        idx_D1 = physical_names.index(mapping[l_name]["data"][1])
-        idx_D2 = physical_names.index(mapping[l_name]["data"][2])
-        idx_A0 = physical_names.index(mapping[l_name]["ancilla"][0])
-        idx_A1 = physical_names.index(mapping[l_name]["ancilla"][1])
+        idx_D0 = physical_index[mapping[l_name]["data"][0]]
+        idx_D1 = physical_index[mapping[l_name]["data"][1]]
+        idx_D2 = physical_index[mapping[l_name]["data"][2]]
+        idx_A0 = physical_index[mapping[l_name]["ancilla"][0]]
+        idx_A1 = physical_index[mapping[l_name]["ancilla"][1]]
 
         d_A0 = dims[idx_A0]
         d_A1 = dims[idx_A1]
@@ -1070,6 +1117,7 @@ class ErrorCorrectionEngine:
         logical_names: List[str],
         mapping: Dict,
         physical_names: List[str],
+        physical_index,
         dims: List[int],
     ) -> Dict[str, float]:
         """
@@ -1105,7 +1153,7 @@ class ErrorCorrectionEngine:
             logical_bits = ""
             for l_name in logical_names:
                 d_idxs = [
-                    physical_names.index(mapping[l_name]["data"][j])
+                    physical_index[mapping[l_name]["data"][j]]
                     for j in range(3)
                 ]
                 bits  = [min(levels[idx], 1) for idx in d_idxs]   # project to {0,1}
@@ -1128,7 +1176,7 @@ class ErrorCorrectionEngine:
         qasm_path: str,
         coupling_type: str = "capacitive",
         coupling_strength: float = 0.010,
-        ec_every_n_gates: int = 1,
+        ec_every_n_gates: int = 0,
     ) -> Dict:
         """
         Full 3-qubit repetition code workflow.
@@ -1211,21 +1259,35 @@ class ErrorCorrectionEngine:
             self.qubit_engine.get_qubit(name).truncated_dim
             for name in physical_names
         ]
+
+        physical_index = {
+            name: idx
+            for idx, name in enumerate(physical_names)
+        }
         print(f"[EC]    Local dims: {dims}")
 
         # ── Step 4: Build coupling topology ────────────────────────────
         print("[EC] 3. Building syndrome-extraction coupling topology...")
         syndrome_couplings = self._build_physical_couplings(
-            logical_names, mapping, physical_names,
-            coupling_type, coupling_strength,
+            logical_names,
+            mapping,
+            physical_names,
+            physical_index,
+            coupling_type,
+            coupling_strength,
         )
         print(f"[EC]    {len(syndrome_couplings)} coupling links defined.")
 
         # ── Step 5: Calibrate pulses ────────────────────────────────────
         print("[EC] 4. Calibrating pulses (results cached for re-use)...")
         calibrations = self._calibrate(
-            logical_names, mapping, physical_names,
-            syndrome_couplings, coupling_type, coupling_strength,
+            logical_names,
+            mapping,
+            physical_names,
+            syndrome_couplings,
+            coupling_type,
+            coupling_strength,
+            calibrate_cnot=False,
         )
 
         # ── Step 6: Initial state |00...0> ─────────────────────────────
@@ -1250,6 +1312,12 @@ class ErrorCorrectionEngine:
                 current_state,
             )
 
+            #DEBUG PRINT
+            print("\nNorm:", current_state.norm())
+            print(current_state)
+
+            #DEBUG END
+
             gate_counter += 1
 
             # 7b. Mid-circuit syndrome extraction
@@ -1258,7 +1326,7 @@ class ErrorCorrectionEngine:
                 print(f"  [EC cycle after gate {step_idx}]")
                 for l_name in logical_names:
                     current_state = self._run_syndrome_block(
-                        l_name, mapping, physical_names, dims,
+                        l_name, mapping, physical_names, physical_index, dims,
                         calibrations, coupling_strength, coupling_type,
                         current_state,
                     )
@@ -1267,7 +1335,7 @@ class ErrorCorrectionEngine:
         print("  [EC final syndrome pass]")
         for l_name in logical_names:
             current_state = self._run_syndrome_block(
-                l_name, mapping, physical_names, dims,
+                l_name, mapping, physical_names, physical_index, dims,
                 calibrations, coupling_strength, coupling_type,
                 current_state,
             )
@@ -1275,7 +1343,7 @@ class ErrorCorrectionEngine:
         # ── Step 9: Decode ─────────────────────────────────────────────
         print("\n[EC] 7. Circuit complete. Decoding final logical populations...")
         logical_pops = self._decode_logical_state(
-            current_state, logical_names, mapping, physical_names, dims
+            current_state, logical_names, mapping, physical_names, physical_index, dims
         )
 
         print("[EC] Logical state populations (majority-vote decoded):")
@@ -1300,6 +1368,7 @@ class ErrorCorrectionEngine:
         l_name: str,
         mapping: Dict,
         physical_names: List[str],
+        physical_index,
         dims: List[int],
         calibrations: Dict,
         coupling_strength: float,
@@ -1311,15 +1380,15 @@ class ErrorCorrectionEngine:
         print(f"    Syndrome extraction for logical block: {l_name}")
 
         # _syndrome_extraction_drives now returns LOCAL indices (0..4)
-        ec_drives, ec_couplings, t_total = self._syndrome_extraction_drives(
+        ec_drives, _, _ = self._syndrome_extraction_drives(
             l_name, mapping, calibrations, coupling_strength,
         )
 
         current_state = self._simulate_subsystem(
             sub_names      = block_names,
             sub_drives     = ec_drives,
-            sub_couplings  = ec_couplings,
-            duration       = t_total,
+            sub_couplings  = [],
+            duration       = 0.0,
             full_state     = current_state,
             full_names     = physical_names,
             full_dims      = dims,
@@ -1327,7 +1396,12 @@ class ErrorCorrectionEngine:
         )
 
         current_state = self._syndrome_measurement_and_correct(
-            current_state, l_name, mapping, physical_names, dims,
+            current_state,
+            l_name,
+            mapping,
+            physical_names,
+            physical_index,
+            dims,
         )
         return current_state
 

@@ -21,6 +21,7 @@ class GateEngine:
 
     _calib_cache: Dict[Tuple, Tuple[float, float]] = {}
     _cache_loaded: bool = False
+    _icx_cache: Dict[Tuple, qt.Qobj] = {}
 
     def __init__(self):
         """Initialize the gate engine."""
@@ -995,34 +996,53 @@ class GateEngine:
         accumulated_phase = np.trapezoid(envelope, tlist)
         return accumulated_phase
     
-    def _apply_ideal_cx(self,
-                        state: qt.Qobj,
-                        dims: List[int],
-                        control_idx: int,
-                        target_idx: int) -> qt.Qobj:
+    def _build_ideal_cx_operator(
+        self,
+        dims: List[int],
+        control_idx: int,
+        target_idx: int,
+    ) -> qt.Qobj:
         """
-        Apply an ideal instantaneous CX gate.
-
-        Works on arbitrary qubit indices inside an N-qubit system.
-
-        Example:
-            control_idx = 3
-            target_idx = 7
-
-        in a 10-qubit register.
+        Build (or retrieve from cache) the ideal CX unitary acting on an
+        arbitrary pair of qubits in an N-qubit register.
         """
+
+        if control_idx == target_idx:
+            raise ValueError(
+                "Ideal CX requires different control and target qubits."
+            )
+
+        if not (0 <= control_idx < len(dims)):
+            raise IndexError(
+                f"Control index {control_idx} outside register."
+            )
+
+        if not (0 <= target_idx < len(dims)):
+            raise IndexError(
+                f"Target index {target_idx} outside register."
+            )
+
+        cache_key = (
+            tuple(dims),
+            control_idx,
+            target_idx,
+        )
+
+        if cache_key in GateEngine._icx_cache:
+            return GateEngine._icx_cache[cache_key]
 
         import itertools
 
         total_dim = int(np.prod(dims))
 
-        U = np.eye(total_dim, dtype=complex)
+        U = np.zeros(
+            (total_dim, total_dim),
+            dtype=complex,
+        )
 
         computational_states = list(
             itertools.product([0, 1], repeat=len(dims))
         )
-
-        U[:] = 0
 
         for bits in computational_states:
 
@@ -1031,17 +1051,54 @@ class GateEngine:
             if bits[control_idx] == 1:
                 output_bits[target_idx] ^= 1
 
-            in_idx = np.ravel_multi_index(bits, dims)
-            out_idx = np.ravel_multi_index(tuple(output_bits), dims)
+            in_idx = np.ravel_multi_index(
+                bits,
+                dims,
+            )
+
+            out_idx = np.ravel_multi_index(
+                tuple(output_bits),
+                dims,
+            )
 
             U[out_idx, in_idx] = 1.0
 
-        # Preserve all leakage states |2>,|3>,...
+        #
+        # Preserve leakage states
+        #
+
         for idx in range(total_dim):
+
             if np.allclose(U[:, idx], 0):
+
                 U[idx, idx] = 1.0
 
-        return qt.Qobj(U) * state
+        op = qt.Qobj(U)
+        op.dims = [list(dims), list(dims)]
+
+        GateEngine._icx_cache[cache_key] = op
+
+        return op
+
+
+    def _apply_ideal_cx(
+            self,
+            state: qt.Qobj,
+            dims: List[int],
+            control_idx: int,
+            target_idx: int,
+        ) -> qt.Qobj:
+            """
+            Apply an ideal instantaneous CX gate.
+            """
+
+            U = self._build_ideal_cx_operator(
+                dims,
+                control_idx,
+                target_idx,
+            )
+
+            return U * state
 
     def simulate_n_qubit_dynamics(self,
                                   qubit_names: List[str],

@@ -241,12 +241,23 @@ class PhysicalWorkflowEngine:
             ctype = c_conf["type"]
 
             if ctype == "tunable_coupler":
+                # Physically a tunable-coupler CNOT is compiled as H(target) -> CZ -> H(target).
+                # The CZ leg only reaches the |11>-|02> avoided crossing if the target qubit is
+                # flux-detuned into resonance for the duration of the coupler pulse - this must
+                # mirror the same flux_pulse + Stark-shift-corrected closing pulse that
+                # GateEngine.simulate_n_qubit_dynamics uses internally when it calibrates dur_cx
+                # (see the CNOT/tunable_coupler auto-compile block), otherwise the calibrated
+                # duration corresponds to a gate that is never actually executed here.
                 t_h = calibrations["single_qubit"][qubit_names[targ_idx]]["X"] / 2.0
+                detuning = self.g_eng._calculate_resonant_flux(qubit_names[ctrl_idx], qubit_names[targ_idx])
+                stark_shift_phase = self.g_eng._calculate_stark_shift(detuning, dur_cx)
+
                 schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": -np.pi / 2, "start_time": t_start, "end_time": t_start + t_h})
                 t1 = t_start + t_h
                 schedule.append({"target": (min(ctrl_idx, targ_idx), max(ctrl_idx, targ_idx)), "type": "coupler_pulse", "strength": c_conf["strength"], "start_time": t1, "end_time": t1 + dur_cx})
+                schedule.append({"target": targ_idx, "type": "flux_pulse", "detuning": detuning, "start_time": t1, "end_time": t1 + dur_cx})
                 t2 = t1 + dur_cx
-                schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": np.pi / 2, "start_time": t2, "end_time": t2 + t_h})
+                schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": np.pi / 2 + stark_shift_phase, "start_time": t2, "end_time": t2 + t_h})
                 return t2 + t_h
             else:
                 schedule.append({"target": ctrl_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur_cx})

@@ -104,6 +104,35 @@ def _proj1_dim(d: int) -> qt.Qobj:
     return qt.Qobj(mat)
 
 
+def _build_ideal_cz_operator(dims: List[int], idx_a: int, idx_b: int) -> qt.Qobj:
+    """
+    Ideal CZ unitary acting on a pair of qubits in an N-qubit register:
+    applies a -1 phase to the |1>|1> computational amplitude and leaves
+    every other computational and leakage amplitude untouched (diagonal,
+    unitary, leakage-preserving — mirrors GateEngine._build_ideal_cx_operator).
+
+    Every qubit outside {idx_a, idx_b} is iterated over its full local
+    dimension (not restricted to {0,1}): a spectator qubit sitting in a
+    leakage level must not block the CZ phase from being applied to
+    idx_a/idx_b, and must not itself be touched by this gate.
+    """
+    import itertools
+
+    total_dim = int(np.prod(dims))
+    U = np.eye(total_dim, dtype=complex)
+
+    full_dim_ranges = [range(d) for d in dims]
+
+    for levels in itertools.product(*full_dim_ranges):
+        if levels[idx_a] == 1 and levels[idx_b] == 1:
+            idx = np.ravel_multi_index(levels, dims)
+            U[idx, idx] = -1.0
+
+    op = qt.Qobj(U)
+    op.dims = [list(dims), list(dims)]
+    return op
+
+
 # ---------------------------------------------------------------------------
 # Main Engine
 # ---------------------------------------------------------------------------
@@ -504,6 +533,7 @@ class ErrorCorrectionEngine:
         N_sub           = len(sub_names)
 
         ideal_cx_pairs = []  # (local_ctrl, local_targ) for ideal CX drives
+        ideal_cz_pairs = []  # (local_a, local_b) for ideal CZ drives
         ideal_single_qubit_ops = []  # (gate_name, local_idx) for ideal X/H drives
         has_only_ideal = True
         x_drives = []  # (local_idx, amplitude, phase) for microwave drives
@@ -513,6 +543,13 @@ class ErrorCorrectionEngine:
 
             if drv_type == "ICX":
                 ideal_cx_pairs.append(
+                    (
+                        int(drv["control"]),
+                        int(drv["target"]),
+                    )
+                )
+            elif drv_type == "ICZ":
+                ideal_cz_pairs.append(
                     (
                         int(drv["control"]),
                         int(drv["target"]),
@@ -560,6 +597,14 @@ class ErrorCorrectionEngine:
                     sub_dims,
                     control_idx,
                     target_idx,
+                )
+                U_sub = U_step * U_sub
+
+            for idx_a, idx_b in ideal_cz_pairs:
+                U_step = _build_ideal_cz_operator(
+                    sub_dims,
+                    idx_a,
+                    idx_b,
                 )
                 U_sub = U_step * U_sub
 
@@ -669,6 +714,16 @@ class ErrorCorrectionEngine:
 
             U_sub = U_icx * U_sub
 
+        for idx_a, idx_b in ideal_cz_pairs:
+
+            U_icz = _build_ideal_cz_operator(
+                sub_dims,
+                idx_a,
+                idx_b,
+            )
+
+            U_sub = U_icz * U_sub
+
 
         U_sub.dims = [list(sub_dims), list(sub_dims)]
 
@@ -737,7 +792,11 @@ class ErrorCorrectionEngine:
             amp_pi = calibrations["x_amp"].get(phys_name, 0.025)
             drive = {
                 "target":     local_idx,
-                "type":       "X",
+                # "type" must be "H", not "X": _simulate_subsystem's ideal
+                # fast-path dispatches purely on this field, so tagging an
+                # H-gate drive as "X" made every logical H execute as an
+                # ideal bit-flip instead of a Hadamard.
+                "type":       "H",
                 "amplitude":  amp_pi / 2.0,   # amp_h = amp_pi / 2
                 "frequency":  w01,
                 "phase":      -np.pi / 2,
@@ -827,14 +886,17 @@ class ErrorCorrectionEngine:
                     )
                     dur = max(dur, key_dur)
 
-                # Build three ideal CX gates in local indices:
+                # Build three ideal two-qubit gates in local indices:
                 # (0,3), (1,4), (2,5) — each acts on the corresponding data qubits
-                # across the two logical blocks.
+                # across the two logical blocks. CZ must use the ideal CZ operator,
+                # not CX/CNOT — they are different gates and were previously
+                # conflated here, silently executing a logical CZ as a CNOT.
+                drive_type = "ICZ" if gate == "CZ" else "ICX"
                 combined_drives = []
                 combined_couplings = []
                 for local_ctrl, local_targ in [(0, 3), (1, 4), (2, 5)]:
                     combined_drives.append({
-                        "type": "ICX",
+                        "type": drive_type,
                         "control": local_ctrl,
                         "target": local_targ,
                     })

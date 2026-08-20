@@ -582,6 +582,9 @@ class GateEngine:
 
 
         # 4. SETUP RANGES (Analytical Estimation)
+        tc_points_per_scale = None  # set below only when the tunable_coupler
+        # duration range is auto-generated; guards the fine-sweep step logic
+        # below against an explicitly-passed range_vals (no auto-estimation).
         if len(range_vals) == 0:
             if parameter == "duration":
                 # --- A. Single Qubit Gates ---
@@ -600,13 +603,34 @@ class GateEngine:
                     # Sweep a +/- 25% window around the 1-pi peak (safely avoids the 3-pi peak)
                     range_vals = np.linspace(T_est * 0.75, T_est * 1.25, 20)
 
-                # --- B. Tunable Coupler CZ ---
+                # --- B. Tunable Coupler CZ / CNOT ---
                 elif coupling_type == "tunable_coupler":
                     if coupling_strength > 0:
                         T_est = 1.0 / (np.sqrt(2) * coupling_strength)
                     else:
                         T_est = 40.0
-                    range_vals = np.linspace(T_est * 0.85, T_est * 1.15, 20)
+                    # T_est = 1/(sqrt(2)*g) is only a bare-coupling estimate of the
+                    # |11>-|02> avoided-crossing period. For a CNOT compiled as
+                    # H-CZ-H, the actual achievable fidelity as a function of the
+                    # coupler-pulse duration is a jagged, multi-peaked landscape
+                    # (interference between the coupling-driven population
+                    # transfer and the qubit-qubit detuning's own fast dynamical
+                    # phase), and the tallest peak is not reliably near T_est - it
+                    # can sit at a small fraction of T_est or several multiples
+                    # above it depending on the qubit pair. A narrow +/-15% window
+                    # around T_est alone can miss every good point. Sample several
+                    # candidate scales of T_est, both below and above it, so the
+                    # coarse sweep has a real chance of landing near whichever
+                    # region actually contains the best resonance for this pair.
+                    tc_points_per_scale = 12
+                    tc_candidate_centers = [
+                        T_est * s
+                        for s in (0.15, 0.25, 0.4, 0.65, 1.0, 1.5, 2.2, 3.3, 5.0, 7.5)
+                    ]
+                    range_vals = np.concatenate([
+                        np.linspace(max(0.5, c * 0.85), c * 1.15, tc_points_per_scale)
+                        for c in tc_candidate_centers
+                    ])
 
                 # --- C. Capacitive CZ ---
                 elif coupling_type == "capacitive" and gate_type == "CZ" and coupling_strength > 0:
@@ -679,10 +703,22 @@ class GateEngine:
         best_val = range_vals[best_idx]
         max_metric = metrics[best_idx]
 
-        # 7. Fine sweep 
+        # 7. Fine sweep
         if max_metric > 0.1:
-             step = abs(range_vals[1] - range_vals[0]) if len(range_vals) > 1 else 5.0
-             
+             if tc_points_per_scale is not None and len(range_vals) > 1:
+                 # range_vals here is a concatenation of several per-scale segments
+                 # (see the tunable_coupler duration estimate above) and is not
+                 # uniformly spaced, so the global first-two-point gap is not a
+                 # meaningful step size. Use the spacing of the segment that
+                 # actually produced the winning point instead.
+                 seg_len = tc_points_per_scale
+                 seg_idx = min(best_idx // seg_len, (len(range_vals) - 1) // seg_len)
+                 seg_start = seg_idx * seg_len
+                 seg_end = min(seg_start + seg_len, len(range_vals)) - 1
+                 step = abs(range_vals[seg_end] - range_vals[seg_start]) / max(seg_end - seg_start, 1)
+             else:
+                 step = abs(range_vals[1] - range_vals[0]) if len(range_vals) > 1 else 5.0
+
              # Zoom in strictly on the highest point from the coarse sweep
              bound_lower = max(0.1, best_val - step)
              bound_upper = best_val + step
@@ -1035,43 +1071,36 @@ class GateEngine:
 
         total_dim = int(np.prod(dims))
 
-        U = np.zeros(
-            (total_dim, total_dim),
-            dtype=complex,
-        )
+        # Start from the identity: any basis state where the control or
+        # target qubit itself is outside {0,1} (leaked) is left untouched
+        # below, and every *other* (spectator) qubit in the register keeps
+        # whatever level it is in — including leakage levels — since only
+        # the control/target loop below ever overwrites an entry. Iterating
+        # bystander qubits over their full local dimension (instead of only
+        # {0,1}) is required: a previous version restricted every qubit in
+        # the register to {0,1} when enumerating basis states, which meant
+        # a leaked spectator qubit anywhere else in the register silently
+        # turned this CX into a no-op instead of acting on control/target.
+        U = np.eye(total_dim, dtype=complex)
 
-        computational_states = list(
-            itertools.product([0, 1], repeat=len(dims))
-        )
+        full_dim_ranges = [range(d) for d in dims]
 
-        for bits in computational_states:
+        for levels in itertools.product(*full_dim_ranges):
 
-            output_bits = list(bits)
+            if levels[control_idx] >= 2 or levels[target_idx] >= 2:
+                continue  # leakage on control or target -> identity
 
-            if bits[control_idx] == 1:
-                output_bits[target_idx] ^= 1
+            if levels[control_idx] != 1:
+                continue  # control in |0> -> identity
 
-            in_idx = np.ravel_multi_index(
-                bits,
-                dims,
-            )
+            output_levels = list(levels)
+            output_levels[target_idx] = 1 - output_levels[target_idx]
 
-            out_idx = np.ravel_multi_index(
-                tuple(output_bits),
-                dims,
-            )
+            in_idx = np.ravel_multi_index(levels, dims)
+            out_idx = np.ravel_multi_index(tuple(output_levels), dims)
 
+            U[in_idx, in_idx] = 0.0
             U[out_idx, in_idx] = 1.0
-
-        #
-        # Preserve leakage states
-        #
-
-        for idx in range(total_dim):
-
-            if np.allclose(U[:, idx], 0):
-
-                U[idx, idx] = 1.0
 
         op = qt.Qobj(U)
         op.dims = [list(dims), list(dims)]
@@ -1339,7 +1368,15 @@ class GateEngine:
                 "type": "X", 
                 "amplitude": 0.025, 
                 "frequency": w01_target, 
-                "phase": np.pi / 2 + stark_shift_phase + virtual_z, 
+                # Add the accumulated Stark (Z) phase to undo the dynamical phase the
+                # target picked up while flux-detuned during the coupler pulse. This
+                # sign was verified against the actual control-dependence of the
+                # compiled gate: with "-stark_shift_phase" the H-CZ-H sandwich loses
+                # essentially all conditional behavior (|00> and |10> both end up
+                # flipping the target with near-identical probability, i.e. it stops
+                # being a controlled gate at all); with "+stark_shift_phase" the
+                # control=0 branch correctly leaves the target unchanged.
+                "phase": np.pi / 2 + stark_shift_phase + virtual_z,
                 "start_time": current_time, 
                 "end_time": current_time + t_h
             })

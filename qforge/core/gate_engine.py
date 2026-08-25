@@ -22,6 +22,13 @@ class GateEngine:
     _calib_cache: Dict[Tuple, Tuple[float, float]] = {}
     _cache_loaded: bool = False
     _icx_cache: Dict[Tuple, qt.Qobj] = {}
+    # Refined flux-pulse detuning found by calibrate_gate()'s tunable-coupler
+    # CNOT local refinement stage, keyed by (q1_name, q2_name, coupling_type,
+    # coupling_strength). Checked by the CNOT/tunable_coupler auto-compile
+    # block in simulate_n_qubit_dynamics before falling back to the analytic
+    # _calculate_resonant_flux() estimate. In-memory only (not persisted to
+    # disk): it's a per-session refinement, not a portable calibration value.
+    _detuning_cache: Dict[Tuple, float] = {}
 
     def __init__(self):
         """Initialize the gate engine."""
@@ -582,9 +589,10 @@ class GateEngine:
 
 
         # 4. SETUP RANGES (Analytical Estimation)
-        tc_points_per_scale = None  # set below only when the tunable_coupler
-        # duration range is auto-generated; guards the fine-sweep step logic
-        # below against an explicitly-passed range_vals (no auto-estimation).
+        tc_points_per_scale = None    # set below only when the tunable_coupler
+        tc_candidate_centers = None   # duration range is auto-generated; guards the
+        # fine-sweep step logic and the duration/detuning refinement stage below
+        # against an explicitly-passed range_vals (no auto-estimation).
         if len(range_vals) == 0:
             if parameter == "duration":
                 # --- A. Single Qubit Gates ---
@@ -674,14 +682,34 @@ class GateEngine:
                         metric = res["populations"]["1"][-1] if "1" in res["populations"] else 0.0
                         
                 elif gate_type == "CNOT":
-                    res = self.simulate_two_qubit_dynamics(
-                        q1_name, q2_name, gate_type, coupling_type, coupling_strength, 
-                        duration=current_dur, steps=40, detuning=current_det, 
-                        use_drag=kwargs["use_drag"], drag_lambda=kwargs["drag_lambda"], 
+                    # A CNOT must satisfy BOTH branches: control=1 flips the target
+                    # (|10>->|11>) AND control=0 leaves it alone (|00>->|00>).
+                    # Scoring only the |10>->P(11) transfer can't tell a genuine
+                    # conditional flip apart from an unconditional one that
+                    # happens to flip the target regardless of control - both
+                    # score perfectly on that single check. Taking the minimum
+                    # of both branches' fidelities means a high metric can only
+                    # be reached by a duration where the gate is actually
+                    # control-dependent, not just "sometimes flips the target".
+                    res_on = self.simulate_two_qubit_dynamics(
+                        q1_name, q2_name, gate_type, coupling_type, coupling_strength,
+                        duration=current_dur, steps=40, detuning=current_det,
+                        use_drag=kwargs["use_drag"], drag_lambda=kwargs["drag_lambda"],
                         initial_state="10",
                         virtual_z = current_vz
                     )
-                    metric = res["populations"]["11"][-1]
+                    fidelity_on = res_on["populations"]["11"][-1]
+
+                    res_off = self.simulate_two_qubit_dynamics(
+                        q1_name, q2_name, gate_type, coupling_type, coupling_strength,
+                        duration=current_dur, steps=40, detuning=current_det,
+                        use_drag=kwargs["use_drag"], drag_lambda=kwargs["drag_lambda"],
+                        initial_state="00",
+                        virtual_z=current_vz
+                    )
+                    fidelity_off = res_off["populations"]["00"][-1]
+
+                    metric = min(fidelity_on, fidelity_off)
                     
                 elif gate_type == "CZ":
                     phase_pi = self._calculate_interaction_phase_metric(
@@ -733,7 +761,99 @@ class GateEngine:
              if fine_metrics[fine_best_idx] > max_metric:
                  best_val = fine_range[fine_best_idx]
                  max_metric = fine_metrics[fine_best_idx]
-             
+
+        # 7b. Local duration/detuning refinement (tunable-coupler CNOT only)
+        #
+        # The sweep above holds detuning fixed at the analytic
+        # _calculate_resonant_flux() estimate and only searches duration.
+        # That estimate comes from a static bare-frequency |11>-|02>
+        # crossing condition; in practice, with the flat-top flux pulse
+        # actually used, the true best detuning for a given duration differs
+        # from that estimate by an amount that itself depends on duration
+        # (verified empirically - there is no single fixed correction factor
+        # that works across durations). A duration-only search can therefore
+        # land on a point that scores well on a single initial state but is
+        # not genuinely control-dependent. Re-examine the best few duration
+        # candidates already evaluated above (no extra duration-only
+        # evaluations needed) together with a local detuning sweep at each,
+        # and keep whichever (duration, detuning) pair is genuinely best.
+        if (
+            gate_type == "CNOT"
+            and coupling_type == "tunable_coupler"
+            and parameter == "duration"
+            and max_metric > 0.15
+            and kwargs["detuning"] != 0.0
+        ):
+            base_det = kwargs["detuning"]
+
+            all_vals = list(range_vals)
+            all_metrics = list(metrics)
+            if max_metric > 0.1 and "fine_range" in dir():
+                all_vals += list(fine_range)
+                all_metrics += list(fine_metrics)
+
+            top_order = np.argsort(all_metrics)[::-1][:4]
+            candidate_durations = {float(all_vals[i]) for i in top_order} | {float(best_val)}
+            if tc_candidate_centers is not None:
+                # Also try each original multi-scale duration estimate directly,
+                # not just whatever scored best at the single default detuning -
+                # the best JOINT (duration, detuning) point can sit at a duration
+                # that only looks mediocre when evaluated at the analytic
+                # detuning estimate alone.
+                candidate_durations |= {float(c) for c in tc_candidate_centers}
+            candidate_durations = sorted(candidate_durations)
+            det_range = np.linspace(base_det * 0.7, base_det * 1.2, 13)
+
+            def _evaluate_pair(dur_val, det_val):
+                try:
+                    res_on = self.simulate_two_qubit_dynamics(
+                        q1_name, q2_name, "CNOT", coupling_type, coupling_strength,
+                        duration=dur_val, steps=40, detuning=det_val,
+                        use_drag=kwargs["use_drag"], drag_lambda=kwargs["drag_lambda"],
+                        initial_state="10", virtual_z=kwargs.get("virtual_z", 0.0),
+                    )
+                    fidelity_on = res_on["populations"]["11"][-1]
+                    res_off = self.simulate_two_qubit_dynamics(
+                        q1_name, q2_name, "CNOT", coupling_type, coupling_strength,
+                        duration=dur_val, steps=40, detuning=det_val,
+                        use_drag=kwargs["use_drag"], drag_lambda=kwargs["drag_lambda"],
+                        initial_state="00", virtual_z=kwargs.get("virtual_z", 0.0),
+                    )
+                    fidelity_off = res_off["populations"]["00"][-1]
+                    return min(fidelity_on, fidelity_off)
+                except Exception:
+                    return -1.0
+
+            print(
+                f" -> Local duration/detuning refinement "
+                f"({len(candidate_durations)} durations x {len(det_range)} detunings)..."
+            )
+            last_print = " -> Local duration/detuning refinement..."
+
+            best_refined = (max_metric, float(best_val), float(base_det))
+            for dur_val in candidate_durations:
+                for det_val in det_range:
+                    m = _evaluate_pair(dur_val, float(det_val))
+                    if m > best_refined[0]:
+                        best_refined = (m, dur_val, float(det_val))
+
+            if best_refined[0] > max_metric:
+                max_metric, best_val, refined_det = best_refined
+                GateEngine._detuning_cache[
+                    (
+                        q1_name, q2_name, coupling_type, float(coupling_strength),
+                        round(float(best_val), 6),
+                    )
+                ] = refined_det
+                print(
+                    f"    -> Refined duration={best_val:.4f}  detuning={refined_det:.4f} GHz "
+                    f"(Metric: {max_metric:.4f})"
+                )
+                last_print = (
+                    f"    -> Refined duration={best_val:.4f}  detuning={refined_det:.4f} GHz "
+                    f"(Metric: {max_metric:.4f})"
+                )
+
         print(f"  -> Calibrated {parameter.capitalize()}: {best_val:.4f} (Metric: {max_metric:.4f})")
         last_print = f"  -> Calibrated {parameter.capitalize()}: {best_val:.4f} (Metric: {max_metric:.4f})"
         GateEngine._calib_cache[cache_key] = (best_val, max_metric)
@@ -792,11 +912,38 @@ class GateEngine:
                 op_list = [qt.qeye(d) for d in dims]
                 op_list[target_idx] = qt.num(dims[target_idx])
                 op_flux = qt.tensor(op_list)
-                
-                def make_flux_coeff(det_val, ts, dur):
-                     mu = ts + dur / 2.0
-                     sigma = dur / 6.0 if dur > 0 else 1.0
-                     return lambda t, args: det_val * np.exp(-0.5 * ((t - mu) / sigma)**2) if (ts <= t <= ts + dur) else 0.0
+
+                def make_flux_coeff(det_val, ts, dur, edge_frac=0.15):
+                     # Smooth flat-top (raised-cosine rise/fall, steady hold at
+                     # det_val in between) instead of a full-width Gaussian.
+                     #
+                     # The tunable-coupler CZ/CNOT drives this qubit's own energy
+                     # continuously from 0 up to det_val to reach the intended
+                     # |11>-|02> avoided crossing. But the sweep from 0 to det_val
+                     # also passes through OTHER, unintended near-resonances that
+                     # a 2-level bare-frequency picture ignores - most notably
+                     # |11>-|c2> (the control promoted to its own second excited
+                     # level), which depends on the control qubit's own
+                     # anharmonicity rather than the target's. A full-duration
+                     # Gaussian spends the entire pulse sweeping continuously
+                     # through that intermediate value, adiabatically transferring
+                     # population into it. Reaching det_val quickly and holding it
+                     # steady for most of the pulse (like a real experimental flux
+                     # bias step) minimizes the time spent near that unwanted
+                     # crossing while remaining adiabatic at the intended one,
+                     # which is held for the bulk of the duration.
+                     edge = max(edge_frac * dur, 1e-9)
+                     def _coeff(t, args):
+                         if t < ts or t > ts + dur:
+                             return 0.0
+                         tau = t - ts
+                         if tau < edge:
+                             return det_val * 0.5 * (1.0 - np.cos(np.pi * tau / edge))
+                         if tau > dur - edge:
+                             tau_end = dur - tau
+                             return det_val * 0.5 * (1.0 - np.cos(np.pi * tau_end / edge))
+                         return det_val
+                     return _coeff
                      
                 flux_func = make_flux_coeff(det, t_start, pulse_dur)
                 H_total.append([op_flux, flux_func])
@@ -1010,24 +1157,37 @@ class GateEngine:
 
         return w1 - w2 - alpha2
     
-    def _calculate_stark_shift(self, detuning: float, duration: float) -> float:
+    def _calculate_stark_shift(self, detuning: float, duration: float, edge_frac: float = 0.15) -> float:
         """
         Calculates the dynamical phase (Stark shift) accumulated by the target qubit
-        during a Gaussian flux pulse using a numerical integral.
+        during the flux pulse, by numerically integrating the SAME flat-top envelope
+        (raised-cosine rise/fall, steady hold at `detuning` in between) that
+        `_build_time_dependent_hamiltonian`'s "flux_pulse" handler (make_flux_coeff)
+        actually applies. This must stay in sync with that envelope shape - if the
+        two diverge, the closing pulse's phase correction no longer matches the
+        dynamical phase the qubit actually accumulated, and the H-CZ-H sandwich
+        stops correctly canceling for the control=0 branch.
         """
         if detuning == 0.0 or duration <= 0.0:
             return 0.0
-            
+
         tlist = np.linspace(0, duration, 1000)
-        mu = duration / 2.0
-        sigma = duration / 6.0 if duration > 0 else 1.0
-        
+        edge = max(edge_frac * duration, 1e-9)
+
         # Convert the detuning from GHz to angular frequency (rad/ns)
         det_val_rad = detuning * 2 * np.pi
-        
-        # Reconstruct the exact Gaussian envelope of the flux pulse
-        envelope = det_val_rad * np.exp(-0.5 * ((tlist - mu) / sigma)**2)
-        
+
+        # Reconstruct the exact flat-top envelope of the flux pulse
+        envelope = np.where(
+            tlist < edge,
+            det_val_rad * 0.5 * (1.0 - np.cos(np.pi * tlist / edge)),
+            np.where(
+                tlist > duration - edge,
+                det_val_rad * 0.5 * (1.0 - np.cos(np.pi * (duration - tlist) / edge)),
+                det_val_rad,
+            ),
+        )
+
         # Integrate the frequency shift over time to get total accumulated phase
         accumulated_phase = np.trapezoid(envelope, tlist)
         return accumulated_phase
@@ -1305,7 +1465,24 @@ class GateEngine:
         # flux pulse detuning implicit calculation
         if N == 2 and gate_type in ["CNOT", "CZ"] and couplings and couplings[0].get("type") == "tunable_coupler":
             if detuning == 0.0:
-                detuning = self._calculate_resonant_flux(qubit_names[0], qubit_names[1])
+                # Prefer a detuning already refined by calibrate_gate()'s local
+                # duration/detuning search (see the CNOT branch there) over the
+                # raw analytic estimate - but ONLY when this call is using the
+                # exact duration that refinement was validated for. The best
+                # detuning correction is duration-dependent (verified
+                # empirically - it is not a fixed offset from the analytic
+                # estimate), so applying a refinement found for one duration
+                # to a different, unrelated duration could easily make things
+                # worse rather than better.
+                cache_key = (
+                    qubit_names[0], qubit_names[1],
+                    "tunable_coupler", float(couplings[0].get("strength", 0.0)),
+                    round(float(duration), 6),
+                )
+                detuning = GateEngine._detuning_cache.get(
+                    cache_key,
+                    self._calculate_resonant_flux(qubit_names[0], qubit_names[1]),
+                )
         
         # For a tunable coupler, a CNOT is physically implemented as an H-CZ-H sequence.
         # This block compiles that logical gate into a single, continuous physical pulse schedule.

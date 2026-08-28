@@ -7,20 +7,23 @@ for stabilizer error-correcting codes.
 
 The engine is written generically in terms of a `StabilizerCode`
 specification (see stabilizer_codes.py): stabilizer generators, a
-syndrome -> correction lookup table, transversal logical-operator support,
-and a decoder. The engine itself never hard-codes a specific code's
-generator count, qubit count, or syndrome table -- it reads all of that from
-the `StabilizerCode` it is given. This means a new CSS stabilizer code (e.g.
-the Steane or Shor code) can be added by writing a new `StabilizerCode`
-instance in stabilizer_codes.py; no changes to this file are required, as
-long as the new code's generators are CSS-type (pure X or pure Z, never
-mixed on one generator).
+syndrome -> correction lookup table, and transversal logical-operator
+support. The engine itself never hard-codes a specific code's generator
+count, qubit count, or syndrome table -- it reads all of that from the
+`StabilizerCode` it is given. This means a new CSS stabilizer code can be
+added by writing a new `StabilizerCode` instance in stabilizer_codes.py; no
+changes to this file are required, as long as the new code's generators are
+CSS-type (pure X or pure Z, never mixed on one generator).
 
-The only code implemented today is the 3-qubit bit-flip repetition code
-(`stabilizer_codes.REPETITION_3`), which `execute_3q_repetition_workflow()`
-runs by default for backward compatibility. Its physical behaviour --
-encoding, transversal gates, syndrome extraction, feed-forward correction,
-and decoding -- is unchanged from the previous hard-coded implementation.
+Two codes are implemented today:
+  - the 3-qubit bit-flip repetition code (`stabilizer_codes.REPETITION_3`),
+    run by `execute_3q_repetition_workflow()` for backward compatibility.
+    Its physical behaviour -- encoding, transversal gates, syndrome
+    extraction, feed-forward correction, and decoding -- is numerically
+    unchanged from the original hard-coded implementation.
+  - the 9-qubit Shor code (`stabilizer_codes.SHOR_9`), run by
+    `execute_shor9_workflow()`.
+Both are just call sites for the generic `execute_stabilizer_workflow()`.
 
 Architecture
 ------------
@@ -31,10 +34,26 @@ Each *logical* qubit L is encoded into `code.num_data + code.num_ancilla`
     D2 = L_D2   (data)
     A0 = L_A0   (ancilla – parity check D0⊕D1)
     A1 = L_A1   (ancilla – parity check D1⊕D2)
+For the 9-qubit Shor code that is 17 qubits (9 data + 8 ancilla) -- see
+stabilizer_codes.py for the block structure and generator layout.
 
 Physical qubits in each block are clones of the original logical qubit
 (same scqubits type and parameters), matching the "same name → same type"
 convention used throughout qforge.
+
+Scalability note: gates, syndrome extraction, and encoding are all
+simulated on small per-generator/per-qubit(-pair) subsystems (see below),
+so no single dense operator ever spans a whole code block. The overall
+STATE VECTOR, however, always spans every physical qubit in the workflow at
+once (this engine has no other state representation), so its size is
+2**(total physical qubits) regardless of how gates are simulated. One Shor-
+encoded logical qubit (17 physical qubits, 2**17 states) is small; several
+Shor-encoded logical qubits in the same workflow (34+ physical qubits) can
+exceed available memory when built as a dense state vector -- this is a
+pre-existing limit of the engine's dense global-state-vector
+representation (the repetition code hits the same wall, just at a much
+higher logical-qubit count thanks to its 5-qubit-per-block footprint), not
+specific to the stabilizer-formalism machinery itself.
 
 Workflow per execute_stabilizer_workflow() call
 ------------------------------------------------
@@ -43,22 +62,45 @@ Workflow per execute_stabilizer_workflow() call
 3. Build the full physical coupling list from the code's stabilizer
    generators (capacitive, used for syndrome-extraction CNOT drives).
 4. Calibrate single-qubit X and two-qubit CNOT pulse durations once.
-5. For every logical instruction:
-   a. Map the logical gate to a *transversal* physical drive schedule
-      (apply the gate to every data qubit in the logical block).
-   b. Physically simulate the drives from the current quantum state.
-   c. Run a syndrome extraction cycle, generated from `code.generators`:
-      - For each Z-type generator: CNOT(data -> ancilla) per data qubit.
-      - For each X-type generator: H(ancilla), CNOT(ancilla -> data) per
-        data qubit, H(ancilla) -- so a direct Z-basis ancilla readout
-        yields the stabilizer eigenvalue either way.
-      - Physically simulate the syndrome CNOTs.
-      - Measure (project) all ancillas, collapse the wavefunction.
-      - Look up the measured syndrome in `code.syndrome_to_correction` and
-        apply the indicated feed-forward Pauli correction.
-      - Reset ancillas back to |0⟩ via X if they were found in |1⟩.
-6. Decode the final physical state via `code.decode()` (majority-vote for
-   the repetition code).
+5. Initialize the physical register to |00...0> and then run
+   `code.encoding_circuit` against each logical block's data qubits to
+   prepare the actual codeword |0>_L. This is not a no-op in general (only
+   for the repetition code, whose |0>_L already equals |000>) -- see
+   `_encode_logical_zero`.
+6. For every logical instruction, apply a *transversal* physical drive
+   schedule built from the code's declared logical-operator support
+   (`code.logical_x_qubits`/`code.logical_x_pauli` for X; every data qubit
+   for H; corresponding data-qubit pairs across two logical blocks for
+   CX/CZ), simulating one qubit (or qubit pair) at a time so the simulated
+   Hilbert space never has to span an entire large code block at once.
+7. Run a syndrome extraction + measurement + correction cycle, GENERATOR BY
+   GENERATOR (never as one combined operation across the whole block):
+      - For each generator, simulate ONLY its own participating data
+        qubits + its own ancilla as a small subsystem:
+          * Z-type: CNOT(data -> ancilla) per data qubit.
+          * X-type: H(ancilla), CNOT(ancilla -> data) per data qubit,
+            H(ancilla) -- so a direct Z-basis ancilla readout yields the
+            stabilizer eigenvalue either way.
+      - Measure that ONE ancilla, collapse the wavefunction, record its bit.
+      Because a valid code's generators always mutually commute, measuring
+      them one at a time gives EXACTLY the same joint outcome distribution
+      and post-measurement state as measuring them all jointly -- this
+      generator-by-generator processing is required to keep every
+      simulated subsystem's dimension bounded by the code's largest
+      generator weight (up to 7 qubits for Shor) rather than its total
+      qubit count (17 for Shor), which the dense-matrix simulation backend
+      cannot handle directly.
+      Once every generator has been measured, look up the full syndrome in
+      `code.syndrome_to_correction` (a LIST of corrections -- more than one
+      can apply simultaneously, e.g. an X and a Z correction together for
+      Shor) and apply each feed-forward Pauli correction, then reset every
+      ancilla found in |1⟩ back to |0⟩ via X.
+8. Decode the final physical state via a joint projective measurement in
+   the logical-Z basis, built from `code.logical_z_qubits`/
+   `code.logical_z_pauli` (see `_decode_logical_state` for why this is
+   required in general rather than a simpler population/majority-vote
+   reading, and why it is nonetheless numerically identical to the old
+   majority-vote decode for the repetition code).
 
 Syndrome table (default: 3-qubit repetition code)
 --------------------------------------------------
@@ -67,6 +109,9 @@ A0 detects D0⊕D1;  A1 detects D1⊕D2.
     (A0=1, A1=0) → error on D0  → correct with X on D0
     (A0=1, A1=1) → error on D1  → correct with X on D1
     (A0=0, A1=1) → error on D2  → correct with X on D2
+
+See stabilizer_codes.py for the 9-qubit Shor code's syndrome table and the
+derivation of its (non-obvious) logical X/Z operators.
 """
 
 import itertools
@@ -78,7 +123,13 @@ from typing import List, Dict, Tuple, Any
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine
 from qforge.core.workflow_engine import PhysicalWorkflowEngine, QASMTranspiler
-from qforge.core.stabilizer_codes import StabilizerCode, REPETITION_3
+from qforge.core.stabilizer_codes import (
+    StabilizerCode,
+    StabilizerGenerator,
+    EncodingStep,
+    REPETITION_3,
+    SHOR_9,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +682,7 @@ class ErrorCorrectionEngine:
                         int(drv["target"]),
                     )
                 )
-            elif drv_type in ("X", "H"):
+            elif drv_type in ("X", "H", "Z"):
                 target_val = drv.get("target")
                 if isinstance(target_val, (tuple, list)):
                     target_idx = int(target_val[0])
@@ -808,6 +859,60 @@ class ErrorCorrectionEngine:
             U_sub, sub_global_idxs, full_state, full_dims
         )
 
+    # ------------------------------------------------------------------
+    # 5b. Logical-zero encoding
+    # ------------------------------------------------------------------
+
+    def _encode_logical_zero(
+        self,
+        l_name: str,
+        mapping: Dict,
+        code: StabilizerCode,
+        physical_names: List[str],
+        full_dims: List[int],
+        current_state: qt.Qobj,
+    ) -> qt.Qobj:
+        """
+        Prepare logical |0>_L for one logical block by running
+        `code.encoding_circuit` against its data qubits (which start in
+        |00...0>), one gate at a time.
+
+        Every step is a single-qubit H or a 2-qubit ideal CNOT, so each is
+        simulated as its own small subsystem — consistent with the rest of
+        this engine's "never simulate a whole large code block as one
+        subsystem" approach, and required for the 9-qubit Shor code's
+        11-gate encoding circuit to be tractable.
+        """
+        data = mapping[l_name]["data"]
+
+        for step in code.encoding_circuit:
+            if step.gate == "H":
+                p = data[step.target]
+                current_state = self._simulate_subsystem(
+                    sub_names=[p],
+                    sub_drives=[{"type": "H", "target": 0}],
+                    duration=0.0,
+                    sub_couplings=[],
+                    full_state=current_state,
+                    full_names=physical_names,
+                    full_dims=full_dims,
+                    gate_label="EC_Encode",
+                )
+            else:  # "ICX"
+                p_ctrl = data[step.control]
+                p_targ = data[step.target]
+                current_state = self._simulate_subsystem(
+                    sub_names=[p_ctrl, p_targ],
+                    sub_drives=[{"type": "ICX", "control": 0, "target": 1}],
+                    duration=0.0,
+                    sub_couplings=[],
+                    full_state=current_state,
+                    full_names=physical_names,
+                    full_dims=full_dims,
+                    gate_label="EC_Encode",
+                )
+
+        return current_state
 
     # ------------------------------------------------------------------
     # 6. Transversal logical gate → per-block subsystem simulations
@@ -825,31 +930,51 @@ class ErrorCorrectionEngine:
         current_state: qt.Qobj,
     ) -> qt.Qobj:
         """
-        Apply a logical instruction transversally by simulating each
-        involved logical block as a SMALL subsystem.
+        Apply a logical instruction transversally, one physical qubit (or
+        qubit pair) at a time -- never the whole logical block in a single
+        combined subsystem. This keeps every simulated Hilbert space small
+        (bounded by 1-2 qubits) regardless of the code's total qubit count,
+        which is required for the 9-qubit Shor code (18 data qubits
+        involved in a two-block CX) to be tractable with this engine's
+        dense-matrix backend; it gives IDENTICAL results to a combined
+        simulation for the repetition code, since gates on disjoint qubits
+        always commute and `_apply_unitary_to_subsystem` embeds each one
+        via a pure unitary (no partial trace), so entanglement across the
+        full register -- including between different logical qubits -- is
+        preserved exactly whether the gates are grouped into one call or
+        applied via several sequential calls.
 
-        Single-qubit gates  (H, X, RZ):
-            Simulate only the code.num_data data qubits of the target
-            logical block (subsystem dim [d,...,d]).
+        Single-qubit gates:
+            X   -- applied to the data qubits in `code.logical_x_qubits`,
+                   using Pauli `code.logical_x_pauli` (X for the repetition
+                   code; Z for the Shor code, whose logical X-bar is
+                   physically a Z string -- see stabilizer_codes.py).
+            H   -- applied to every data qubit (unchanged from the
+                   repetition code's original transversal-H behaviour).
+            RZ  -- virtual, no physical drive.
 
-        Two-qubit gates (CNOT/CZ between two logical blocks):
-            Simulate corresponding data-qubit pairs across the two blocks,
-            one pair per data-qubit index: (D0_L1, D0_L2), (D1_L1, D1_L2), ...
+        Two-qubit gates (CX/CNOT/CZ between two logical blocks):
+            Applied to corresponding data-qubit pairs across the two
+            blocks, one pair per data-qubit index: (D0_L1,D0_L2),
+            (D1_L1,D1_L2), ... -- the general fact that transversal CNOT
+            implements logical CNOT for any CSS code.
 
         Returns the updated full quantum state.
         """
         gate   = instruction["type"].upper()
         target = instruction["target"]
 
-        def _make_x_drive(local_idx: int, phys_name: str, phase: float = 0.0) -> Tuple[Dict, float]:
+        def _make_single_qubit_drive(
+            phys_name: str, pauli_type: str, phase: float = 0.0, amplitude: float = 0.025,
+        ) -> Tuple[Dict, float]:
             dur       = calibrations["x_dur"][phys_name]
             qubit_obj = self.qubit_engine.get_qubit(phys_name)
             evals     = qubit_obj.eigensys(evals_count=2)[0]
             w01       = float(evals[1] - evals[0])
             drive = {
-                "target":     local_idx,
-                "type":       "X",
-                "amplitude":  0.025,
+                "target":     0,
+                "type":       pauli_type,
+                "amplitude":  amplitude,
                 "frequency":  w01,
                 "phase":      phase,
                 "start_time": 0.0,
@@ -857,86 +982,55 @@ class ErrorCorrectionEngine:
             }
             return drive, dur
 
-        def _make_h_drive(local_idx: int, phys_name: str) -> Tuple[Dict, float]:
+        def _make_h_drive(phys_name: str) -> Tuple[Dict, float]:
             # H gate uses the SAME duration as X (t_h = t_x) but half the
             # amplitude.  Using t_x/2 is wrong: Gaussian area is nonlinear
             # in T, so halving T does not halve the rotation angle.
-            dur       = calibrations["x_dur"][phys_name]   # same as t_x
-            qubit_obj = self.qubit_engine.get_qubit(phys_name)
-            evals     = qubit_obj.eigensys(evals_count=2)[0]
-            w01       = float(evals[1] - evals[0])
-            # Read calibrated pi-pulse amplitude and halve it for H.
             amp_pi = calibrations["x_amp"].get(phys_name, 0.025)
-            drive = {
-                "target":     local_idx,
-                # "type" must be "H", not "X": _simulate_subsystem's ideal
-                # fast-path dispatches purely on this field, so tagging an
-                # H-gate drive as "X" made every logical H execute as an
-                # ideal bit-flip instead of a Hadamard.
-                "type":       "H",
-                "amplitude":  amp_pi / 2.0,   # amp_h = amp_pi / 2
-                "frequency":  w01,
-                "phase":      -np.pi / 2,
-                "start_time": 0.0,
-                "end_time":   dur,
-            }
-            return drive, dur
+            return _make_single_qubit_drive(
+                phys_name, "H", phase=-np.pi / 2, amplitude=amp_pi / 2.0
+            )
 
         # ---- single-qubit transversal gates --------------------------------
         if isinstance(target, int):
-            l_name    = logical_names[target]
-            data      = mapping[l_name]["data"]    # [D0..D(n-1)]
-            sub_names = data                        # simulate only the data qubits
+            l_name = logical_names[target]
+            data   = mapping[l_name]["data"]    # [D0..D(n-1)]
 
             if gate == "X":
-                # Transversal logical X touches exactly the data qubits the
-                # code declares as its logical-X support (code.logical_x_qubits;
-                # for the repetition code that is every data qubit, so this
-                # reproduces the previous "apply to all data qubits" behaviour).
-                drives_sub = []
-                duration   = 0.0
+                # Transversal logical X touches exactly the data qubits (and
+                # Pauli type) the code declares as its logical-X support
+                # (code.logical_x_qubits / code.logical_x_pauli). For the
+                # repetition code that is physical X on every data qubit,
+                # reproducing the previous hard-coded behaviour exactly. For
+                # the Shor code it is physical Z on one representative qubit
+                # per block (see stabilizer_codes.py for the derivation).
                 for local_idx in code.logical_x_qubits:
                     p = data[local_idx]
-                    drv, dur = _make_x_drive(local_idx, p)
-                    drives_sub.append(drv)
-                    duration = max(duration, dur)
-
-                #DEBUG PRINT
-                print("\nDEBUG H drives:")
-                for d in drives_sub:
-                    print(d)
-                
-                #END DEBUG
-
-                current_state = self._simulate_subsystem(
-                    sub_names=sub_names,
-                    sub_drives=drives_sub,
-                    duration=duration,
-                    sub_couplings=[],
-                    full_state=current_state,
-                    full_names=physical_names,
-                    full_dims=full_dims,
-                    gate_label=f"EC_{gate}",
-                )
+                    drv, dur = _make_single_qubit_drive(p, code.logical_x_pauli)
+                    current_state = self._simulate_subsystem(
+                        sub_names=[p],
+                        sub_drives=[drv],
+                        duration=dur,
+                        sub_couplings=[],
+                        full_state=current_state,
+                        full_names=physical_names,
+                        full_dims=full_dims,
+                        gate_label=f"EC_{gate}",
+                    )
 
             elif gate == "H":
-                drives_sub = []
-                duration   = 0.0
-                for local_idx, p in enumerate(data):
-                    drv, dur = _make_h_drive(local_idx, p)
-                    drives_sub.append(drv)
-                    duration = max(duration, dur)
-
-                current_state = self._simulate_subsystem(
-                    sub_names=sub_names,
-                    sub_drives=drives_sub,
-                    duration=duration,
-                    sub_couplings=[],
-                    full_state=current_state,
-                    full_names=physical_names,
-                    full_dims=full_dims,
-                    gate_label="EC_H",
-                )
+                for p in data:
+                    drv, dur = _make_h_drive(p)
+                    current_state = self._simulate_subsystem(
+                        sub_names=[p],
+                        sub_drives=[drv],
+                        duration=dur,
+                        sub_couplings=[],
+                        full_state=current_state,
+                        full_names=physical_names,
+                        full_dims=full_dims,
+                        gate_label="EC_H",
+                    )
 
             elif gate == "RZ":
                 pass   # virtual-Z: no physical drive, state unchanged
@@ -953,48 +1047,24 @@ class ErrorCorrectionEngine:
             data2 = mapping[l2]["data"]
 
             if gate in ("CX", "CNOT", "CZ"):
-                # Simulate ALL data qubits (D0..D(n-1) of L1 + D0..D(n-1) of L2)
-                # as a single subsystem in one mesolve call.
-                # Pair-by-pair simulation destroys inter-block entanglement:
-                # e.g. a Bell state (H on L1, CX L1→L2) requires both blocks
-                # to be entangled — ptrace collapses L1 to a mixed state before
-                # L2 sees the CNOT, making the decoded output always mixed.
-                combined_names = data1 + data2   # [D0_L1..D(n-1)_L1, D0_L2..D(n-1)_L2]
-                # Max duration across all transversal CNOT pairs
-                dur = 0.0
-                for d1, d2 in zip(data1, data2):
-                    key_dur = calibrations["cnot_dur"].get(
-                        (d1, d2), calibrations["cnot_dur"].get((d2, d1), 100.0)
-                    )
-                    dur = max(dur, key_dur)
-
-                # Build code.num_data ideal two-qubit gates in local indices:
-                # (0,n), (1,n+1), ... — each acts on the corresponding data
-                # qubits across the two logical blocks (n = code.num_data).
                 # CZ must use the ideal CZ operator, not CX/CNOT — they are
                 # different gates and were previously conflated here,
                 # silently executing a logical CZ as a CNOT.
                 drive_type = "ICZ" if gate == "CZ" else "ICX"
-                combined_drives = []
-                combined_couplings = []
-                n = code.num_data
-                for local_ctrl, local_targ in [(i, n + i) for i in range(n)]:
-                    combined_drives.append({
-                        "type": drive_type,
-                        "control": local_ctrl,
-                        "target": local_targ,
-                    })
-
-                current_state = self._simulate_subsystem(
-                    sub_names=combined_names,
-                    sub_drives=combined_drives,
-                    duration=dur,
-                    sub_couplings=combined_couplings,
-                    full_state=current_state,
-                    full_names=physical_names,
-                    full_dims=full_dims,
-                    gate_label=f"EC_{gate}",
-                )
+                for p1, p2 in zip(data1, data2):
+                    dur = calibrations["cnot_dur"].get(
+                        (p1, p2), calibrations["cnot_dur"].get((p2, p1), 100.0)
+                    )
+                    current_state = self._simulate_subsystem(
+                        sub_names=[p1, p2],
+                        sub_drives=[{"type": drive_type, "control": 0, "target": 1}],
+                        duration=dur,
+                        sub_couplings=[],
+                        full_state=current_state,
+                        full_names=physical_names,
+                        full_dims=full_dims,
+                        gate_label=f"EC_{gate}",
+                    )
             else:
                 print(f"[EC] Warning: two-qubit gate '{gate}' not natively supported; skipping.")
 
@@ -1004,22 +1074,14 @@ class ErrorCorrectionEngine:
     # 6. Syndrome extraction drive schedule
     # ------------------------------------------------------------------
 
-    def _syndrome_extraction_drives(
-        self,
-        l_name: str,
-        mapping: Dict,
-        code: StabilizerCode,
-        calibrations: Dict,
-        coupling_strength: float,
-    ) -> Tuple[List[Dict], List[Dict], float]:
+    def _generator_extraction_drives(self, gen: StabilizerGenerator) -> List[Dict]:
         """
-        Build the syndrome extraction drive schedule for one logical block,
-        generated generically from `code.generators`.
+        Build the LOCAL extraction-drive schedule for ONE stabilizer
+        generator. The subsystem this schedule is meant to run on must be
+        ordered as [gen.data_qubits in order, ancilla] -- i.e. local index k
+        for the k-th listed data qubit, and local index len(gen.data_qubits)
+        for the ancilla.
 
-        block_names (local ordering) = [D0..D(n-1), A0..A(m-1)]
-        (indices 0..n-1 for data, n..n+m-1 for ancilla).
-
-        For each generator:
           - Z-type: CNOT(data -> ancilla) for every data qubit in the
             generator, sequenced in time. A direct Z-basis ancilla readout
             afterwards gives the Z-stabilizer eigenvalue.
@@ -1027,87 +1089,61 @@ class ErrorCorrectionEngine:
             qubit in the generator, then H(ancilla) — the standard
             X-stabilizer measurement circuit, so a Z-basis ancilla readout
             still gives the correct eigenvalue. Not exercised by the
-            default 3-qubit repetition code (Z-type only), but required by
-            future CSS codes such as Steane/Shor.
+            3-qubit repetition code (Z-type only), but required by the
+            9-qubit Shor code's outer (phase-flip) generators.
 
-        For the default 3-qubit repetition code this reproduces exactly the
-        previous fixed sequence:
+        For the repetition code's two generators this reproduces exactly
+        the previous fixed sequence:
             CNOT(D0 -> A0)   parity D0 xor D1
             CNOT(D1 -> A0)
             CNOT(D1 -> A1)   parity D1 xor D2
             CNOT(D2 -> A1)
-
-        All drive indices are LOCAL to the block so that _simulate_subsystem
-        receives consistent 0-based indexing.
-
-        Returns (drives_local, couplings_local, total_duration).
         """
+        n = len(gen.data_qubits)
+        anc_local = n
         drives: List[Dict] = []
 
-        for gen in code.generators:
-            anc_local = code.num_data + gen.ancilla
+        if gen.basis == "Z":
+            for local_dq in range(n):
+                drives.append({"type": "ICX", "control": local_dq, "target": anc_local})
+        elif gen.basis == "X":
+            drives.append({"type": "H", "target": anc_local})
+            for local_dq in range(n):
+                drives.append({"type": "ICX", "control": anc_local, "target": local_dq})
+            drives.append({"type": "H", "target": anc_local})
 
-            if gen.basis == "Z":
-                for dq in gen.data_qubits:
-                    drives.append({
-                        "type": "ICX",
-                        "control": dq,
-                        "target": anc_local,
-                    })
-            elif gen.basis == "X":
-                drives.append({"type": "H", "target": anc_local})
-                for dq in gen.data_qubits:
-                    drives.append({
-                        "type": "ICX",
-                        "control": anc_local,
-                        "target": dq,
-                    })
-                drives.append({"type": "H", "target": anc_local})
-
-        return drives, [], 0.0
-
+        return drives
 
     # ------------------------------------------------------------------
     # 7. Syndrome measurement (projective, with correction)
     # ------------------------------------------------------------------
 
-    def _syndrome_measurement_and_correct(
+    def _measure_and_collapse_ancilla(
         self,
-        state,
-        l_name,
-        mapping,
-        code: StabilizerCode,
-        physical_names,
-        physical_index,
-        dims,
-    )-> qt.Qobj:
+        state: qt.Qobj,
+        anc_idx: int,
+        dims: List[int],
+        label: str,
+    ) -> Tuple[qt.Qobj, int]:
         """
-        Measure all `code.num_ancilla` ancillas for a single logical block,
-        collapse the wavefunction, look up the indicated correction in
-        `code.syndrome_to_correction`, apply it, and reset every ancilla
-        found in |1> back to |0>.
+        Projectively measure ONE physical ancilla qubit in the Z
+        (computational) basis, collapse the FULL state onto the observed
+        outcome, and return (collapsed_state, bit).
 
-        Default (3-qubit repetition code) syndrome table:
-            (A0=0, A1=0) → no error
-            (A0=1, A1=0) → X on D0
-            (A0=1, A1=1) → X on D1
-            (A0=0, A1=1) → X on D2
+        Ancillas are measured one at a time (rather than jointly, as a
+        single combined 2**num_ancilla-outcome projector) purely for
+        tractability with codes that have many generators (8 for the Shor
+        code): all of a valid code's stabilizer generators mutually
+        commute by construction, so sequential single-ancilla measurement
+        gives EXACTLY the same joint outcome distribution and
+        post-measurement state as a joint measurement — this is the
+        standard equivalence between sequential and joint measurement of
+        commuting observables, not an approximation.
         """
-        data_idxs = [physical_index[n] for n in mapping[l_name]["data"]]
-        anc_idxs  = [physical_index[n] for n in mapping[l_name]["ancilla"]]
+        d_anc = dims[anc_idx]
+        proj0 = _tensor_op_at(_proj0_dim(d_anc), anc_idx, dims)
+        proj1 = _tensor_op_at(_proj1_dim(d_anc), anc_idx, dims)
 
-        # Build projectors for each syndrome outcome (syndrome bit tuple is
-        # ordered by ancilla index, matching code.syndrome_to_correction keys)
-        projectors: Dict[Tuple, qt.Qobj] = {}
-        for outcome in itertools.product([0, 1], repeat=len(anc_idxs)):
-            op_list = [qt.qeye(d) for d in dims]
-            for anc_idx, bit in zip(anc_idxs, outcome):
-                d_anc = dims[anc_idx]
-                op_list[anc_idx] = _proj1_dim(d_anc) if bit else _proj0_dim(d_anc)
-            projectors[outcome] = qt.tensor(op_list)
-
-        # Compute outcome probabilities
-        # Handle both ket and density matrix states.
         # QuTiP's inner product can return either a 1x1 Qobj or a plain
         # complex scalar depending on version — extract a real float safely
         # in either case.
@@ -1118,60 +1154,106 @@ class ErrorCorrectionEngine:
             return float(np.real(val))
 
         if state.type == "ket":
-            probs = {
-                synd: _qobj_to_real(state.dag() * proj * state)
-                for synd, proj in projectors.items()
-            }
+            p0 = _qobj_to_real(state.dag() * proj0 * state)
+            p1 = _qobj_to_real(state.dag() * proj1 * state)
         else:
-            probs = {
-                synd: float(np.real((proj * state).tr()))
-                for synd, proj in projectors.items()
-            }
+            p0 = float(np.real((proj0 * state).tr()))
+            p1 = float(np.real((proj1 * state).tr()))
 
-        # Normalise (guard against floating-point drift)
-        total = sum(probs.values())
+        total = p0 + p1
         if total < 1e-12:
-            print(f"    [EC] Warning: total probability ~0 for block {l_name}. State may be corrupted.")
-            return state
-        probs = {k: v / total for k, v in probs.items()}
+            print(f"    [EC] Warning: total probability ~0 measuring {label}. State may be corrupted.")
+            return state, 0
 
-        # Stochastic measurement
-        syndromes    = list(probs.keys())
-        prob_values  = [probs[s] for s in syndromes]
-        chosen_idx   = np.random.choice(len(syndromes), p=prob_values)
-        syndrome     = syndromes[chosen_idx]
-        prob_outcome = prob_values[chosen_idx]
+        p0n  = p0 / total
+        bit  = int(np.random.choice([0, 1], p=[p0n, 1.0 - p0n]))
+        proj = proj1 if bit == 1 else proj0
+        prob = (1.0 - p0n) if bit == 1 else p0n
 
-        print(
-            f"    [EC] {l_name}  syndrome {syndrome}  "
-            f"p={prob_outcome:.4f}"
-        )
+        collapsed = proj * state
+        if prob > 1e-12:
+            collapsed = collapsed / np.sqrt(prob)
 
-        # Collapse
-        collapsed = projectors[syndrome] * state
-        if prob_outcome > 1e-12:
-            collapsed = collapsed / np.sqrt(prob_outcome)
-        state = collapsed
+        print(f"      [EC] {label}  bit={bit}  p={prob:.4f}")
+        return collapsed, bit
 
-        # Feed-forward correction, looked up from the code's syndrome table
-        correction = code.syndrome_to_correction.get(syndrome)
-        if correction is not None:
-            local_dq, pauli_type = correction
-            target_idx = data_idxs[local_dq]
-            label = physical_names[target_idx]
-            print(f"    [EC] Applying {pauli_type} correction to {label}")
-            P_op   = _pauli_dim(pauli_type, dims[target_idx])
-            P_full = _tensor_op_at(P_op, target_idx, dims)
-            state  = P_full * state
+    # ------------------------------------------------------------------
+    # 7b. Shor-code-specific: measure AND reclaim an ancilla's dimension
+    # ------------------------------------------------------------------
+    #
+    # Used ONLY by the Shor-code execution path below (execute_shor9_workflow
+    # / _run_shor9_workflow / _run_shor9_syndrome_block). The repetition
+    # code's execution path (_run_ec_workflow / _run_syndrome_block /
+    # _measure_and_collapse_ancilla above) is untouched by this and behaves
+    # exactly as before.
+    #
+    # The generic engine keeps one dense state vector spanning every
+    # physical qubit for the whole workflow, including every ancilla,
+    # forever. That is fine for the repetition code (2 ancillas, a factor
+    # of 4), but the Shor code's 8 ancillas per logical block make it
+    # prohibitive as soon as more than one Shor-encoded logical qubit is in
+    # the same workflow: e.g. a 2-logical-qubit Bell-state circuit needs
+    # 2*17=34 physical qubits, i.e. a 2**34-dimensional dense state vector
+    # (hundreds of GB), even though only 2*9=18 of those qubits (the data
+    # qubits) ever carry information that outlives a single syndrome round.
+    #
+    # The fix implemented here: after a projective measurement, the
+    # measured qubit is -- by construction -- in a definite product-state
+    # factor, unentangled with the rest of the register (this is exactly
+    # what "collapse" means). That means its dimension can be removed from
+    # the tracked Hilbert space entirely, with zero information loss and
+    # zero approximation, by reshaping the state array by the current
+    # per-qubit dimensions and slicing out the measured qubit's axis at its
+    # observed value, instead of just collapsing-and-keeping it (as
+    # `_measure_and_collapse_ancilla` above does) or partial-tracing it out
+    # (which would be equally exact but would turn a compact ket into a
+    # dense d*d density matrix -- quadratically worse, not better).
+    # `_run_shor9_syndrome_block` tensors a fresh |0> ancilla in only for
+    # the duration of its own generator's extraction + measurement, then
+    # immediately drops it here, so at most ONE ancilla is ever "live" at a
+    # time, regardless of how many logical qubits or syndrome rounds the
+    # workflow has -- bounding the live dimension by (total data qubits) +
+    # 1 ancilla instead of (total data qubits) + (every ancilla ever used).
 
-        # Reset ancillas to |0⟩
-        for anc_idx, bit in zip(anc_idxs, syndrome):
-            if bit == 1:
-                X_op   = _sigmax_dim(dims[anc_idx])
-                X_full = _tensor_op_at(X_op, anc_idx, dims)
-                state  = X_full * state
+    def _measure_and_reclaim_ancilla(
+        self,
+        state: qt.Qobj,
+        dims: List[int],
+        idx: int,
+        label: str,
+    ) -> Tuple[qt.Qobj, int]:
+        """
+        Projectively measure the ancilla at local position `idx` (within
+        the CURRENT tensor structure `dims`, a ket) in the Z basis, and
+        return a NEW, SMALLER ket with that qubit's axis removed entirely
+        (rather than collapsed-and-kept). See the section comment above for
+        why this is exact, not an approximation.
+        """
+        arr = state.full().reshape(dims)
+        p0 = float(np.sum(np.abs(np.take(arr, 0, axis=idx)) ** 2))
+        p1 = float(np.sum(np.abs(np.take(arr, 1, axis=idx)) ** 2))
+        total = p0 + p1
 
-        return state
+        if total < 1e-12:
+            print(f"    [EC] Warning: total probability ~0 measuring {label}. State may be corrupted.")
+            bit, prob = 0, 0.0
+        else:
+            p0n  = p0 / total
+            bit  = int(np.random.choice([0, 1], p=[p0n, 1.0 - p0n]))
+            prob = (1.0 - p0n) if bit == 1 else p0n
+
+        sliced = np.take(arr, bit, axis=idx)
+        norm = np.linalg.norm(sliced)
+        if norm > 1e-12:
+            sliced = sliced / norm
+
+        remaining_dims = [d for i, d in enumerate(dims) if i != idx]
+        new_total = int(np.prod(remaining_dims)) if remaining_dims else 1
+        new_ket = qt.Qobj(sliced.reshape(new_total, 1))
+        new_ket.dims = [remaining_dims, [1] * len(remaining_dims)]
+
+        print(f"      [EC] {label}  bit={bit}  p={prob:.4f}")
+        return new_ket, bit
 
     # ------------------------------------------------------------------
     # 8. Final state decoding
@@ -1188,47 +1270,65 @@ class ErrorCorrectionEngine:
         dims: List[int],
     ) -> Dict[str, float]:
         """
-        Extract logical populations via `code.decode()` on each logical
-        block's data-qubit bits (majority vote for the 3-qubit repetition
-        code). Handles both ket states and density matrices.
-        """
-        N_phys = len(physical_names)
+        Decode the logical value of each logical block via a JOINT
+        projective measurement in the logical-Z basis, built from the
+        code's declared `logical_z_qubits`/`logical_z_pauli` (Z0Z1Z2 for
+        the repetition code, X0X1X2 for the Shor code — see
+        stabilizer_codes.py).
 
-        # Convert ket to density matrix for uniform treatment
+        This is required for physical correctness in general: it is NOT
+        equivalent to reading raw data-qubit populations and majority-
+        voting, which is all the repetition code needed because its
+        codewords |000> and |111> ARE themselves computational-basis
+        states. That coincidence does not hold for the Shor code — |0>_L
+        and |1>_L touch the exact same computational-basis strings with the
+        exact same probabilities and differ only in relative phase, which a
+        bit-population reading of the diagonal cannot see at all. A genuine
+        logical-Z operator expectation-value measurement is the only
+        general way to decode a stabilizer-encoded state.
+
+        For the repetition code this reduces to EXACTLY the previous
+        population/majority-vote decode once the state has been corrected
+        back into the codespace (the case that always applies here, since
+        decode always follows a mandatory final syndrome-correction pass):
+        Z0, Z1, Z2 all act identically on the repetition code's codespace
+        (they differ only by stabilizer elements), so <Z0 Z1 Z2> on a state
+        confined to {|000>, |111>} gives exactly P(|000>) - P(|111>), the
+        same split majority-vote-over-the-diagonal already computed.
+
+        Handles both ket states and density matrices, and preserves
+        correlations/entanglement between multiple logical qubits (e.g. a
+        logical Bell state still decodes to {'00': 0.5, '11': 0.5}, not
+        independent per-qubit marginals).
+        """
         if state.type == "ket":
             rho = qt.ket2dm(state)
         else:
             rho = state
 
-        diag = np.real(rho.diag())
+        # Build each logical block's Z-bar operator, embedded in the full
+        # physical register (identity on every other qubit).
+        z_bar_ops: List[qt.Qobj] = []
+        for l_name in logical_names:
+            data_names = mapping[l_name]["data"]
+            op_list = [qt.qeye(d) for d in dims]
+            for local_dq in code.logical_z_qubits:
+                idx = physical_index[data_names[local_dq]]
+                op_list[idx] = _pauli_dim(code.logical_z_pauli, dims[idx])
+            z_bar_ops.append(qt.tensor(op_list))
+
+        identity_full = qt.tensor([qt.qeye(d) for d in dims])
+
         logical_pops: Dict[str, float] = {}
-
-        total_states = int(np.prod(dims))
-        for i, prob in enumerate(diag):
-            if prob < 1e-8:
-                continue
-
-            # Decompose composite index into per-qubit levels
-            # (respects non-uniform local dims)
-            remainder = i
-            levels = []
-            for d in reversed(dims):
-                levels.append(remainder % d)
-                remainder //= d
-            levels.reverse()   # levels[k] = level of physical qubit k
-
-            # Decode per logical block via the code's decoder
-            logical_bits = ""
-            for l_name in logical_names:
-                d_idxs = [
-                    physical_index[n] for n in mapping[l_name]["data"]
-                ]
-                bits = [min(levels[idx], 1) for idx in d_idxs]   # project to {0,1}
-                logical_bits += code.decode(bits)
-
-            logical_pops[logical_bits] = (
-                logical_pops.get(logical_bits, 0.0) + float(prob)
-            )
+        for bits in itertools.product([0, 1], repeat=len(logical_names)):
+            projector = identity_full
+            for z_bar, bit in zip(z_bar_ops, bits):
+                sign = 1.0 if bit == 0 else -1.0
+                projector = projector * (identity_full + sign * z_bar) / 2.0
+            prob = float(np.real((rho * projector).tr()))
+            if prob > 1e-8:
+                bitstring = "".join(str(b) for b in bits)
+                logical_pops[bitstring] = logical_pops.get(bitstring, 0.0) + prob
 
         return logical_pops
 
@@ -1277,6 +1377,403 @@ class ErrorCorrectionEngine:
             coupling_strength=coupling_strength,
             ec_every_n_gates=ec_every_n_gates,
         )
+
+    def execute_shor9_workflow(
+        self,
+        logical_names: List[str],
+        qasm_path: str,
+        coupling_type: str = "capacitive",
+        coupling_strength: float = 0.010,
+        ec_every_n_gates: int = 0,
+    ) -> Dict:
+        """
+        Entry point for the 9-qubit Shor code.
+
+        Runs a dedicated, ancilla-reclaiming execution path (see
+        `_run_shor9_workflow` / `_run_shor9_syndrome_block` /
+        `_measure_and_reclaim_ancilla`) instead of the generic
+        `execute_stabilizer_workflow`: the generic path keeps one dense
+        state vector spanning EVERY physical qubit -- data AND ancilla --
+        for the whole workflow, which is fine for the repetition code (2
+        ancillas) but is only 2 logical qubits away from needing hundreds
+        of GB for the Shor code (8 ancillas per block). This path instead
+        reclaims each ancilla's dimension immediately after it is measured
+        (exact, not an approximation -- see `_measure_and_reclaim_ancilla`),
+        so the live simulated Hilbert space is bounded by the total number
+        of DATA qubits plus at most one "borrowed" ancilla at a time,
+        regardless of how many logical qubits or syndrome rounds the
+        workflow has. See stabilizer_codes.SHOR_9 for the code's generator
+        layout and the derivation of its logical X/Z operators.
+
+        Parameters
+        ----------
+        logical_names : list of str
+            Names of the logical qubits (must exist in QubitEngine).
+            Each is expanded to 17 physical qubits (9 data + 8 ancilla) in
+            memory only — they are NEVER written to the session JSON file.
+        qasm_path : str
+            Path to an OpenQASM 2.0 file for the logical circuit.
+        coupling_type : str
+            Coupling type for syndrome-extraction CNOTs (default: "capacitive").
+        coupling_strength : float
+            Coupling strength in GHz (default: 0.010).
+        ec_every_n_gates : int
+            Run a syndrome cycle after every N gates (default: 1).
+            Set to 0 to skip all mid-circuit syndromes and run only a single
+            final syndrome pass.  Use 0 for circuits with H gates / superpositions,
+            because Z-stabiliser measurement collapses X-basis states mid-circuit.
+        """
+        code = SHOR_9
+
+        print(f"[EC] 1. Parsing logical QASM from '{qasm_path}'...")
+        transpiler      = QASMTranspiler()
+        logical_circuit = transpiler.parse_file(qasm_path)
+        print(f"[EC]    {len(logical_circuit)} logical instructions parsed.")
+
+        print(f"[EC] 2. Generating physical qubit mapping for '{code.name}'...")
+        mapping        = self.generate_stabilizer_mapping(logical_names, code)
+        physical_names = self._get_flat_physical_names(logical_names, mapping)
+        print(
+            f"[EC]    Logical qubits : {logical_names}\n"
+            f"[EC]    Physical qubits: {physical_names}"
+        )
+
+        self._register_physical_qubits(logical_names, mapping)
+
+        try:
+            self._run_shor9_workflow(
+                logical_names     = logical_names,
+                logical_circuit   = logical_circuit,
+                mapping           = mapping,
+                code              = code,
+                physical_names    = physical_names,
+                coupling_type     = coupling_type,
+                coupling_strength = coupling_strength,
+                ec_every_n_gates  = ec_every_n_gates,
+            )
+            result = self._last_ec_result
+        finally:
+            self._cleanup_physical_qubits(logical_names, mapping)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # 9d. Shor-code-specific inner workflow (ancilla-reclaiming)
+    # ------------------------------------------------------------------
+
+    def _run_shor9_workflow(
+        self,
+        logical_names: List[str],
+        logical_circuit: List[Dict],
+        mapping: Dict,
+        code: StabilizerCode,
+        physical_names: List[str],
+        coupling_type: str,
+        coupling_strength: float,
+        ec_every_n_gates: int,
+    ) -> None:
+        """
+        Shor-code counterpart of `_run_ec_workflow`, differing in how the
+        simulated state is kept small:
+
+        Ancilla reclaim: `active_names`/`active_dims` are the qubits
+        CURRENTLY present in `current_state` (initially just the data
+        qubits of every logical block), grown by one ancilla right before
+        its own generator is extracted and shrunk back down the instant
+        that ancilla is measured (`_run_shor9_syndrome_block`). Encoding
+        and transversal gates only ever touch data qubits, so
+        `_encode_logical_zero` / `_transversal_drives` / `_decode_logical_state`
+        are reused completely unmodified.
+
+        Simulated dimension: every qubit's dimension in `active_dims` is
+        capped at 2 (the computational subspace {|0>,|1>} only), regardless
+        of its registered `truncated_dim` (which may be larger, e.g. 4, to
+        model leakage in general physical-pulse simulations elsewhere in
+        qforge). This is exact here, not an approximation: every gate this
+        workflow ever applies -- transversal X/H, syndrome CNOTs, and
+        feed-forward Pauli corrections -- goes through the IDEAL gate path
+        (`_build_ideal_single_qubit_operator` / `_build_ideal_cx_operator` /
+        `_pauli_dim`), which is built directly from whatever `dims` it is
+        given and provably acts as identity outside the qubit indices it
+        touches; combined with an initial state of |0> everywhere, no
+        leakage level is ever populated at any point in this workflow, so
+        there is nothing for a truncated_dim=2 simulation to lose. It is
+        also necessary: with each qubit's full registered truncated_dim
+        (e.g. 4), two Shor-encoded logical qubits alone would need
+        4**18 ~ 6.9*10**10 states just for the data qubits, no matter how
+        efficiently ancillas are reclaimed.
+        """
+        print("[EC] 3. Calibrating pulses (results cached for re-use)...")
+        calibrations = self._calibrate(
+            logical_names,
+            mapping,
+            physical_names,
+            syndrome_couplings=[],
+            coupling_type=coupling_type,
+            coupling_strength=coupling_strength,
+            calibrate_cnot=False,
+        )
+
+        # ── Active state: data qubits of every logical block, initially |00...0> ──
+        active_names = []
+        for l_name in logical_names:
+            active_names.extend(mapping[l_name]["data"])
+        # Simulated dimension is capped at 2 per qubit (computational subspace
+        # only), NOT the qubit's full registered truncated_dim -- see the
+        # "Simulated dimension" note in this method's docstring for why this
+        # is exact (not an approximation) for this specific workflow, and
+        # necessary: with the registered qubits' full truncated_dim (e.g. 4),
+        # 2 Shor-encoded logical qubits alone need 4**18 ~ 6.9*10**10 states
+        # for the data qubits, regardless of how well ancillas are reclaimed.
+        active_dims = [
+            min(2, self.qubit_engine.get_qubit(name).truncated_dim)
+            for name in active_names
+        ]
+        print(f"[EC] 4. Initialising physical state to |00...0> ({len(active_names)} data qubits)...")
+        current_state = qt.tensor([qt.basis(d, 0) for d in active_dims])
+        current_state.dims = [list(active_dims), [1] * len(active_dims)]
+
+        print(f"[EC]    Encoding |0>_L for {len(logical_names)} logical qubit(s)...")
+        for l_name in logical_names:
+            current_state = self._encode_logical_zero(
+                l_name, mapping, code, active_names, active_dims, current_state,
+            )
+
+        # ── Execute logical circuit, gate by gate ──────────────────────
+        print(f"\n[EC] 5. Executing logical circuit ({len(logical_circuit)} gates)...\n")
+        gate_counter = 0
+
+        for step_idx, instruction in enumerate(logical_circuit):
+            gate_label = instruction.get("type", "?")
+            target     = instruction.get("target", "?")
+            print(f"  [Gate {step_idx:03d}] {gate_label}  target={target}")
+
+            if isinstance(target, tuple) and len(target) == 2:
+                # Two-qubit gates need Shor-specific handling: see
+                # _shor9_transversal_two_qubit_gate for why a plain
+                # transversal CNOT does not implement logical CNOT in the
+                # circuit's intended direction for this code.
+                current_state = self._shor9_transversal_two_qubit_gate(
+                    instruction, logical_names, mapping, code,
+                    active_names, active_dims, calibrations,
+                    current_state,
+                )
+            else:
+                current_state = self._transversal_drives(
+                    instruction, logical_names, mapping, code,
+                    active_names, active_dims, calibrations,
+                    current_state,
+                )
+
+            gate_counter += 1
+
+            if ec_every_n_gates > 0 and gate_counter % ec_every_n_gates == 0:
+                print(f"  [EC cycle after gate {step_idx}]")
+                for l_name in logical_names:
+                    current_state = self._run_shor9_syndrome_block(
+                        l_name, mapping, code, active_names, active_dims, current_state,
+                    )
+
+        # ── Final syndrome pass (always runs) ──────────────────────────
+        print("  [EC final syndrome pass]")
+        for l_name in logical_names:
+            current_state = self._run_shor9_syndrome_block(
+                l_name, mapping, code, active_names, active_dims, current_state,
+            )
+
+        # By now every ancilla has been reclaimed, so active_names/active_dims
+        # are exactly the data qubits again, in the same order as at the top.
+        active_index = {name: idx for idx, name in enumerate(active_names)}
+
+        print("\n[EC] 6. Circuit complete. Decoding final logical populations...")
+        logical_pops = self._decode_logical_state(
+            current_state, logical_names, mapping, code, active_names, active_index, active_dims
+        )
+
+        print("[EC] Logical state populations:")
+        if not logical_pops:
+            print("    [EC] WARNING: no logical populations decoded.")
+        for bitstring, pop in sorted(logical_pops.items(), key=lambda x: -x[1]):
+            bar = "█" * int(pop * 20) + "░" * (20 - int(pop * 20))
+            print(f"    |{bitstring}>_L  {bar}  {pop * 100:5.2f}%")
+
+        self._last_ec_result = {
+            "logical_populations":  logical_pops,
+            "final_physical_state": current_state,
+        }
+
+    def _run_shor9_syndrome_block(
+        self,
+        l_name: str,
+        mapping: Dict,
+        code: StabilizerCode,
+        active_names: List[str],
+        active_dims: List[int],
+        current_state: qt.Qobj,
+    ) -> qt.Qobj:
+        """
+        Shor-code counterpart of `_run_syndrome_block`: runs one full
+        syndrome-extraction + measurement + correction cycle for one
+        logical block, generator by generator, but tensors each
+        generator's ancilla in fresh right before it is needed and
+        reclaims (removes) its dimension immediately after measuring it
+        (`_measure_and_reclaim_ancilla`), instead of registering all 8
+        ancillas in the state up front and keeping them forever. `active_names`
+        and `active_dims` are mutated IN PLACE to track whatever is
+        currently tensored into `current_state`; both are back to exactly
+        the data qubits (in their original order) by the time this method
+        returns.
+        """
+        print(f"    Syndrome extraction for logical block: {l_name}")
+
+        data_names = mapping[l_name]["data"]
+        anc_names  = mapping[l_name]["ancilla"]
+        syndrome_bits: List[int] = [0] * code.num_ancilla
+
+        for gen in code.generators:
+            anc_name = anc_names[gen.ancilla]
+            # Capped at 2 for the same reason active_dims is in
+            # _run_shor9_workflow: exact (not approximate) for this
+            # ideal-gate-only workflow, and necessary for tractability.
+            d_anc = min(2, self.qubit_engine.get_qubit(anc_name).truncated_dim)
+
+            # Tensor a fresh |0> ancilla onto the END of the active state.
+            current_state = qt.tensor(current_state, qt.basis(d_anc, 0))
+            active_names.append(anc_name)
+            active_dims.append(d_anc)
+            current_state.dims = [list(active_dims), [1] * len(active_dims)]
+
+            gen_data_names = [data_names[dq] for dq in gen.data_qubits]
+            sub_names      = gen_data_names + [anc_name]
+            drives         = self._generator_extraction_drives(gen)
+            current_state = self._simulate_subsystem(
+                sub_names      = sub_names,
+                sub_drives     = drives,
+                sub_couplings  = [],
+                duration       = 0.0,
+                full_state     = current_state,
+                full_names     = active_names,
+                full_dims      = active_dims,
+                gate_label     = "EC_Syndrome",
+            )
+
+            anc_idx = active_names.index(anc_name)
+            current_state, bit = self._measure_and_reclaim_ancilla(
+                current_state, active_dims, anc_idx, f"{l_name}:{anc_name}",
+            )
+            syndrome_bits[gen.ancilla] = bit
+
+            # The ancilla's dimension is gone from current_state now — drop
+            # its bookkeeping entries too so active_names/active_dims stay
+            # in sync with what's actually tensored into current_state.
+            del active_names[anc_idx]
+            del active_dims[anc_idx]
+
+        syndrome = tuple(syndrome_bits)
+        print(f"    [EC] {l_name}  syndrome {syndrome}")
+
+        # Feed-forward correction(s), looked up from the code's syndrome table.
+        # No ancilla reset is needed here (unlike _run_syndrome_block): a
+        # reclaimed ancilla has already been removed from the state, so
+        # there is nothing left to reset -- the next syndrome round tensors
+        # in a brand new |0> ancilla instead.
+        active_index = {name: idx for idx, name in enumerate(active_names)}
+        data_idxs    = [active_index[n] for n in data_names]
+        corrections  = code.syndrome_to_correction.get(syndrome, [])
+        for local_dq, pauli_type in corrections:
+            target_idx = data_idxs[local_dq]
+            label = active_names[target_idx]
+            print(f"    [EC] Applying {pauli_type} correction to {label}")
+            P_op   = _pauli_dim(pauli_type, active_dims[target_idx])
+            P_full = _tensor_op_at(P_op, target_idx, active_dims)
+            current_state = P_full * current_state
+
+        return current_state
+
+    def _shor9_transversal_two_qubit_gate(
+        self,
+        instruction: Dict[str, Any],
+        logical_names: List[str],
+        mapping: Dict,
+        code: StabilizerCode,
+        active_names: List[str],
+        active_dims: List[int],
+        calibrations: Dict,
+        current_state: qt.Qobj,
+    ) -> qt.Qobj:
+        """
+        Shor-code-specific transversal two-qubit gate handler for
+        CX/CNOT/CZ, used ONLY by the Shor execution path
+        (`_run_shor9_workflow`). Does not touch, and is not used by, the
+        repetition code's `_transversal_drives`.
+
+        Why this exists: for a CSS code whose logical X-bar is built from
+        PHYSICAL X's and Z-bar from physical Z's (the repetition code:
+        code.logical_x_pauli == "X"), a transversal CNOT (physical CNOT_i
+        from control-block qubit i to target-block qubit i, for every i)
+        implements logical CNOT in that SAME direction. The Shor code's
+        logical operators are swapped (code.logical_x_pauli == "Z": X-bar
+        is a Z-type string, Z-bar an X-type string -- see
+        stabilizer_codes.py for the derivation), and conjugating X-bar/
+        Z-bar through a transversal CNOT for a code with this swapped
+        convention shows it instead implements logical CNOT with the
+        physical control and target blocks' roles REVERSED. This was
+        verified three independent ways (stabilizer conjugation algebra,
+        a block-parity amplitude derivation, and direct enumeration of the
+        transversal CNOT's action on all four computational-basis logical
+        inputs |0>_L|0>_L .. |1>_L|1>_L), all agreeing exactly.
+
+        The fix: apply the transversal CNOT with the PHYSICAL control and
+        target blocks swapped relative to the circuit's logical control and
+        target -- i.e. physical control = the circuit's target block's
+        qubits, physical target = the circuit's control block's qubits.
+        That reproduces the circuit's intended logical CNOT(l1 -> l2)
+        exactly.
+
+        CZ has no such simple fix and is not supported here: a transversal
+        physical CZ is diagonal in the PHYSICAL Z basis, but the Shor
+        code's logical Z-basis corresponds to the PHYSICAL X eigenbasis
+        (since Z-bar is X-type), so a transversal physical CZ is diagonal
+        in the wrong basis to implement logical CZ for this code at all --
+        unlike CNOT, swapping control/target does not fix this (CZ is
+        symmetric under that swap). A warning is printed and the gate is
+        skipped rather than silently returning a wrong answer.
+        """
+        gate = instruction["type"].upper()
+        l1_idx, l2_idx = instruction["target"]
+        l1 = logical_names[l1_idx]
+        l2 = logical_names[l2_idx]
+        data1 = mapping[l1]["data"]   # circuit's control block
+        data2 = mapping[l2]["data"]   # circuit's target block
+
+        if gate == "CZ":
+            print(
+                "[EC] Warning: logical CZ is not supported for the Shor "
+                "code (a transversal physical CZ does not implement it -- "
+                "see _shor9_transversal_two_qubit_gate); skipping."
+            )
+            return current_state
+
+        if gate not in ("CX", "CNOT"):
+            print(f"[EC] Warning: two-qubit gate '{gate}' not natively supported for the Shor code; skipping.")
+            return current_state
+
+        for phys_control, phys_target in zip(data2, data1):
+            dur = calibrations["cnot_dur"].get(
+                (phys_control, phys_target), calibrations["cnot_dur"].get((phys_target, phys_control), 100.0)
+            )
+            current_state = self._simulate_subsystem(
+                sub_names=[phys_control, phys_target],
+                sub_drives=[{"type": "ICX", "control": 0, "target": 1}],
+                duration=dur,
+                sub_couplings=[],
+                full_state=current_state,
+                full_names=active_names,
+                full_dims=active_dims,
+                gate_label=f"EC_{gate}_shor",
+            )
+
+        return current_state
 
     def execute_stabilizer_workflow(
         self,
@@ -1414,6 +1911,21 @@ class ErrorCorrectionEngine:
         current_state = qt.tensor(ground_states)
         current_state.dims = [list(dims), [1] * len(dims)]
 
+        # ── Step 6b: Encode |0>_L for every logical block ───────────────
+        # |00...0> is only itself the codeword |0>_L for codes where the
+        # logical zero happens to coincide with a computational basis state
+        # (true of the repetition code, NOT true in general -- e.g. the
+        # Shor code's |0>_L is a genuine multi-term superposition). Running
+        # code.encoding_circuit turns the physical |00...0> state into the
+        # actual |0>_L codeword; for the repetition code this is a
+        # mathematical no-op (verified in stabilizer_codes.py).
+        if code.encoding_circuit:
+            print(f"[EC]    Encoding |0>_L for {len(logical_names)} logical qubit(s)...")
+            for l_name in logical_names:
+                current_state = self._encode_logical_zero(
+                    l_name, mapping, code, physical_names, dims, current_state,
+                )
+
         # ── Step 7: Execute logical circuit, gate by gate ──────────────
         print(f"\n[EC] 6. Executing logical circuit ({len(logical_circuit)} gates)...\n")
         gate_counter = 0
@@ -1494,35 +2006,75 @@ class ErrorCorrectionEngine:
         coupling_type: str,
         current_state: qt.Qobj,
     ) -> qt.Qobj:
-        """Simulate syndrome CNOTs for one logical block, then measure & correct."""
-        block_names = mapping[l_name]["data"] + mapping[l_name]["ancilla"]
+        """
+        Run one full syndrome-extraction + measurement + correction cycle
+        for one logical block, GENERATOR BY GENERATOR.
+
+        Each stabilizer generator is extracted and measured using ONLY the
+        small subsystem of qubits it actually touches (its own data qubits
+        + its own ancilla) rather than the whole logical block at once.
+        This keeps every simulated subsystem's Hilbert-space dimension
+        bounded by the code's largest generator WEIGHT (2-3 qubits for the
+        repetition code, up to 7 for a Shor-code X-generator) instead of
+        the code's total qubit count (5 for the repetition code, but 17 for
+        Shor) — required for the 9-qubit Shor code to be tractable at all
+        with this engine's dense-matrix simulation backend. Because all of
+        a valid code's generators mutually commute, this generator-by-
+        generator processing gives EXACTLY the same joint syndrome
+        distribution and post-measurement state as extracting/measuring
+        everything jointly (see _measure_and_collapse_ancilla).
+        """
         print(f"    Syndrome extraction for logical block: {l_name}")
 
-        # _syndrome_extraction_drives now returns LOCAL indices
-        # (0..code.num_data+code.num_ancilla-1)
-        ec_drives, _, _ = self._syndrome_extraction_drives(
-            l_name, mapping, code, calibrations, coupling_strength,
-        )
+        data_names = mapping[l_name]["data"]
+        anc_names  = mapping[l_name]["ancilla"]
 
-        current_state = self._simulate_subsystem(
-            sub_names      = block_names,
-            sub_drives     = ec_drives,
-            sub_couplings  = [],
-            duration       = 0.0,
-            full_state     = current_state,
-            full_names     = physical_names,
-            full_dims      = dims,
-            gate_label     = "EC_Syndrome",
-        )
+        syndrome_bits: List[int] = [0] * code.num_ancilla
 
-        current_state = self._syndrome_measurement_and_correct(
-            current_state,
-            l_name,
-            mapping,
-            code,
-            physical_names,
-            physical_index,
-            dims,
-        )
+        for gen in code.generators:
+            anc_name        = anc_names[gen.ancilla]
+            gen_data_names  = [data_names[dq] for dq in gen.data_qubits]
+            sub_names       = gen_data_names + [anc_name]
+
+            drives = self._generator_extraction_drives(gen)
+            current_state = self._simulate_subsystem(
+                sub_names      = sub_names,
+                sub_drives     = drives,
+                sub_couplings  = [],
+                duration       = 0.0,
+                full_state     = current_state,
+                full_names     = physical_names,
+                full_dims      = dims,
+                gate_label     = "EC_Syndrome",
+            )
+
+            anc_idx = physical_index[anc_name]
+            current_state, bit = self._measure_and_collapse_ancilla(
+                current_state, anc_idx, dims, f"{l_name}:{anc_name}",
+            )
+            syndrome_bits[gen.ancilla] = bit
+
+        syndrome = tuple(syndrome_bits)
+        print(f"    [EC] {l_name}  syndrome {syndrome}")
+
+        # Feed-forward correction(s), looked up from the code's syndrome table.
+        data_idxs   = [physical_index[n] for n in data_names]
+        corrections = code.syndrome_to_correction.get(syndrome, [])
+        for local_dq, pauli_type in corrections:
+            target_idx = data_idxs[local_dq]
+            label = physical_names[target_idx]
+            print(f"    [EC] Applying {pauli_type} correction to {label}")
+            P_op   = _pauli_dim(pauli_type, dims[target_idx])
+            P_full = _tensor_op_at(P_op, target_idx, dims)
+            current_state = P_full * current_state
+
+        # Reset every ancilla found in |1> back to |0>.
+        for anc_name, bit in zip(anc_names, syndrome_bits):
+            if bit == 1:
+                anc_idx = physical_index[anc_name]
+                X_op   = _sigmax_dim(dims[anc_idx])
+                X_full = _tensor_op_at(X_op, anc_idx, dims)
+                current_state = X_full * current_state
+
         return current_state
 

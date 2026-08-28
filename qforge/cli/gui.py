@@ -1701,11 +1701,16 @@ class QForgeGUI(tk.Tk):
             print(f"  [green]Added[/green] [cyan]{ctype}[/cyan] "
                   f"({cstren} GHz): [cyan]{q1_input}[/cyan] ↔ [cyan]{q2_input}[/cyan]")
 
-        use_ec = messagebox.askyesno(
+        ecc_choice = self._ask_choice(
             "3. Error Correction",
-            "Use Quantum Error Correction?\n(3-qubit repetition code)",
-            default=messagebox.NO,
+            "Select the error-correcting code to use for this workflow:",
+            ["No ECC", "3-qubit repetition code", "9-qubit Shor code"],
+            "No ECC",
         )
+        if ecc_choice is None:
+            self._warn("Aborted.")
+            return
+        ecc_choice = ecc_choice.strip() or "No ECC"
 
         qasm_path = filedialog.askopenfilename(
             title="Select OpenQASM (.qasm) File",
@@ -1729,10 +1734,14 @@ class QForgeGUI(tk.Tk):
         def _do():
             try:
                 g_eng = GateEngine()
-                if use_ec:
-                    print("[cyan]Using ErrorCorrectionEngine (3-qubit repetition code)…[/cyan]")
+                if ecc_choice != "No ECC":
                     ec_eng = ErrorCorrectionEngine(self.engine, g_eng)
-                    res    = ec_eng.execute_3q_repetition_workflow(qubit_names, qasm_path)
+                    if ecc_choice == "9-qubit Shor code":
+                        print("[cyan]Using ErrorCorrectionEngine (9-qubit Shor code)…[/cyan]")
+                        res = ec_eng.execute_shor9_workflow(qubit_names, qasm_path)
+                    else:
+                        print("[cyan]Using ErrorCorrectionEngine (3-qubit repetition code)…[/cyan]")
+                        res = ec_eng.execute_3q_repetition_workflow(qubit_names, qasm_path)
                     logical_results = res["logical_populations"]
                     print("\n[bold green]Workflow Complete![/bold green]  "
                           "[dim]Decoded Logical Populations:[/dim]")

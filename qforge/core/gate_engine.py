@@ -1285,7 +1285,7 @@ class GateEngine:
             raise IndexError(f"Target index {target_idx} outside register.")
 
         gate_name = gate_name.upper()
-        if gate_name not in {"X", "H"}:
+        if gate_name not in {"X", "H", "Z"}:
             raise ValueError(f"Unsupported ideal single-qubit gate: {gate_name}")
 
         total_dim = int(np.prod(dims))
@@ -1303,6 +1303,10 @@ class GateEngine:
                 output_bits[target_idx] = 1 - output_bits[target_idx]
                 out_idx = np.ravel_multi_index(tuple(output_bits), dims)
                 U[out_idx, in_idx] = 1.0
+            elif gate_name == "Z":
+                # |0> -> +|0>, |1> -> -|1>; diagonal, leaves the qubit index
+                # unchanged.
+                U[in_idx, in_idx] = -1.0 if bits[target_idx] == 1 else 1.0
             else:  # H
                 output_bits = list(bits)
                 if bits[target_idx] == 0:

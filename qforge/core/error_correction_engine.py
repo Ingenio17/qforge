@@ -129,6 +129,7 @@ from qforge.core.stabilizer_codes import (
     EncodingStep,
     REPETITION_3,
     SHOR_9,
+    STEANE_7,
 )
 
 
@@ -1772,6 +1773,307 @@ class ErrorCorrectionEngine:
                 full_dims=active_dims,
                 gate_label=f"EC_{gate}_shor",
             )
+
+        return current_state
+
+    # ------------------------------------------------------------------
+    # 9e. Steane-code-specific entry point and inner workflow
+    # ------------------------------------------------------------------
+    #
+    # Structurally a near-twin of the Shor-code path above (same
+    # ancilla-reclaiming, dimension-capped strategy, for the same
+    # tractability reasons -- see _run_shor9_workflow's docstring), but
+    # written as its own independent set of methods rather than sharing
+    # code with the Shor-specific ones, so that nothing here can ever
+    # affect the Shor code's behaviour (and vice versa).
+    #
+    # Unlike Shor, the Steane code needs NO special-cased two-qubit gate
+    # handling: it uses the "obvious" CSS convention (logical X-bar =
+    # transversal X, logical Z-bar = transversal Z -- see stabilizer_codes.py),
+    # for which transversal CNOT and CZ implement logical CNOT/CZ directly,
+    # with no direction reversal or basis mismatch (verified by direct
+    # state-vector simulation before this was written). So the gate-
+    # execution loop below calls the fully generic `_transversal_drives`
+    # for every gate type, single- or two-qubit alike.
+
+    def execute_steane7_workflow(
+        self,
+        logical_names: List[str],
+        qasm_path: str,
+        coupling_type: str = "capacitive",
+        coupling_strength: float = 0.010,
+        ec_every_n_gates: int = 0,
+    ) -> Dict:
+        """
+        Entry point for the 7-qubit Steane code.
+
+        Runs a dedicated, ancilla-reclaiming execution path (see
+        `_run_steane7_workflow` / `_run_steane7_syndrome_block`), for the
+        same reason `execute_shor9_workflow` does: the generic
+        `execute_stabilizer_workflow` keeps one dense state vector
+        spanning every physical qubit -- data AND ancilla -- for the whole
+        workflow, which becomes intractable well before this code's 13
+        qubits per logical block (7 data + 6 ancilla) are used more than
+        once or twice in the same workflow. This path instead reclaims
+        each ancilla's dimension immediately after it is measured (exact,
+        not an approximation -- see `_measure_and_reclaim_ancilla`) and
+        simulates every qubit at its computational dimension (2) rather
+        than its full registered `truncated_dim`, which is also exact here
+        since every gate in this workflow is an ideal/logical Clifford
+        operation that never populates a leakage level (see
+        `_run_steane7_workflow`'s docstring for the full justification).
+        See stabilizer_codes.STEANE_7 for the code's generator layout and
+        the Hamming-code syndrome decoding it uses.
+
+        Parameters
+        ----------
+        logical_names : list of str
+            Names of the logical qubits (must exist in QubitEngine).
+            Each is expanded to 13 physical qubits (7 data + 6 ancilla) in
+            memory only — they are NEVER written to the session JSON file.
+        qasm_path : str
+            Path to an OpenQASM 2.0 file for the logical circuit.
+        coupling_type : str
+            Coupling type for syndrome-extraction CNOTs (default: "capacitive").
+        coupling_strength : float
+            Coupling strength in GHz (default: 0.010).
+        ec_every_n_gates : int
+            Run a syndrome cycle after every N gates (default: 1).
+            Set to 0 to skip all mid-circuit syndromes and run only a single
+            final syndrome pass.  Use 0 for circuits with H gates / superpositions,
+            because stabiliser measurement collapses non-eigenstate superpositions
+            mid-circuit.
+        """
+        code = STEANE_7
+
+        print(f"[EC] 1. Parsing logical QASM from '{qasm_path}'...")
+        transpiler      = QASMTranspiler()
+        logical_circuit = transpiler.parse_file(qasm_path)
+        print(f"[EC]    {len(logical_circuit)} logical instructions parsed.")
+
+        print(f"[EC] 2. Generating physical qubit mapping for '{code.name}'...")
+        mapping        = self.generate_stabilizer_mapping(logical_names, code)
+        physical_names = self._get_flat_physical_names(logical_names, mapping)
+        print(
+            f"[EC]    Logical qubits : {logical_names}\n"
+            f"[EC]    Physical qubits: {physical_names}"
+        )
+
+        self._register_physical_qubits(logical_names, mapping)
+
+        try:
+            self._run_steane7_workflow(
+                logical_names     = logical_names,
+                logical_circuit   = logical_circuit,
+                mapping           = mapping,
+                code              = code,
+                physical_names    = physical_names,
+                coupling_type     = coupling_type,
+                coupling_strength = coupling_strength,
+                ec_every_n_gates  = ec_every_n_gates,
+            )
+            result = self._last_ec_result
+        finally:
+            self._cleanup_physical_qubits(logical_names, mapping)
+
+        return result
+
+    def _run_steane7_workflow(
+        self,
+        logical_names: List[str],
+        logical_circuit: List[Dict],
+        mapping: Dict,
+        code: StabilizerCode,
+        physical_names: List[str],
+        coupling_type: str,
+        coupling_strength: float,
+        ec_every_n_gates: int,
+    ) -> None:
+        """
+        Steane-code counterpart of `_run_shor9_workflow`.
+
+        Ancilla reclaim: `active_names`/`active_dims` are the qubits
+        CURRENTLY present in `current_state` (initially just the data
+        qubits of every logical block), grown by one ancilla right before
+        its own generator is extracted and shrunk back down the instant
+        that ancilla is measured (`_run_steane7_syndrome_block`).
+
+        Simulated dimension: every qubit's dimension in `active_dims` is
+        capped at 2 (the computational subspace {|0>,|1>} only), regardless
+        of its registered `truncated_dim`. This is exact here, not an
+        approximation: every gate this workflow ever applies -- transversal
+        X/H/CX/CZ, syndrome CNOTs, and feed-forward Pauli corrections --
+        goes through the IDEAL gate path (`_build_ideal_single_qubit_operator`
+        / `_build_ideal_cx_operator` / `_pauli_dim`), built directly from
+        whatever `dims` it is given and provably acting as identity outside
+        the qubit indices it touches; combined with an initial state of |0>
+        everywhere, no leakage level is ever populated at any point in this
+        workflow, so there is nothing for a truncated_dim=2 simulation to
+        lose. It is also necessary for tractability: with each qubit's full
+        registered truncated_dim (commonly > 2 for scqubits transmon
+        models), even a single Steane-encoded logical qubit's 7 data qubits
+        could need an unnecessarily large state vector.
+
+        Because Steane's logical operators use the standard CSS convention
+        (see stabilizer_codes.STEANE_7), transversal gates -- single- and
+        two-qubit alike -- are all handled by the fully generic
+        `_transversal_drives`, unlike the Shor path which needs a
+        dedicated two-qubit handler.
+        """
+        print("[EC] 3. Calibrating pulses (results cached for re-use)...")
+        calibrations = self._calibrate(
+            logical_names,
+            mapping,
+            physical_names,
+            syndrome_couplings=[],
+            coupling_type=coupling_type,
+            coupling_strength=coupling_strength,
+            calibrate_cnot=False,
+        )
+
+        # ── Active state: data qubits of every logical block, initially |00...0> ──
+        active_names = []
+        for l_name in logical_names:
+            active_names.extend(mapping[l_name]["data"])
+        active_dims = [
+            min(2, self.qubit_engine.get_qubit(name).truncated_dim)
+            for name in active_names
+        ]
+        print(f"[EC] 4. Initialising physical state to |00...0> ({len(active_names)} data qubits)...")
+        current_state = qt.tensor([qt.basis(d, 0) for d in active_dims])
+        current_state.dims = [list(active_dims), [1] * len(active_dims)]
+
+        print(f"[EC]    Encoding |0>_L for {len(logical_names)} logical qubit(s)...")
+        for l_name in logical_names:
+            current_state = self._encode_logical_zero(
+                l_name, mapping, code, active_names, active_dims, current_state,
+            )
+
+        # ── Execute logical circuit, gate by gate ──────────────────────
+        print(f"\n[EC] 5. Executing logical circuit ({len(logical_circuit)} gates)...\n")
+        gate_counter = 0
+
+        for step_idx, instruction in enumerate(logical_circuit):
+            gate_label = instruction.get("type", "?")
+            target     = instruction.get("target", "?")
+            print(f"  [Gate {step_idx:03d}] {gate_label}  target={target}")
+
+            current_state = self._transversal_drives(
+                instruction, logical_names, mapping, code,
+                active_names, active_dims, calibrations,
+                current_state,
+            )
+
+            gate_counter += 1
+
+            if ec_every_n_gates > 0 and gate_counter % ec_every_n_gates == 0:
+                print(f"  [EC cycle after gate {step_idx}]")
+                for l_name in logical_names:
+                    current_state = self._run_steane7_syndrome_block(
+                        l_name, mapping, code, active_names, active_dims, current_state,
+                    )
+
+        # ── Final syndrome pass (always runs) ──────────────────────────
+        print("  [EC final syndrome pass]")
+        for l_name in logical_names:
+            current_state = self._run_steane7_syndrome_block(
+                l_name, mapping, code, active_names, active_dims, current_state,
+            )
+
+        # By now every ancilla has been reclaimed, so active_names/active_dims
+        # are exactly the data qubits again, in the same order as at the top.
+        active_index = {name: idx for idx, name in enumerate(active_names)}
+
+        print("\n[EC] 6. Circuit complete. Decoding final logical populations...")
+        logical_pops = self._decode_logical_state(
+            current_state, logical_names, mapping, code, active_names, active_index, active_dims
+        )
+
+        print("[EC] Logical state populations:")
+        if not logical_pops:
+            print("    [EC] WARNING: no logical populations decoded.")
+        for bitstring, pop in sorted(logical_pops.items(), key=lambda x: -x[1]):
+            bar = "█" * int(pop * 20) + "░" * (20 - int(pop * 20))
+            print(f"    |{bitstring}>_L  {bar}  {pop * 100:5.2f}%")
+
+        self._last_ec_result = {
+            "logical_populations":  logical_pops,
+            "final_physical_state": current_state,
+        }
+
+    def _run_steane7_syndrome_block(
+        self,
+        l_name: str,
+        mapping: Dict,
+        code: StabilizerCode,
+        active_names: List[str],
+        active_dims: List[int],
+        current_state: qt.Qobj,
+    ) -> qt.Qobj:
+        """
+        Steane-code counterpart of `_run_shor9_syndrome_block`: runs one
+        full syndrome-extraction + measurement + correction cycle for one
+        logical block, generator by generator, tensoring each generator's
+        ancilla in fresh right before it is needed and reclaiming (removing)
+        its dimension immediately after measuring it
+        (`_measure_and_reclaim_ancilla`). `active_names` and `active_dims`
+        are mutated IN PLACE to track whatever is currently tensored into
+        `current_state`; both are back to exactly the data qubits (in their
+        original order) by the time this method returns.
+        """
+        print(f"    Syndrome extraction for logical block: {l_name}")
+
+        data_names = mapping[l_name]["data"]
+        anc_names  = mapping[l_name]["ancilla"]
+        syndrome_bits: List[int] = [0] * code.num_ancilla
+
+        for gen in code.generators:
+            anc_name = anc_names[gen.ancilla]
+            d_anc = min(2, self.qubit_engine.get_qubit(anc_name).truncated_dim)
+
+            # Tensor a fresh |0> ancilla onto the END of the active state.
+            current_state = qt.tensor(current_state, qt.basis(d_anc, 0))
+            active_names.append(anc_name)
+            active_dims.append(d_anc)
+            current_state.dims = [list(active_dims), [1] * len(active_dims)]
+
+            gen_data_names = [data_names[dq] for dq in gen.data_qubits]
+            sub_names      = gen_data_names + [anc_name]
+            drives         = self._generator_extraction_drives(gen)
+            current_state = self._simulate_subsystem(
+                sub_names      = sub_names,
+                sub_drives     = drives,
+                sub_couplings  = [],
+                duration       = 0.0,
+                full_state     = current_state,
+                full_names     = active_names,
+                full_dims      = active_dims,
+                gate_label     = "EC_Syndrome",
+            )
+
+            anc_idx = active_names.index(anc_name)
+            current_state, bit = self._measure_and_reclaim_ancilla(
+                current_state, active_dims, anc_idx, f"{l_name}:{anc_name}",
+            )
+            syndrome_bits[gen.ancilla] = bit
+
+            del active_names[anc_idx]
+            del active_dims[anc_idx]
+
+        syndrome = tuple(syndrome_bits)
+        print(f"    [EC] {l_name}  syndrome {syndrome}")
+
+        # Feed-forward correction(s), looked up from the code's syndrome table.
+        active_index = {name: idx for idx, name in enumerate(active_names)}
+        data_idxs    = [active_index[n] for n in data_names]
+        corrections  = code.syndrome_to_correction.get(syndrome, [])
+        for local_dq, pauli_type in corrections:
+            target_idx = data_idxs[local_dq]
+            label = active_names[target_idx]
+            print(f"    [EC] Applying {pauli_type} correction to {label}")
+            P_op   = _pauli_dim(pauli_type, active_dims[target_idx])
+            P_full = _tensor_op_at(P_op, target_idx, active_dims)
+            current_state = P_full * current_state
 
         return current_state
 

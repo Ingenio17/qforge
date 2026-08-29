@@ -7,37 +7,239 @@ into physical microwave schedules on defined qubit topologies.
 import re
 import numpy as np
 import copy
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine
 
+# Canonical bodies for the OpenQASM 2.0 standard-library gates ("qelib1.inc",
+# included by virtually every real QASM 2.0 file) that are not already
+# covered by QASMTranspiler's hand-written decompositions below. These are
+# reproduced verbatim from the published qelib1.inc, so registering them
+# does not introduce any new physical behavior - it only lets more gate
+# mnemonics resolve into the same {x, h, rz, cx, cz, swap, cp} basis that
+# QForge already simulates.
+_QELIB1_EXTRA_GATES = r"""
+gate cy a,b { sdg b; cx a,b; s b; }
+gate ch a,b {
+h b; sdg b;
+cx a,b;
+h b; t b;
+cx a,b;
+t b; h b; s b; x b; s a;
+}
+gate crz(lambda) a,b {
+u1(lambda/2) b;
+cx a,b;
+u1(-lambda/2) b;
+cx a,b;
+}
+gate cu1(lambda) a,b {
+u1(lambda/2) a;
+cx a,b;
+u1(-lambda/2) b;
+cx a,b;
+u1(lambda/2) b;
+}
+gate cu3(theta,phi,lambda) c,t {
+u1((lambda+phi)/2) c;
+u1((lambda-phi)/2) t;
+cx c,t;
+u3(-theta/2,0,-(phi+lambda)/2) t;
+cx c,t;
+u3(theta/2,phi,0) t;
+}
+gate cswap a,b,c { cx c,b; ccx a,b,c; cx c,b; }
+"""
+
+
 class QASMTranspiler:
     """A parser and transpiler that converts OpenQASM 2.0 into a strict basis gate set."""
-    
-    GATE_PATTERN = re.compile(r"([a-z0-9]+)(?:\(([^)]+)\))?\s+([^;]+);")
-    QUBIT_PATTERN = re.compile(r"([a-z]+)\[(\d+)\]")
+
+    # A single qubit reference such as "q[0]" or "anc_1[3]".
+    INDEXED_QUBIT_PATTERN = re.compile(r"^([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]$")
+    # A `gate name(params) qargs { body }` definition, anywhere in the source
+    # (headers/bodies may legally span multiple lines).
+    GATE_DEF_PATTERN = re.compile(r"gate\s+([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?\s*([^{;]+)\{([^{}]*)\}")
+    OPAQUE_DEF_PATTERN = re.compile(r"opaque\s+[^;]+;")
+    # A single statement: NAME(params)? remainder
+    STATEMENT_PATTERN = re.compile(r"^([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?\s*(.*)$")
+
+    # Statements that carry no meaning for a unitary/Hamiltonian simulation
+    # (classical registers, mid-circuit measurement, timing barriers, and
+    # classically-conditioned execution) are intentionally dropped rather
+    # than approximated - see docs/parsing.rst.
+    _IGNORED_KEYWORDS = {"openqasm", "include", "creg", "measure", "barrier", "reset", "if"}
 
     def __init__(self):
         # The strict basis gates allowed in the output
         self.basis_gates = {'x', 'h', 'rz', 'cx', 'cz', 'swap', 'cp'}
+        self._reset_parse_state()
+
+    def _reset_parse_state(self):
+        """Clears all per-file state: the qubit register map and the custom-gate library."""
+        self.qreg_offsets: Dict[str, int] = {}
+        self.qreg_sizes: Dict[str, int] = {}
+        self._next_qubit_offset = 0
+        self.custom_gates: Dict[str, Dict[str, Any]] = {}
+        self._warned_gates = set()
+        # Preload the standard-library extras unconditionally: harmless if
+        # unused, and lets files resolve cy/ch/crz/cu1/cu3/cswap correctly
+        # even when their own `include "qelib1.inc";` line isn't present.
+        self._register_gate_defs(_QELIB1_EXTRA_GATES)
+
+    @staticmethod
+    def _sanitize_identifier(name: str) -> str:
+        """Renames identifiers that collide with Python keywords - 'lambda' is
+        the standard OpenQASM parameter name for phase angles (u1, crz, cu1,
+        cu3) and cannot be evaluated as a bare identifier via `eval`."""
+        return "lambda_" if name == "lambda" else name
 
     def _parse_qubits(self, arg_string: str) -> List[int]:
-        """Extracts qubit indices from a string like 'q[0], q[1]'."""
-        return [int(match.group(2)) for match in self.QUBIT_PATTERN.finditer(arg_string)]
+        """Extracts indexed qubit references from a string like 'q[0], q[1]'.
+        Kept for backward compatibility; prefer `_resolve_qubit_args`, which
+        also understands multiple registers and whole-register broadcasts."""
+        return [int(m.group(2)) for m in re.finditer(r"([A-Za-z_]\w*)\[(\d+)\]", arg_string)]
 
-    def _parse_params(self, param_string: str) -> List[float]:
-        """Safely evaluates mathematical expressions like 'pi/2' into floats."""
-        if not param_string: return []
-        
-        safe_dict = {"pi": np.pi, "sqrt": np.sqrt}
+    def _parse_params(self, param_string: Optional[str], extra_vars: Optional[Dict[str, float]] = None) -> List[float]:
+        """Safely evaluates mathematical expressions like 'pi/2' into floats.
+        `extra_vars` supplies actual values for a custom gate's formal
+        parameters (e.g. {'lambda_': 1.57}) while expanding its body."""
+        if not param_string:
+            return []
+
+        safe_dict = {
+            "pi": np.pi, "sqrt": np.sqrt, "sin": np.sin, "cos": np.cos,
+            "tan": np.tan, "exp": np.exp, "ln": np.log,
+        }
+        if extra_vars:
+            safe_dict.update(extra_vars)
+
         params = []
         for p in param_string.split(","):
+            expr = re.sub(r"\blambda\b", "lambda_", p.strip()).replace("^", "**")
             try:
-                params.append(eval(p.strip(), {"__builtins__": None}, safe_dict))
+                params.append(float(eval(expr, {"__builtins__": None}, safe_dict)))
             except Exception:
                 params.append(0.0)
         return params
+
+    # ------------------------------------------------------------------
+    # Quantum register bookkeeping: multiple `qreg` declarations are mapped
+    # into one contiguous physical index space, in declaration order, and
+    # whole-register gate calls (e.g. "h q;") broadcast across their qubits.
+    # ------------------------------------------------------------------
+
+    def _handle_qreg(self, declaration: str):
+        match = self.INDEXED_QUBIT_PATTERN.match(declaration.strip())
+        if not match:
+            return
+        name, size = match.group(1), int(match.group(2))
+        self.qreg_offsets[name] = self._next_qubit_offset
+        self.qreg_sizes[name] = size
+        self._next_qubit_offset += size
+
+    def _global_index(self, reg_name: str, local_index: int) -> int:
+        if reg_name not in self.qreg_offsets:
+            raise ValueError(f"reference to undeclared quantum register '{reg_name}'.")
+        if local_index >= self.qreg_sizes[reg_name]:
+            raise ValueError(
+                f"index {local_index} out of bounds for register '{reg_name}[{self.qreg_sizes[reg_name]}]'."
+            )
+        return self.qreg_offsets[reg_name] + local_index
+
+    def _resolve_qubit_args(self, arg_string: str) -> List[List[int]]:
+        """
+        Resolves a gate's qubit-argument list into one or more concrete index
+        lists. A bare register name (e.g. the 'q' in 'h q;') broadcasts the
+        gate across every qubit of that register, per the OpenQASM 2.0
+        register-broadcast rule; mixing broadcast and indexed arguments
+        (e.g. 'cx q[0], r;') is also supported.
+        """
+        tokens = [t.strip() for t in arg_string.split(",") if t.strip()]
+        resolved: List[Tuple[str, Any]] = []
+        broadcast_len = None
+
+        for tok in tokens:
+            indexed = self.INDEXED_QUBIT_PATTERN.match(tok)
+            if indexed:
+                idx = self._global_index(indexed.group(1), int(indexed.group(2)))
+                resolved.append(("single", idx))
+                continue
+
+            if tok not in self.qreg_sizes:
+                raise ValueError(f"reference to undeclared quantum register '{tok}'.")
+            size = self.qreg_sizes[tok]
+            if broadcast_len is not None and size != broadcast_len:
+                raise ValueError(
+                    f"register size mismatch in broadcast gate call: '{tok}' has {size} qubits, expected {broadcast_len}."
+                )
+            broadcast_len = size
+            resolved.append(("broadcast", [self._global_index(tok, i) for i in range(size)]))
+
+        if broadcast_len is None:
+            return [[val for _, val in resolved]]
+        return [[val if kind == "single" else val[i] for kind, val in resolved] for i in range(broadcast_len)]
+
+    # ------------------------------------------------------------------
+    # Gate-definition parsing: both user-defined `gate { ... }` blocks found
+    # in the source file and the bundled qelib1.inc extras above go through
+    # this same registration/expansion machinery.
+    # ------------------------------------------------------------------
+
+    def _register_gate_defs(self, text: str) -> str:
+        """Finds every `gate name(params) qargs { body }` block in `text`,
+        records it in self.custom_gates, and returns `text` with those
+        blocks removed so the remainder can be parsed as plain statements."""
+
+        def _register(match: "re.Match") -> str:
+            name = match.group(1).lower()
+            param_names = [self._sanitize_identifier(p.strip())
+                           for p in (match.group(2) or "").split(",") if p.strip()]
+            qarg_names = [q.strip() for q in match.group(3).split(",") if q.strip()]
+
+            body_text = " ".join(match.group(4).split())
+            body_stmts = []
+            for raw in body_text.split(";"):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                sub_match = self.STATEMENT_PATTERN.match(raw)
+                if not sub_match:
+                    continue
+                body_stmts.append((
+                    sub_match.group(1).lower(),
+                    sub_match.group(2) or "",
+                    [q.strip() for q in sub_match.group(3).split(",") if q.strip()],
+                ))
+
+            self.custom_gates[name] = {"params": param_names, "qargs": qarg_names, "body": body_stmts}
+            return ""
+
+        return self.GATE_DEF_PATTERN.sub(_register, text)
+
+    def _expand_custom_gate(self, gate_name: str, params: List[float], qubits: List[int]) -> List[Dict[str, Any]]:
+        definition = self.custom_gates[gate_name]
+        formal_params, formal_qargs = definition["params"], definition["qargs"]
+
+        if len(qubits) != len(formal_qargs):
+            print(f"Warning: Gate '{gate_name}' expects {len(formal_qargs)} qubit(s) "
+                  f"but received {len(qubits)}; skipping.")
+            return []
+
+        param_map = dict(zip(formal_params, params))
+        qarg_map = dict(zip(formal_qargs, qubits))
+
+        instructions = []
+        for sub_name, sub_param_str, sub_qarg_names in definition["body"]:
+            sub_params = self._parse_params(sub_param_str, extra_vars=param_map)
+            try:
+                sub_qubits = [qarg_map[q] for q in sub_qarg_names]
+            except KeyError as missing:
+                print(f"Warning: Unknown qubit argument {missing} in body of gate '{gate_name}'; skipping sub-instruction.")
+                continue
+            instructions.extend(self._decompose(sub_name, sub_params, sub_qubits))
+        return instructions
 
     def _decompose(self, gate_name: str, params: List[float], qubits: List[int]) -> List[Dict[str, Any]]:
         """
@@ -129,31 +331,80 @@ class QASMTranspiler:
                 self._decompose("cx", [], [c1, c2])
             )
 
-        # Ignore unrecognized commands (like measurements/barriers) for the physics engine
+        # 7. Identity / delay gates carry no physical action
+        if gate_name in ("id", "u0"):
+            return []
+
+        # 8. Anything defined via a `gate { ... }` block in the source file,
+        # or via the bundled qelib1.inc extras registered in __init__.
+        if gate_name in self.custom_gates:
+            return self._expand_custom_gate(gate_name, params, qubits)
+
+        # Ignore unrecognized commands (unknown gates) for the physics engine, warning once per name.
+        if gate_name not in self._warned_gates:
+            self._warned_gates.add(gate_name)
+            print(f"Warning: Unrecognized gate '{gate_name}' has no known decomposition into the native basis; ignoring.")
         return []
 
     def parse_file(self, filepath: str) -> List[Dict[str, Any]]:
         with open(filepath, 'r') as f:
             return self.parse_string(f.read())
 
-    def parse_string(self, qasm_string: str) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _strip_comments(text: str) -> str:
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)  # block comments
+        text = re.sub(r"//[^\n]*", "", text)                     # line comments
+        return text
+
+    def _process_statement(self, statement: str) -> List[Dict[str, Any]]:
+        match = self.STATEMENT_PATTERN.match(statement)
+        if not match:
+            return []
+
+        name, params_str, remainder = match.group(1), match.group(2), match.group(3).strip()
+        name_lower = name.lower()
+
+        if name_lower in self._IGNORED_KEYWORDS:
+            return []
+        if name_lower == "qreg":
+            self._handle_qreg(remainder)
+            return []
+        if not remainder:
+            return []
+
+        params = self._parse_params(params_str)
+        try:
+            qubit_calls = self._resolve_qubit_args(remainder)
+        except ValueError as err:
+            print(f"Warning: {err} Skipping instruction '{statement}'.")
+            return []
+
         instructions = []
-        qasm_string = re.sub(r"//.*", "", qasm_string) # Strip comments
-        
-        for line in qasm_string.splitlines():
-            line = line.strip()
-            if not line or line.startswith(("OPENQASM", "include", "creg", "qreg", "measure", "barrier")):
-                continue
-                
-            match = self.GATE_PATTERN.match(line)
-            if match:
-                gate_name = match.group(1)
-                params = self._parse_params(match.group(2))
-                qubits = self._parse_qubits(match.group(3))
+        for qubits in qubit_calls:
+            instructions.extend(self._decompose(name_lower, params, qubits))
+        return instructions
 
-                # Recursively expand the gate and append to the main instruction list
-                instructions.extend(self._decompose(gate_name, params, qubits))
+    def parse_string(self, qasm_string: str) -> List[Dict[str, Any]]:
+        """
+        Parses an OpenQASM 2.0 source string into the transpiler's native
+        instruction list. Handles multiple qregs (mapped to one contiguous
+        physical index space), register broadcasts, statements/comments
+        spanning multiple lines, several statements per line, and
+        user-defined `gate { ... }` blocks in addition to the standard
+        qelib1.inc library.
+        """
+        self._reset_parse_state()
 
+        text = self._strip_comments(qasm_string)
+        text = self._register_gate_defs(text)         # consume `gate ... { ... }` blocks
+        text = self.OPAQUE_DEF_PATTERN.sub("", text)   # opaque declarations have no body to expand
+        text = " ".join(text.split())                  # collapse newlines/indentation for statement splitting
+
+        instructions = []
+        for statement in text.split(";"):
+            statement = statement.strip()
+            if statement:
+                instructions.extend(self._process_statement(statement))
         return instructions
 
 

@@ -73,6 +73,7 @@ phase, which a bit-population/majority-vote reading of the diagonal cannot
 see. Only a genuine logical-Z projective measurement decodes it correctly.
 """
 
+import itertools
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
@@ -405,5 +406,126 @@ SHOR_9 = StabilizerCode(
         EncodingStep(gate="ICX", control=3, target=5),
         EncodingStep(gate="ICX", control=6, target=7),
         EncodingStep(gate="ICX", control=6, target=8),
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# 7-qubit Steane code
+# ---------------------------------------------------------------------------
+#
+# The Steane code is the CSS(C1, C2) construction built from the classical
+# [7,4,3] Hamming code C1 and its dual C2 = C1^perp, the [7,3,4] simplex
+# code (C2 subset C1, so the construction is valid). Both the X-type and
+# Z-type stabilizer generators come from the SAME 3x7 parity-check matrix H
+# of C1 (equivalently, a generator matrix of C2):
+#
+#     H = [ 1 0 1 0 1 0 1 ]   (row A: qubits {0,2,4,6})
+#         [ 0 1 1 0 0 1 1 ]   (row B: qubits {1,2,5,6})
+#         [ 0 0 0 1 1 1 1 ]   (row C: qubits {3,4,5,6})
+#
+# i.e. column j (0-indexed qubit j) of H is the 3-bit binary representation
+# of (j+1). Each row gives one Z-type generator and one X-type generator
+# (same qubit support, different Pauli), for 6 generators total (7 data
+# qubits - 1 logical qubit = 6).
+#
+# All 6 generators mutually commute: two Z-type (or two X-type) generators
+# trivially commute, and every X/Z pair from different rows overlaps on
+# exactly 2 qubits (even), e.g. row-A-X = {0,2,4,6} and row-B-Z = {1,2,5,6}
+# overlap on {2,6}; same-row X/Z pairs overlap on all 4 qubits (also even).
+#
+# Syndrome decoding (the classic "Hamming code" property): reading the 3
+# Z-type-generator syndrome bits as a binary number (row A = bit 0, row B =
+# bit 1, row C = bit 2) gives the 1-indexed physical qubit that suffered a
+# bit-flip (X) error directly -- no lookup table search needed, because H's
+# columns are literally the binary representations of the qubit indices.
+# The same holds for the 3 X-type-generator bits and phase-flip (Z) errors.
+# Both can be corrected simultaneously if triggered together, exactly like
+# the Shor code's inner/outer corrections (hence corrections are lists
+# here too, even though at most one X and one Z correction can ever appear
+# together for this code).
+#
+# Logical operators: UNLIKE the Shor code, Steane uses the "obvious" CSS
+# convention directly: logical X-bar = X on all 7 qubits (transversal X),
+# logical Z-bar = Z on all 7 qubits (transversal Z) -- both built from the
+# same Pauli type their names suggest. Steane is also famously self-dual
+# enough to have a valid TRANSVERSAL HADAMARD (H on all 7 qubits swaps
+# X-bar <-> Z-bar exactly, since they share the same 7-qubit support), and
+# transversal CNOT/CZ between two Steane-encoded logical qubits implement
+# logical CNOT/CZ directly with no direction reversal or basis mismatch --
+# none of the Shor-code-specific workarounds in error_correction_engine.py
+# are needed here, so the Steane execution path there reuses the fully
+# generic transversal-gate machinery unmodified.
+#
+# All of the above (generator commutativity, the syndrome/binary-index
+# correspondence for all 7 possible single-qubit errors, the logical
+# operators, transversal CX and CZ acting as their logical counterparts
+# with no reversal, and the encoding circuit below) were independently
+# verified by direct state-vector simulation before this code was written.
+#
+# Encoding circuit: C2's generator matrix (= H above) is already in
+# reduced row-echelon form with pivot columns {0, 1, 3} -- i.e. those are
+# the "message" qubits. The standard CSS encoding recipe is: Hadamard the
+# message qubits, then for each row, CNOT from its pivot (message) qubit to
+# every OTHER qubit where that row has a 1. Direct simulation confirms this
+# exactly reproduces |0>_L as constructed from the stabilizer group's
+# common +1 eigenspace.
+
+def _build_steane7_syndrome_table() -> Dict[Tuple[int, ...], List[Tuple[int, str]]]:
+    """
+    Build the full syndrome -> correction table for the 7-qubit Steane
+    code using the binary-index Hamming-code property described above.
+
+    Ancilla layout (6 ancillas, in the same order as STEANE_7.generators):
+        0,1,2 : Z-type generators (rows A,B,C) -> X correction, qubit
+                index = binary(s0,s1,s2) - 1 (bit 0 = ancilla 0's outcome)
+        3,4,5 : X-type generators (rows A,B,C) -> Z correction, qubit
+                index = binary(s3,s4,s5) - 1
+    """
+    table: Dict[Tuple[int, ...], List[Tuple[int, str]]] = {}
+    for bits in itertools.product([0, 1], repeat=6):
+        sZA, sZB, sZC, sXA, sXB, sXC = bits
+        z_index = sZA + 2 * sZB + 4 * sZC   # 1-indexed qubit with an X error, 0 = none
+        x_index = sXA + 2 * sXB + 4 * sXC   # 1-indexed qubit with a Z error, 0 = none
+        corrections: List[Tuple[int, str]] = []
+        if z_index != 0:
+            corrections.append((z_index - 1, "X"))
+        if x_index != 0:
+            corrections.append((x_index - 1, "Z"))
+        if corrections:
+            table[bits] = corrections
+    return table
+
+
+STEANE_7 = StabilizerCode(
+    name="7-qubit Steane code",
+    num_data=7,
+    num_ancilla=6,
+    generators=(
+        StabilizerGenerator(basis="Z", data_qubits=(0, 2, 4, 6), ancilla=0),
+        StabilizerGenerator(basis="Z", data_qubits=(1, 2, 5, 6), ancilla=1),
+        StabilizerGenerator(basis="Z", data_qubits=(3, 4, 5, 6), ancilla=2),
+        StabilizerGenerator(basis="X", data_qubits=(0, 2, 4, 6), ancilla=3),
+        StabilizerGenerator(basis="X", data_qubits=(1, 2, 5, 6), ancilla=4),
+        StabilizerGenerator(basis="X", data_qubits=(3, 4, 5, 6), ancilla=5),
+    ),
+    syndrome_to_correction=_build_steane7_syndrome_table(),
+    logical_x_qubits=(0, 1, 2, 3, 4, 5, 6),
+    logical_x_pauli="X",
+    logical_z_qubits=(0, 1, 2, 3, 4, 5, 6),
+    logical_z_pauli="Z",
+    encoding_circuit=(
+        EncodingStep(gate="H", target=0),
+        EncodingStep(gate="H", target=1),
+        EncodingStep(gate="H", target=3),
+        EncodingStep(gate="ICX", control=0, target=2),
+        EncodingStep(gate="ICX", control=0, target=4),
+        EncodingStep(gate="ICX", control=0, target=6),
+        EncodingStep(gate="ICX", control=1, target=2),
+        EncodingStep(gate="ICX", control=1, target=5),
+        EncodingStep(gate="ICX", control=1, target=6),
+        EncodingStep(gate="ICX", control=3, target=4),
+        EncodingStep(gate="ICX", control=3, target=5),
+        EncodingStep(gate="ICX", control=3, target=6),
     ),
 )

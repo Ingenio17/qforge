@@ -47,22 +47,35 @@ Standard QASM phase and rotation gates are mathematically decomposed into the na
 Multi-Qubit Decompositions
 --------------------------
 * **Toffoli (``ccx``):** The standard 3-qubit controlled-X is natively decomposed into the standard 6-CNOT breakdown involving ``h``, ``cx``, ``t``, and ``tdg`` gates, ensuring it can be executed on 2-qubit physical topologies.
+* **Standard-library extras (``cy``, ``ch``, ``crz``, ``cu1``, ``cu3``, ``cswap``):** These are not hand-derived by QForge; the transpiler preloads the exact gate bodies published in OpenQASM 2.0's ``qelib1.inc`` and recursively decomposes them the same way it does any user-defined gate, so no new physical behavior is introduced beyond the native basis above.
+
+User-Defined Gates
+===================
+Any ``gate name(params) qargs { ... }`` block in the source file is parsed and registered before the rest of the circuit is processed. Calls to that gate are expanded recursively - substituting actual qubits/parameter values for the formal ones in the body - through the exact same machinery used for the ``qelib1.inc`` extras, so custom composite gates decompose all the way down to the native basis. ``opaque`` gate declarations (which have no body to expand) are parsed but their calls are ignored, consistent with the "unsupported features" behavior below.
+
+Registers & Qubit Indexing
+===========================
+* **Multiple ``qreg`` declarations** are mapped into one contiguous physical index space in declaration order (e.g. ``qreg q[2]; qreg anc[1];`` maps ``q[0], q[1], anc[0]`` to physical indices ``0, 1, 2``), rather than assuming a single register.
+* **Register broadcasts** are supported: a gate applied to a bare register name (e.g. ``h q;``) is expanded across every qubit in that register, and two same-size registers used together (e.g. ``cx q, r;``) are expanded qubit-wise.
+* Circuits may freely mix multiple statements per line, statements/parameter lists spanning multiple lines, and ``/* block */`` or ``// line`` comments.
 
 Measurements & Classical Registers
 ==================================
-Because QForge simulates physics at the Hamiltonian level via QuTiP's ``mesolve``, wave-functions are not "collapsed" mid-circuit into classical registers. 
+Because QForge simulates physics at the Hamiltonian level via QuTiP's ``mesolve``, wave-functions are not "collapsed" mid-circuit into classical registers.
 
 The ``QASMTranspiler`` explicitly **ignores** the following OpenQASM directives:
 
 * ``measure``
 * ``barrier``
-* ``creg`` and ``qreg`` allocations
+* ``creg`` allocations
+* ``reset``
+* ``if (...)`` classically-conditioned statements (the condition **and** the wrapped operation are both dropped, since QForge has no classical feedback path from a QASM file - executing the wrapped gate unconditionally would silently change the circuit's meaning)
 
 Instead of writing to a classical bit, QForge computes the continuous density matrix throughout the entire algorithm. At the end of the ``execute_workflow`` simulation, users can extract the exact population probabilities (e.g., the probability of measuring :math:`|11\rangle`) directly from the output states.
 
 Unsupported Features
 ====================
-Any instruction or custom ``opaque`` gate definition that does not match the transpiler's regular expressions or internal decomposition dictionary will be silently ignored by the physics engine. 
+Any gate mnemonic that is neither part of the native basis/decomposition set above, nor defined via a ``gate { ... }`` block in the file, is silently ignored by the physics engine (a one-time warning is printed per unrecognized name). References to an undeclared quantum register, or a register-broadcast size mismatch, are likewise reported as a warning and that single instruction is skipped rather than aborting the whole parse.
 
 Example QASM Workflow
 =====================

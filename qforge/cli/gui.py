@@ -1704,7 +1704,7 @@ class QForgeGUI(tk.Tk):
         ecc_choice = self._ask_choice(
             "3. Error Correction",
             "Select the error-correcting code to use for this workflow:",
-            ["No ECC", "3-qubit repetition code", "9-qubit Shor code"],
+            ["No ECC", "3-qubit repetition code", "9-qubit Shor code", "7-qubit Steane code"],
             "No ECC",
         )
         if ecc_choice is None:
@@ -1739,6 +1739,9 @@ class QForgeGUI(tk.Tk):
                     if ecc_choice == "9-qubit Shor code":
                         print("[cyan]Using ErrorCorrectionEngine (9-qubit Shor code)…[/cyan]")
                         res = ec_eng.execute_shor9_workflow(qubit_names, qasm_path)
+                    elif ecc_choice == "7-qubit Steane code":
+                        print("[cyan]Using ErrorCorrectionEngine (7-qubit Steane code)…[/cyan]")
+                        res = ec_eng.execute_steane7_workflow(qubit_names, qasm_path)
                     else:
                         print("[cyan]Using ErrorCorrectionEngine (3-qubit repetition code)…[/cyan]")
                         res = ec_eng.execute_3q_repetition_workflow(qubit_names, qasm_path)

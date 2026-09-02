@@ -2,748 +2,1074 @@
 Interactive terminal interface for qforge.
 """
 
-from prompt_toolkit import prompt
-from prompt_toolkit.completion import WordCompleter
-from rich.console import Console
-from rich.panel import Panel
-from rich.markdown import Markdown
+import glob
 import os
-import sys
 import subprocess
-from qforge.cli.commands.example import list_example_files, get_examples_dir
+import sys
 
-from qforge.core.qubit_engine import QubitEngine
-from qforge.core.gate_engine import GateEngine
-from qforge.core.workflow_engine import PhysicalWorkflowEngine
+from prompt_toolkit import prompt
+from prompt_toolkit.application import Application
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.dimension import Dimension
+from prompt_toolkit.styles import Style as PTStyle
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Confirm, Prompt
+from rich.table import Table
+
+from qforge import __version__
+from qforge.cli.commands.example import get_examples_dir, list_example_files
 from qforge.core.error_correction_engine import ErrorCorrectionEngine
+from qforge.core.gate_engine import GateEngine
+from qforge.core.qubit_engine import QubitEngine
+from qforge.core.stabilizer_codes import REPETITION_3, SHOR_9, STEANE_7
+from qforge.core.workflow_engine import PhysicalWorkflowEngine
 
 console = Console()
 engine = QubitEngine()
 
+ACCENT = "bright_cyan"
+
+MENU_STYLE = PTStyle.from_dict(
+    {
+        "title": "bold ansibrightcyan",
+        "subtitle": "ansibrightblack italic",
+        "header": "bold ansibrightmagenta",
+        "selected": "bold ansibrightcyan",
+        "item": "",
+        "desc": "ansibrightblack italic",
+        "hint": "ansibrightblack",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Low-level UI helpers
+# ---------------------------------------------------------------------------
+
+
+class _MenuUnavailableError(Exception):
+    """Raised when the arrow-key menu can't run in this terminal."""
+
+
+def _arrow_menu(sections, title=None, subtitle=None):
+    """
+    A small inline, arrow-key driven picker built on prompt_toolkit.
+
+    `sections` is a list of (header, items) where items is a list of
+    (key, label, description) tuples. Returns the chosen key, or None if
+    the user cancelled (q / Esc / Ctrl-C).
+
+    Raises `_MenuUnavailableError` if this terminal can't host a prompt_toolkit
+    Application at all (e.g. output isn't a real console), so callers can
+    fall back to a plain numbered prompt.
+    """
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise _MenuUnavailableError("not an interactive terminal")
+
+    rows = []  # ("header", text) | ("item", key, label, desc)
+    item_rows = []  # indices into `rows` that are selectable
+    for header, items in sections:
+        if header:
+            rows.append(("header", header))
+        for key, label, desc in items:
+            rows.append(("item", key, label, desc))
+            item_rows.append(len(rows) - 1)
+
+    if not item_rows:
+        return None
+
+    cursor = [0]  # index into item_rows
+
+    def move(delta):
+        cursor[0] = (cursor[0] + delta) % len(item_rows)
+
+    def get_text():
+        out = []
+        if title:
+            out.append(("class:title", f" {title}\n"))
+        if subtitle:
+            out.append(("class:subtitle", f" {subtitle}\n"))
+        out.append(("", "\n"))
+        selected_desc = ""
+        for i, row in enumerate(rows):
+            if row[0] == "header":
+                out.append(("class:header", f" {row[1]}\n"))
+            else:
+                _, key, label, desc = row
+                if item_rows[cursor[0]] == i:
+                    out.append(("class:selected", f"   > {label}\n"))
+                    selected_desc = desc or ""
+                else:
+                    out.append(("class:item", f"     {label}\n"))
+        out.append(("class:desc", f"\n     {selected_desc}\n" if selected_desc else "\n"))
+        out.append(("class:hint", "\n  up/down move    enter select    q cancel\n"))
+        return out
+
+    n_lines = 4 + len(rows) + sum(1 for h, _ in sections if h) + 3
+
+    kb = KeyBindings()
+
+    @kb.add("up")
+    @kb.add("k")
+    def _(event):
+        move(-1)
+
+    @kb.add("down")
+    @kb.add("j")
+    def _(event):
+        move(1)
+
+    @kb.add("enter")
+    def _(event):
+        row = rows[item_rows[cursor[0]]]
+        event.app.exit(result=row[1])
+
+    @kb.add("c-c")
+    @kb.add("q")
+    @kb.add("escape")
+    def _(event):
+        event.app.exit(result=None)
+
+    control = FormattedTextControl(get_text, focusable=True)
+    window = Window(content=control, height=Dimension(preferred=n_lines, max=n_lines))
+    app = Application(
+        layout=Layout(window),
+        key_bindings=kb,
+        style=MENU_STYLE,
+        full_screen=False,
+        mouse_support=False,
+    )
+
+    try:
+        return app.run()
+    except _MenuUnavailableError:
+        raise
+    except Exception as exc:
+        raise _MenuUnavailableError(str(exc))
+
+
+def _text_menu(sections, title=None):
+    """Plain numbered-list fallback for terminals that can't render the arrow menu."""
+    if title:
+        console.print(f"\n[bold]{title}[/bold]")
+
+    numbered = []
+    for header, items in sections:
+        if header:
+            console.print(f"[dim]{header}[/dim]")
+        for key, label, _desc in items:
+            numbered.append((key, label))
+            console.print(f"  {len(numbered)}. {label}")
+
+    words = [label for _key, label in numbered] + [key for key, _label in numbered]
+    choice = prompt(
+        "\n> Choice (number or name): ",
+        completer=WordCompleter(words, ignore_case=True, sentence=True),
+    ).strip()
+
+    if choice.isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(numbered):
+            return numbered[idx][0]
+        return None
+
+    choice_l = choice.lower()
+    for key, label in numbered:
+        if choice_l == key.lower() or choice_l == label.lower():
+            return key
+    return None
+
+
+def _choose(sections, title=None, subtitle=None):
+    """Try the arrow-key menu, falling back to a numbered prompt if the terminal can't host it."""
+    try:
+        return _arrow_menu(sections, title=title, subtitle=subtitle)
+    except _MenuUnavailableError:
+        return _text_menu(sections, title=title)
+
+
+def _flat_choose(items, title=None, subtitle=None):
+    """Convenience wrapper for a single, header-less list of (key, label, desc)."""
+    return _choose([(None, items)], title=title, subtitle=subtitle)
+
+
+def _pause():
+    console.print()
+    console.input("[dim]Press enter to return to the menu...[/dim]")
+
+
+def _section(title):
+    console.print(f"\n[bold {ACCENT}]{title}[/bold {ACCENT}]")
+
+
+def _qubit_names():
+    return [q["name"] for q in engine.list_qubits()]
+
+
+def _completer(words):
+    return WordCompleter(words, ignore_case=True, sentence=True)
+
+
+def _prompt_params(defaults):
+    """Ask for each parameter in `defaults`, keeping its default on an empty reply."""
+    params = {}
+    for key, default_val in defaults.items():
+        val_str = prompt(f"  {key} [{default_val}]: ").strip()
+        if not val_str:
+            params[key] = default_val
+            continue
+        try:
+            if isinstance(default_val, bool):
+                params[key] = val_str.lower() in ("y", "yes", "true", "1")
+            elif isinstance(default_val, int):
+                params[key] = int(val_str)
+            elif isinstance(default_val, float):
+                params[key] = float(val_str)
+            else:
+                params[key] = val_str
+        except ValueError:
+            console.print(
+                f"[yellow]Couldn't parse '{val_str}' for {key}, keeping default.[/yellow]"
+            )
+            params[key] = default_val
+    return params
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+
+def _menu_sections():
+    return [
+        (
+            "QUBITS",
+            [
+                (
+                    "create",
+                    "Create a qubit",
+                    "Define a new physical qubit from EJ/EC/EL and friends",
+                ),
+                ("list", "List qubits", "Show every qubit registered in this session"),
+                ("analyze", "Analyze a qubit", "Spectrum, anharmonicity, coherence estimates"),
+                ("compare", "Compare qubits", "Side-by-side metrics across qubits"),
+                ("delete", "Delete a qubit", "Remove a qubit and its cached calibrations"),
+            ],
+        ),
+        (
+            "GATES & CIRCUITS",
+            [
+                (
+                    "gate",
+                    "Simulate a gate",
+                    "Drive a 1- or 2-qubit gate and watch populations evolve",
+                ),
+                ("multi", "Analyze multi-qubit gates", "Compare coupling types for CNOT / CZ"),
+                ("circuit", "Build a circuit", "Multi-gate circuit construction"),
+            ],
+        ),
+        (
+            "WORKFLOWS",
+            [
+                (
+                    "workflow",
+                    "Run full workflow",
+                    "QASM to physical execution, with optional error correction",
+                ),
+            ],
+        ),
+        (
+            "HARDWARE",
+            [
+                ("hardware", "Design hardware", "Chip layout from qubit and coupling choices"),
+            ],
+        ),
+        (
+            "LEARN",
+            [
+                ("example", "Run an example", "Execute a bundled example script"),
+                ("help", "Help", "Guide to interactive mode"),
+            ],
+        ),
+        (
+            None,
+            [
+                ("exit", "Exit", "Quit qforge interactive mode"),
+            ],
+        ),
+    ]
+
+
+def _print_banner():
+    console.print(
+        Panel.fit(
+            f"[bold {ACCENT}]qforge[/bold {ACCENT}] [dim]v{__version__}[/dim] — interactive mode\n\n"
+            "A guided, physics-first path from qubit parameters to calibrated gates,\n"
+            "circuits, and error correction. Built for quick prototyping in the terminal.\n\n"
+            "[yellow]Tip:[/yellow] use the arrow keys and enter to pick an option, or type its name.",
+            border_style=ACCENT,
+        )
+    )
+    console.print(
+        "[dim]Powered by scqubits and QuTiP. Please cite these libraries in your research.[/dim]"
+    )
+
+
+HANDLERS = {}
+
 
 def run_interactive():
     """Run qforge in interactive mode with guided workflows."""
-    
-    console.print(
-        Panel.fit(
-            "[bold cyan]Welcome to qforge Interactive Mode![/bold cyan]\n\n"
-            "This guided interface will help you build quantum simulations step-by-step.\n"
-            "Perfect for beginners and quick prototyping.\n\n"
-            "[yellow]Tip:[/yellow] Type 'help' for assistance, 'exit' to quit.",
-            border_style="cyan",
-        )
-    )
-    
-    console.print("[dim]Powered by scqubits and QuTiP. Please cite these libraries in your research.[/dim]\n")
+    _print_banner()
 
-    # Main menu
-    menu_options = [
-        "Create a qubit",
-        "List qubits",
-        "Analyze a qubit",
-        "Delete a qubit",
-        "Simulate gates",
-        "Build a circuit",
-        "Design hardware",
-        "Compare qubits",
-        "Analyze multi-qubit gates",
-        "Run an example",
-        "Run full workflow",
-        "Help",
-        "Exit",
-    ]
-    
-    completer = WordCompleter(
-        [opt.lower() for opt in menu_options], ignore_case=True, sentence=True
-    )
-    
     while True:
-        engine.load_session()
-        console.print("\n[bold]What would you like to do?[/bold]")
-        for idx, option in enumerate(menu_options, 1):
-            console.print(f"  {idx}. {option}")
-        
         try:
-            choice = prompt(
-                "\n> Your choice (number or name): ",
-                completer=completer,
-            ).strip()
-            
-            # Handle numeric or text input
-            if choice.isdigit():
-                choice_idx = int(choice) - 1
-                if 0 <= choice_idx < len(menu_options):
-                    choice = menu_options[choice_idx].lower()
-                else:
-                    console.print("[red]Invalid choice. Please try again.[/red]")
-                    continue
-            else:
-                choice = choice.lower()
-            
-            # Route to appropriate wizard
-            if choice in ["create a qubit", "1"]:
-                _wizard_create_qubit()
-            elif choice in ["list qubits", "2"]:
-                _wizard_list_qubits()
-            elif choice in ["analyze a qubit", "3"]:
-                _wizard_analyze_qubit()
-            elif choice in ["delete a qubit", "4"]:
-                _wizard_delete_qubit()
-            elif choice in ["simulate gates", "5"]:
-                _wizard_simulate_gate()
-            elif choice in ["build a circuit", "6"]:
-                _wizard_build_circuit()
-            elif choice in ["design hardware", "7"]:
-                _wizard_design_hardware()
-            elif choice in ["compare qubits", "8"]:
-                _wizard_compare_qubits()
-            elif choice in ["analyze multi-qubit gates", "9"]:
-                _wizard_analyze_multi_qubit()
-            elif choice in ["run an example", "10"]:
-                _wizard_run_example()
-            elif choice in ["run full workflow", "11"]:
-                _wizard_full_workflow()
-            elif choice in ["help", "12"]:
-                _show_help()
-            elif choice in ["exit", "13", "quit", "q"]:
-                console.print("\n[cyan]Thank you for using qforge! Goodbye![/cyan]\n")
+            engine.load_session()
+            n_qubits = len(_qubit_names())
+            subtitle = (
+                f"{n_qubits} qubit(s) registered"
+                if n_qubits
+                else "no qubits yet - start with 'Create a qubit'"
+            )
+            choice = _choose(
+                _menu_sections(), title="What would you like to do?", subtitle=subtitle
+            )
+
+            if choice is None or choice == "exit":
+                console.print(f"\n[{ACCENT}]Thanks for using qforge. Goodbye![/{ACCENT}]\n")
                 break
-            else:
-                console.print(f"[red]Invalid choice: '{choice}' (Index: {choice_idx if 'choice_idx' in locals() else 'N/A'}). Please try again.[/red]")
-                console.print(f"[dim]Debug: Options are {[o.lower() for o in menu_options]}[/dim]")
-                
+
+            handler = HANDLERS.get(choice)
+            if handler is None:
+                console.print(f"[red]Unknown option: {choice}[/red]")
+                continue
+
+            handler()
+
         except (KeyboardInterrupt, EOFError):
-            console.print("\n\n[cyan]Exiting qforge. Goodbye![/cyan]\n")
+            console.print(f"\n\n[{ACCENT}]Exiting qforge. Goodbye![/{ACCENT}]\n")
             break
 
 
+# ---------------------------------------------------------------------------
+# Wizards: qubits
+# ---------------------------------------------------------------------------
+
+
 def _wizard_create_qubit():
-    """Wizard for creating a qubit."""
-    console.print("\n[bold cyan]Qubit Creation Wizard[/bold cyan]")
-    
+    _section("Create a qubit")
+
     from qforge.config.defaults import QUBIT_PRESETS
-    qubit_types = list(QUBIT_PRESETS.keys())
-    completer = WordCompleter(qubit_types, ignore_case=True)
-    
-    qubit_type = prompt(
-        f"Select qubit type ({'/'.join(qubit_types)}): ",
-        completer=completer,
-    ).strip().lower()
-    
-    if qubit_type not in qubit_types:
-        console.print(f"[red]Unknown qubit type: {qubit_type}[/red]")
+
+    type_items = []
+    for qtype, presets in QUBIT_PRESETS.items():
+        info = presets.get("_info", {})
+        bits = [b for b in (info.get("freq"), info.get("best_for")) if b]
+        type_items.append((qtype, qtype.capitalize(), "  ·  ".join(bits)))
+
+    qubit_type = _flat_choose(type_items, title="Choose a qubit type")
+    if not qubit_type:
         return
-    
-    name = prompt("Enter a name for your qubit: ").strip()
-    
-    # Dynamic parameter prompting
-    # Get parameters from 'typical' preset to know what to ask
-    defaults = QUBIT_PRESETS[qubit_type].get("typical", {})
-    params = {}
-    
-    console.print(f"\n[yellow]Configuring {qubit_type} (defaults shown):[/yellow]")
-    
-    for key, default_val in defaults.items():
-        # Skip some internal keys if any? usually EJ, EC, EL, flux, etc.
-        # Maybe skip 'cutoff' or 'ncut' for wizard simplicity? 
-        # For now, ask everything but maybe organize execution 
-        
-        # Friendly prompt formatting
-        prompt_text = f"{key} [default: {default_val}]: "
-        val_str = prompt(prompt_text).strip()
-        
-        if not val_str:
-            params[key] = default_val
-        else:
-            # Try to convert to float/int type of default
-            try:
-                if isinstance(default_val, int):
-                    params[key] = int(val_str)
-                elif isinstance(default_val, float):
-                    params[key] = float(val_str)
-                else:
-                    params[key] = val_str
-            except ValueError:
-                console.print(f"[red]Invalid input for {key}, using default.[/red]")
-                params[key] = default_val
+
+    preset_keys = [k for k in QUBIT_PRESETS[qubit_type] if k != "_info"]
+    preset_items = [(k, k.replace("_", " ").title(), "") for k in preset_keys]
+    preset_items.append(("custom", "Custom", "Enter every parameter yourself"))
+    preset = _flat_choose(preset_items, title=f"Starting point for this {qubit_type}")
+    if not preset:
+        return
+
+    name = prompt("Name for this qubit: ").strip()
+    if not name:
+        return
+
+    if preset == "custom":
+        defaults = QUBIT_PRESETS[qubit_type].get("typical", {})
+        console.print(f"\n[yellow]Configuring {qubit_type} (blank keeps the default):[/yellow]")
+        params = _prompt_params(defaults)
+    else:
+        params = QUBIT_PRESETS[qubit_type][preset].copy()
+        table = Table(
+            title=f"{preset.replace('_', ' ').title()} {qubit_type} parameters", show_header=True
+        )
+        table.add_column("Parameter", style="yellow")
+        table.add_column("Value", style="green")
+        for key, value in params.items():
+            table.add_row(key, str(value))
+        console.print(table)
+        if not Confirm.ask("Use these values as-is?", default=True):
+            console.print(
+                f"\n[yellow]Editing {qubit_type} parameters (blank keeps the shown value):[/yellow]"
+            )
+            params = _prompt_params(params)
 
     console.print(f"\n[green]Creating {qubit_type} '{name}'...[/green]")
-    
-    # Construct CLI command string for display (approximate)
-    cmd_str = f"qforge qubit create {qubit_type} --name {name}"
+
+    cmd_str = f"qforge qubit create -t {qubit_type} -n {name}"
     for k, v in params.items():
-        # Only show core params in CLI hint to avoid clutter?
-        # Actually CLI create command expects specific named arguments (--EJ etc).
-        # Our dynamic wizard gathers a dict.
-        # The internal _create_qubit function accepts a params dict.
-        # But `click` command `create` maps args to params.
-        # We should call `_create_qubit` directly with the params dict.
-        cmd_str += f" --{key} {v}"
-        
-    console.print(f"[dim]Equivalent Command: {cmd_str}[/dim]")
-    
+        cmd_str += f" --{k} {v}"
+    console.print(f"[dim]Equivalent command: {cmd_str}[/dim]")
+
     from qforge.cli.commands.qubit import _create_qubit
-    # We pass params dict directly to _create_qubit
-    # _create_qubit signature: (qubit_type, name, params, output=None, relative=False)
+
     _create_qubit(qubit_type, name, params)
-    
-    console.print("\n[bold green]✓ Qubit created successfully![/bold green]")
+
+    console.print("\n[bold green]Qubit created successfully.[/bold green]")
+    _pause()
+
+
+def _wizard_list_qubits():
+    _section("Registered qubits")
+    from qforge.cli.commands.qubit import list_qubits
+
+    try:
+        list_qubits.callback()
+    except Exception as e:
+        console.print(f"[red]Error listing qubits: {e}[/red]")
+    _pause()
+
+
+def _wizard_analyze_qubit():
+    _section("Analyze a qubit")
+    from qforge.cli.commands.qubit import analyze
+
+    qubits = _qubit_names()
+    if not qubits:
+        console.print("[yellow]No qubits found. Create one first.[/yellow]")
+        _pause()
+        return
+
+    name = prompt("Qubit name: ", completer=_completer(qubits)).strip()
+    if not name:
+        return
+
+    do_plot = Confirm.ask("Generate plots?", default=True)
+    do_coherence = Confirm.ask("Estimate coherence?", default=True)
+    do_relative = Confirm.ask("Display energies relative to the ground state?", default=False)
+
+    try:
+        analyze.callback(name=name, plot=do_plot, coherence=do_coherence, relative=do_relative)
+    except Exception as e:
+        if "Abort" not in str(type(e)):
+            console.print(f"[red]Error: {e}[/red]")
+
+    _pause()
+
+
+def _wizard_delete_qubit():
+    _section("Delete a qubit")
+    from qforge.cli.commands.qubit import delete
+
+    qubits = _qubit_names()
+    if not qubits:
+        console.print("[yellow]No qubits to delete.[/yellow]")
+        _pause()
+        return
+
+    name = prompt("Qubit name to delete: ", completer=_completer(qubits)).strip()
+    if not name:
+        return
+
+    if not Confirm.ask(f"Delete '{name}'? This cannot be undone", default=False):
+        return
+
+    try:
+        delete.callback(name=name)
+
+        g_eng = GateEngine()
+        stale = [key for key in GateEngine._calib_cache if name in (key[0], key[1])]
+        if stale:
+            for key in stale:
+                del GateEngine._calib_cache[key]
+            g_eng._save_cache_to_disk()
+            console.print(
+                f"[dim green]Cleared {len(stale)} cached calibration(s) involving '{name}'.[/dim green]"
+            )
+    except Exception as e:
+        if "Abort" not in str(type(e)):
+            console.print(f"[red]Error: {e}[/red]")
+
+    _pause()
+
+
+def _wizard_compare_qubits():
+    _section("Compare qubits")
+    from qforge.cli.commands.compare import compare_qubits
+
+    qubits = _qubit_names()
+    if len(qubits) < 2:
+        console.print("[yellow]Need at least 2 qubits to compare.[/yellow]")
+        _pause()
+        return
+
+    console.print("[dim]Tab-complete qubit names; separate several with commas.[/dim]")
+    qubit_str = prompt("Qubits to compare: ", completer=_completer(qubits)).strip()
+    if not qubit_str:
+        return
+
+    metric_items = [
+        ("all", "All metrics", ""),
+        ("frequency", "Frequency", ""),
+        ("anharmonicity", "Anharmonicity", ""),
+        ("t1", "T1", ""),
+        ("t2", "T2", ""),
+    ]
+    metrics = _flat_choose(metric_items, title="Which metrics?") or "all"
+
+    try:
+        compare_qubits.callback(
+            qubits=qubit_str, metrics=metrics, gates=None, tag=None, output=None
+        )
+    except Exception as e:
+        if "Abort" not in str(type(e)):
+            console.print(f"[red]Error: {e}[/red]")
+
+    _pause()
+
+
+# ---------------------------------------------------------------------------
+# Wizards: gates
+# ---------------------------------------------------------------------------
 
 
 def _wizard_simulate_gate():
-    """Wizard for simulating gates."""
-    console.print("\n[bold cyan]Gate Simulation Wizard[/bold cyan]")
-    
-    # Get available qubits
-    qubits = [q["name"] for q in engine.list_qubits()]
+    _section("Simulate a gate")
+
+    qubits = _qubit_names()
     if not qubits:
-        console.print("[yellow]No qubits found. Please create a qubit first.[/yellow]")
+        console.print("[yellow]No qubits found. Create one first.[/yellow]")
+        _pause()
         return
 
-    qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
-    gate_completer = WordCompleter(["X", "Y", "Z", "H", "CNOT", "CZ"], ignore_case=True)
-    
-    qubit = prompt("Select qubit (Control for 2Q): ", completer=qubit_completer).strip()
-    if not qubit: return
-    
-    gate = prompt("Select gate (X/Y/Z/H/CNOT/CZ): ", completer=gate_completer).strip().upper()
-    if not gate: return
-    
-    if gate in ["CNOT", "CZ"]:
-        # 2-Qubit Logic
+    gate_items = [
+        ("X", "X  (bit flip)", "Single-qubit, pi rotation"),
+        ("Y", "Y", "Single-qubit, pi rotation"),
+        ("Z", "Z  (phase flip)", "Single-qubit, pi rotation"),
+        ("H", "H  (Hadamard)", "Single-qubit, pi/2 rotation"),
+        ("CNOT", "CNOT", "Two-qubit, controlled bit flip"),
+        ("CZ", "CZ", "Two-qubit, controlled phase"),
+    ]
+    gate = _flat_choose(gate_items, title="Which gate?")
+    if not gate:
+        return
+
+    qubit = prompt("Qubit (control, for a two-qubit gate): ", completer=_completer(qubits)).strip()
+    if not qubit:
+        return
+
+    if gate in ("CNOT", "CZ"):
         remaining = [q for q in qubits if q != qubit]
-        q2_completer = WordCompleter(remaining, ignore_case=True)
-        qubit2 = prompt(f"Select Target qubit for {gate}: ", completer=q2_completer).strip()
-        if not qubit2: return
-        
-        duration = prompt("Duration (ns) [default: 50.0]: ").strip() or "50.0"
-        
-        # Coupling selection?
-        # For simulation, let's default to "tunable_coupler" or "capacitive" depending on gate?
-        # Or ask user. Let's ask.
-        c_completer = WordCompleter(["capacitive", "inductive", "tunable_coupler"], ignore_case=True)
-        c_type = prompt("Coupling Type [default: tunable_coupler]: ", completer=c_completer).strip() or "tunable_coupler"
-        g_val = prompt("Coupling Strength (GHz) [default: 0.05]: ").strip() or "0.05"
-        
-        console.print(f"\n[green]Simulating {gate} on {qubit}->{qubit2} ({c_type}, g={g_val})...[/green]")
-        
-        from qforge.core.gate_engine import GateEngine
-        from qforge.utils.terminal_plot import TerminalPlotter
+        if not remaining:
+            console.print("[yellow]Need a second qubit for a two-qubit gate.[/yellow]")
+            _pause()
+            return
+
+        qubit2 = prompt("Target qubit: ", completer=_completer(remaining)).strip()
+        if not qubit2:
+            return
+
+        duration = Prompt.ask("Duration (ns)", default="50.0")
+
+        coupling_items = [
+            ("capacitive", "Capacitive", "g(a1_dag a2 + a1 a2_dag), exchange-like"),
+            ("inductive", "Inductive / ZZ", "g * n1 * n2, dispersive / phase-type"),
+            (
+                "tunable_coupler",
+                "Tunable coupler",
+                "Time-dependent g_max f(t)(a1_dag a2 + a1 a2_dag)",
+            ),
+        ]
+        c_type = _flat_choose(coupling_items, title="Coupling type") or "tunable_coupler"
+        g_val = Prompt.ask("Coupling strength (GHz)", default="0.05")
+
+        console.print(
+            f"\n[green]Simulating {gate} on {qubit} -> {qubit2} ({c_type}, g={g_val} GHz)...[/green]"
+        )
+
         ge = GateEngine()
         try:
-            res = ge.simulate_two_qubit_dynamics(
-                qubit, qubit2, gate, 
-                coupling_type=c_type, 
-                coupling_strength=float(g_val), 
-                duration=float(duration),
-                steps=100
-            )
-            
-            # Plot 4 populations
+            with console.status("[cyan]Running two-qubit dynamics...[/cyan]"):
+                res = ge.simulate_two_qubit_dynamics(
+                    qubit,
+                    qubit2,
+                    gate,
+                    coupling_type=c_type,
+                    coupling_strength=float(g_val),
+                    duration=float(duration),
+                    steps=100,
+                )
+
             times = res["times"]
-            pops = res["populations"] # Dict 00, 01...
-            
-            # Convert to list of lists for plotter?
-            # TerminalPlotter.plot_multi_line(times, data_dict)
-            # Assuming TerminalPlotter has generic plotting or we use rich directly for simple plots?
-            # existing simulate.callback uses a customized plotter.
-            # Let's try to use TerminalPlotter if it exposes a generic method.
-            # If not, we print the final populations and maybe a simple ASCII text plot if possible.
-            # Let's peek TerminalPlotter.
-            
-            # Simple fallback: Print Final Populations
-            console.print("\n[bold]Final Populations:[/bold]")
+            pops = res["populations"]
+
+            console.print("\n[bold]Final populations[/bold]")
             for state, p_arr in pops.items():
-                console.print(f" |{state}>: {p_arr[-1]:.4f}")
-                
-            # For "Simulate Gate", users expect a plot. 
-            # We can use the plotter if we pass data correctly.
-            plotter = TerminalPlotter()
+                console.print(f"  |{state}>: {p_arr[-1]:.4f}")
+
+            from qforge.utils.terminal_plot import TerminalPlotter
+
             data = [pops[k] for k in ["00", "01", "10", "11"]]
             labels = ["|00>", "|01>", "|10>", "|11>"]
-            plotter.plot_time_evolution(times, data, labels, title=f"{gate} Dynamics")
-            
+            TerminalPlotter.plot_time_evolution(times, data, labels, title=f"{gate} Dynamics")
+
         except Exception as e:
-            console.print(f"[red]Simulation Error: {e}[/red]")
-        
+            console.print(f"[red]Simulation error: {e}[/red]")
+
     else:
-        # 1-Qubit Logic (Existing)
-        duration = prompt("Duration (ns) [default: 20.0]: ").strip() or "20.0"
-        
-        noise_completer = WordCompleter(["none", "realistic"], ignore_case=True)
-        noise = prompt("Noise model (none/realistic) [default: none]: ", completer=noise_completer).strip() or "none"
-        
+        duration = Prompt.ask("Duration (ns)", default="20.0")
+
+        noise_items = [
+            ("none", "None", "Ideal, coherent evolution"),
+            ("realistic", "Realistic", "Includes T1/T2-type decoherence"),
+        ]
+        noise = _flat_choose(noise_items, title="Noise model") or "none"
+
         console.print(f"\n[green]Simulating {gate} on {qubit}...[/green]")
-        
-        # Run simulation command (invoking directly to show plot)
+
         from qforge.cli.commands.gate import simulate
+
         try:
-            # We invoke callback but handle save manually to avoid click context issues if simpler
-            # Actually easier to just run our own logic or call `engine` directly here?
-            # Let's call the click command callback but we need to handle "save" interaction ourself
-            # or pass safe=False and ask later. 
-            # Click command prints plot.
-            
-            # We'll pass save=False initially
-            simulate.callback(qubit=qubit, gate=gate, duration=float(duration), noise=noise, save=False, steps=100)
-            
-            # After plot is shown (TerminalPlotter), ask to save
-            yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
-            if prompt("\nSave plot to file? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y":
-                # Re-run logic to save? Or better yet, the click command logic should be split.
-                # For efficiency let's just re-run with save=True, simulation is fast.
-                console.print("[dim]Re-running to save high-res plot...[/dim]")
-                simulate.callback(qubit=qubit, gate=gate, duration=float(duration), noise=noise, save=True, steps=100)
-                
+            simulate.callback(
+                qubit=qubit, gate=gate, duration=float(duration), noise=noise, save=False, steps=100
+            )
+
+            if Confirm.ask("\nSave a high-resolution plot to file?", default=False):
+                console.print("[dim]Re-running to save the plot...[/dim]")
+                simulate.callback(
+                    qubit=qubit,
+                    gate=gate,
+                    duration=float(duration),
+                    noise=noise,
+                    save=True,
+                    steps=100,
+                )
+
         except Exception as e:
             if "Abort" not in str(type(e)):
                 console.print(f"[red]Error: {e}[/red]")
-    
-    input("\nPress Enter to continue...")
+
+    _pause()
+
+
+def _wizard_analyze_multi_qubit():
+    _section("Analyze multi-qubit gates")
+    from rich.table import Table as RichTable
+
+    gate_engine = GateEngine()
+    qubits = _qubit_names()
+    if len(qubits) < 2:
+        console.print("[yellow]Need at least 2 qubits for multi-qubit analysis.[/yellow]")
+        _pause()
+        return
+
+    q1 = prompt("Control qubit: ", completer=_completer(qubits)).strip()
+    if not q1:
+        return
+
+    remaining = [q for q in qubits if q != q1]
+    q2 = prompt("Target qubit: ", completer=_completer(remaining)).strip()
+    if not q2:
+        return
+
+    gate = _flat_choose([("CNOT", "CNOT", ""), ("CZ", "CZ", "")], title="Gate to compare") or "CNOT"
+
+    console.print(f"\n[green]Comparing coupling types for {gate} on {q1} -> {q2}...[/green]")
+
+    try:
+        results = gate_engine.compare_couplings(q1, q2, gate=gate)
+
+        table = RichTable(title=f"Coupling comparison: {gate} ({q1} -> {q2})")
+        table.add_column("Coupling type", style="cyan")
+        table.add_column("Target population (fidelity proxy)", justify="right", style="green")
+        if gate == "CZ":
+            table.add_column("Phase (pi)", justify="right", style="magenta")
+
+        for coupling, metrics in results.items():
+            pop = metrics.get("population", 0.0)
+            phase = metrics.get("phase", None)
+            row = [coupling, f"{pop:.4f}"]
+            if gate == "CZ":
+                row.append(f"{phase:.4f}" if phase is not None else "n/a")
+            table.add_row(*row)
+
+        console.print(table)
+
+        if gate == "CNOT":
+            console.print(
+                "[dim]Note: target population is |11>, i.e. the bit-flip success probability.[/dim]"
+            )
+        else:
+            console.print(
+                "[dim]Note: target population is |11> population retention (leakage shows up as a drop here).[/dim]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error during analysis: {e}[/red]")
+
+    _pause()
 
 
 def _wizard_build_circuit():
-    """Wizard for building circuits."""
-    console.print("\n[bold cyan]Circuit Building Wizard[/bold cyan]")
-    console.print("[yellow]This feature will help you construct and simulate quantum circuits.[/yellow]")
-    console.print("[dim]Coming soon in interactive mode. Use: qforge circuit build --help[/dim]")
+    _section("Build a circuit")
+    console.print(
+        "[yellow]A dedicated circuit builder isn't wired up yet in interactive mode.[/yellow]\n"
+        "[dim]For a full QASM-to-physical circuit run today, use 'Run full workflow' from the "
+        "main menu, or `qforge circuit build --help` on the command line.[/dim]"
+    )
+    _pause()
 
 
 def _wizard_design_hardware():
-    """Wizard for hardware design."""
-    console.print("\n[bold cyan]Hardware Design Wizard[/bold cyan]")
-    console.print("[yellow]This feature will help you design quantum chip layouts.[/yellow]")
-    console.print("[dim]Coming soon in interactive mode. Use: qforge hardware design --help[/dim]")
+    _section("Design hardware")
+    console.print(
+        "[yellow]Hardware layout design isn't wired up yet in interactive mode.[/yellow]\n"
+        "[dim]Use `qforge hardware design --help` on the command line to track progress on this.[/dim]"
+    )
+    _pause()
 
 
+# ---------------------------------------------------------------------------
+# Wizards: examples
+# ---------------------------------------------------------------------------
 
 
 def _wizard_run_example():
-    """Wizard for running examples."""
-    console.print("\n[bold cyan]Run Example Wizard[/bold cyan]")
-    
+    _section("Run an example")
+
     examples = list_example_files()
     if not examples:
         console.print("[yellow]No examples found.[/yellow]")
+        _pause()
         return
-        
-    example_completer = WordCompleter(examples, ignore_case=True, sentence=True)
-    
-    console.print("\n[bold]Available examples:[/bold]")
-    for ex in examples:
-        console.print(f" - {ex}")
-        
-    name = prompt("\nSelect example to run: ", completer=example_completer).strip()
-    if not name: return
-    
-    # Normalize
-    if not name.endswith(".py"):
-        name += ".py"
-        
+
     examples_dir = get_examples_dir()
+    items = []
+    for ex in examples:
+        desc = ""
+        try:
+            with open(os.path.join(examples_dir, ex), encoding="utf-8") as f:
+                content = f.read()
+            if '"""' in content:
+                desc = content.split('"""')[1].strip().split("\n")[0]
+        except Exception:
+            pass
+        items.append((ex, ex.replace(".py", ""), desc))
+
+    name = _flat_choose(items, title="Choose an example to run")
+    if not name:
+        return
+
     script_path = os.path.join(examples_dir, name)
-    
     if not os.path.exists(script_path):
         console.print(f"[red]Example '{name}' not found.[/red]")
         return
-        
+
     console.print(f"\n[green]Running {name}...[/green]")
     try:
         subprocess.run([sys.executable, script_path], check=True)
     except Exception as e:
         console.print(f"[red]Error running example: {e}[/red]")
-    
-    input("\nPress Enter to continue...")
+
+    _pause()
+
+
+# ---------------------------------------------------------------------------
+# Wizard: full workflow (QASM -> physical execution, with optional QEC)
+# ---------------------------------------------------------------------------
+
+EC_CODES = {
+    "none": None,
+    "repetition": REPETITION_3,
+    "steane": STEANE_7,
+    "shor": SHOR_9,
+}
+
+EC_METHODS = {
+    "repetition": "execute_3q_repetition_workflow",
+    "steane": "execute_steane7_workflow",
+    "shor": "execute_shor9_workflow",
+}
+
+
+def _qasm_completer():
+    examples_dir = get_examples_dir()
+    files = []
+    if examples_dir:
+        qasm_dir = os.path.join(examples_dir, "qasm_files")
+        if os.path.isdir(qasm_dir):
+            files = [
+                os.path.join("examples", "qasm_files", os.path.basename(f))
+                for f in glob.glob(os.path.join(qasm_dir, "*.qasm"))
+            ]
+    return WordCompleter(files, ignore_case=True)
 
 
 def _wizard_full_workflow():
-    """Wizard for full workflow."""
-    console.print("\n[bold cyan]Full Workflow Wizard[/bold cyan]")
-    console.print("[yellow]Translating abstract OpenQASM algorithmic circuits to superconducting physical schedules.[/yellow]\n")
+    _section("Run full workflow")
+    console.print("[dim]Logical OpenQASM in, physical hardware execution out.[/dim]\n")
 
-    use_error_correction_bool = False
-    
-    # Step 1: Qubit Selection
-    available_qubits = [q["name"] for q in engine.list_qubits()]
+    available_qubits = _qubit_names()
     if not available_qubits:
-        console.print("[red]No qubits exist. Go back and Create Qubits first![/red]")
+        console.print("[red]No qubits exist yet. Create some first.[/red]")
+        _pause()
         return
-        
-    console.print("[bold]1. Available Qubits[/bold]: " + ", ".join(available_qubits))
-    q_str = prompt("Enter comma-separated qubit names to use in order (e.g. Q0, Q1, Q2): ").strip()
+
+    console.print(f"[bold]Available qubits:[/bold] {', '.join(available_qubits)}")
+    q_str = prompt(
+        "Qubit names to use, in order (comma-separated): ", completer=_completer(available_qubits)
+    ).strip()
     if not q_str:
         return
-        
-    qubit_names = [q.strip() for q in q_str.split(',')]
+
+    qubit_names = [q.strip() for q in q_str.split(",")]
     for q in qubit_names:
         if q not in available_qubits:
-            console.print(f"[red]Error: Qubit '{q}' does not exist.[/red]")
+            console.print(f"[red]Qubit '{q}' does not exist.[/red]")
             return
-            
-    # Step 2: Coupling Specification
-    console.print("\n[bold]2. Define Native Coupling Topology[/bold]")
-    console.print("[dim]Enter graph edges connecting the qubits you chose (Couplings are bidirectional, so only specify Q1->Q2 once!).[/dim]")
+
+    console.print("\n[bold]Native coupling topology[/bold]")
+    console.print(
+        "[dim]Add an edge for each pair of qubits that can talk to each other directly (each pair only once).[/dim]"
+    )
     couplings = []
-    
-    ctype_completer = WordCompleter(["capacitive", "inductive", "tunable_coupler"], ignore_case=True)
-    qindex_completer = WordCompleter([str(i) for i in range(len(qubit_names))])
-    
-    qname_completer = WordCompleter(qubit_names, ignore_case=True)
-    
+    qname_completer = _completer(qubit_names)
+    coupling_items = [
+        ("capacitive", "Capacitive", "g(a1_dag a2 + a1 a2_dag)"),
+        ("inductive", "Inductive / ZZ", "g * n1 * n2"),
+        ("tunable_coupler", "Tunable coupler", "Time-dependent g_max f(t)(a1_dag a2 + a1 a2_dag)"),
+    ]
+
     while True:
-        console.print("\n   [New Coupling Edge]")
-        
-        q1_input = prompt(f"   Enter Name for first qubit in edge (or leave empty to finish): ", completer=qname_completer).strip()
+        console.print("\n  [New coupling edge]")
+        q1_input = prompt("  First qubit (blank to finish): ", completer=qname_completer).strip()
         if not q1_input:
             break
-            
-        q2_input = prompt(f"   Enter Name for second qubit in edge: ", completer=qname_completer).strip()
+        q2_input = prompt("  Second qubit: ", completer=qname_completer).strip()
         if not q2_input:
             break
-        
         if q1_input not in qubit_names or q2_input not in qubit_names:
-            console.print("[red]Invalid qubit name. Please use the names you defined in Step 1.[/red]")
+            console.print("[red]Use one of the qubit names chosen above.[/red]")
             continue
 
-        ctype = prompt("   Coupling Type (capacitive/inductive/tunable_coupler) [tunable_coupler]: ", completer=ctype_completer).strip() or "tunable_coupler"
-        cstren = prompt("   Strength in GHz [0.05]: ").strip() or "0.05"
-        
+        ctype = _flat_choose(coupling_items, title="  Coupling type") or "tunable_coupler"
+        cstren = Prompt.ask("  Strength (GHz)", default="0.05")
+
         try:
-            # Let Python figure out the logic index!
-            c_idx1 = qubit_names.index(q1_input)
-            c_idx2 = qubit_names.index(q2_input)
-            
-            couplings.append({
-                "q1": c_idx1,
-                "q2": c_idx2,
-                "type": ctype,
-                "strength": float(cstren)
-            })
-            console.print(f"   [green]Added {ctype} ({cstren} GHz) edge between physical qubits {q1_input} and {q2_input}.[/green]")
-        except ValueError:
-             console.print("[red]Invalid numerical input for coupling strength.[/red]")
-
-    options = WordCompleter(['yes', 'no'], ignore_case=True)
-
-    use_error_correction = prompt("Use Quantum Error Correction? (yes/no) [no]: ", completer=options).strip().lower() or "no"
-
-    if use_error_correction == "yes":
-        # Step 3: EC Mapping
-        console.print("\n[bold]3. Error Correction Setup (3-Qubit Repetition Code)[/bold]")
-        console.print("[dim]The engine will dynamically allocate 3 data and 2 ancilla qubits per logical qubit.[/dim]")
-        
-        path = prompt("Enter path to logical OpenQASM (.qasm) file: ").strip().strip("\"'")
-        if not path or not os.path.exists(path):
-            console.print(f"[red]QASM file '{path}' not found.[/red]")
-            return
-            
-        console.print(f"\n[green]Initializing ErrorCorrectionEngine...[/green]")
-        try:
-            g_eng = GateEngine()
-            ec_eng = ErrorCorrectionEngine(engine, g_eng)
-            
-            # Execute the new workflow (Mapping and decoding are handled internally!)
-            res = ec_eng.execute_3q_repetition_workflow(qubit_names, path)
-            
-            # Extract the already-decoded logical results
-            logical_results = res["logical_populations"]
-            
-            console.print("\n[bold]Workflow Complete! Decoded Logical Populations (Majority Voting & Active Correction):[/bold]")
-            sorted_l = sorted(logical_results.items(), key=lambda x: -x[1])
-            for l_state, prob in sorted_l:
-                if prob > 0.001:
-                    console.print(f" |{l_state}>_L: {prob*100:5.2f}%")
-
-            console.print("\n[dim]Note: Continuous physical timeline plotting is disabled during active error correction due to mid-circuit wave-function collapse.[/dim]")
-
-        except Exception as e:
-            console.print(f"[red]EC Workflow failed: {e}[/red]")
-            import traceback
-            traceback.print_exc()
-            
-    else:
-        use_error_correction_bool = False
-         
-        # Step 3: Circuit Processing for False Error Correction
-        console.print("\n[bold]3. Algorithm Circuit Specification[/bold]")
-        path = prompt("Enter accurate path to OpenQASM (.qasm) file: ").strip().strip("\"'")
-        if not path or not os.path.exists(path):
-            console.print(f"[red]QASM file '{path}' not found.[/red]")
-            return
-            
-        console.print(f"\n[green]Initializing PhysicalWorkflowEngine and orchestrating mappings...[/green]")
-        try:
-            g_eng = GateEngine()
-            wf_eng = PhysicalWorkflowEngine(engine, g_eng)
-            
-            # Simulates inside WorkflowEngine using GateEngine's Hilbert solver
-            res = wf_eng.execute_workflow(qubit_names, couplings, path)
-            
-            # Extract Results
-            console.print("\n[bold]Simulation Complete! Decoding Physical Populations:[/bold]")
-            final_pops = {k: v[-1] for k, v in res["populations"].items()}
-            
-            sorted_pops = sorted(final_pops.items(), key=lambda x: -x[1])
-            top_keys = [k for k, v in sorted_pops[:4]]
-            
-            for state, p in sorted_pops[:8]:
-                if p > 0.01:
-                    console.print(f" |{state}>: {p*100:5.2f}%")
-                    
-            # Plot continuous timeline
-            from qforge.utils.terminal_plot import TerminalPlotter
-            plot_expectations = [res["populations"][k] for k in top_keys]
-            labels = [f"P(|{k}>)" for k in top_keys]
-            console.print("\n[bold]4. Visual Hardware Timeline Analysis[/bold]")
-            TerminalPlotter.plot_time_evolution(
-                times=res["times"],
-                expectations=plot_expectations,
-                labels=labels,
-                title="Physical Workflow Hardware Execution Timeline"
+            couplings.append(
+                {
+                    "q1": qubit_names.index(q1_input),
+                    "q2": qubit_names.index(q2_input),
+                    "type": ctype,
+                    "strength": float(cstren),
+                }
             )
-        except Exception as e:
-            console.print(f"[red]Workflow execution failed: {e}[/red]")
-            import traceback
-            traceback.print_exc()
-            
-        input("\nPress Enter to continue...")
+            console.print(
+                f"  [green]Added {ctype} edge between {q1_input} and {q2_input} ({cstren} GHz).[/green]"
+            )
+        except ValueError:
+            console.print("[red]Couldn't parse that strength as a number.[/red]")
+
+    ec_items = [
+        ("none", "No error correction", "Run the QASM circuit directly on the physical qubits"),
+        (
+            "repetition",
+            "3-qubit repetition code",
+            "5 physical qubits/logical qubit, corrects a single bit flip",
+        ),
+        (
+            "steane",
+            "7-qubit Steane code",
+            "13 physical qubits/logical qubit, corrects any single-qubit Pauli error",
+        ),
+        (
+            "shor",
+            "9-qubit Shor code",
+            "17 physical qubits/logical qubit, corrects any single-qubit error",
+        ),
+    ]
+    ec_choice = _flat_choose(ec_items, title="Error correction") or "none"
+
+    qasm_completer = _qasm_completer()
+    examples_dir = get_examples_dir()
+    if examples_dir and os.path.isdir(os.path.join(examples_dir, "qasm_files")):
+        console.print(
+            f"\n[dim]Bundled circuits live under {os.path.join(examples_dir, 'qasm_files')} (tab to complete).[/dim]"
+        )
+
+    if ec_choice == "none":
+        _run_plain_workflow(qubit_names, couplings, qasm_completer)
+    else:
+        _run_ec_workflow(qubit_names, ec_choice, qasm_completer)
+
+
+def _run_plain_workflow(qubit_names, couplings, qasm_completer):
+    path = prompt("Path to OpenQASM (.qasm) file: ", completer=qasm_completer).strip().strip("\"'")
+    if not path or not os.path.exists(path):
+        console.print(f"[red]QASM file '{path}' not found.[/red]")
+        _pause()
+        return
+
+    console.print("\n[green]Building physical schedule and simulating...[/green]")
+    try:
+        g_eng = GateEngine()
+        wf_eng = PhysicalWorkflowEngine(engine, g_eng)
+
+        with console.status("[cyan]Running workflow...[/cyan]"):
+            res = wf_eng.execute_workflow(qubit_names, couplings, path)
+
+        console.print("\n[bold]Final physical populations[/bold]")
+        final_pops = {k: v[-1] for k, v in res["populations"].items()}
+        sorted_pops = sorted(final_pops.items(), key=lambda x: -x[1])
+        top_keys = [k for k, _v in sorted_pops[:4]]
+
+        for state, p in sorted_pops[:8]:
+            if p > 0.01:
+                console.print(f"  |{state}>: {p * 100:5.2f}%")
+
+        from qforge.utils.terminal_plot import TerminalPlotter
+
+        console.print("\n[bold]Hardware execution timeline[/bold]")
+        TerminalPlotter.plot_time_evolution(
+            times=res["times"],
+            expectations=[res["populations"][k] for k in top_keys],
+            labels=[f"P(|{k}>)" for k in top_keys],
+            title="Physical Workflow Hardware Execution Timeline",
+        )
+    except Exception as e:
+        console.print(f"[red]Workflow execution failed: {e}[/red]")
+
+    _pause()
+
+
+def _run_ec_workflow(qubit_names, ec_choice, qasm_completer):
+    code = EC_CODES[ec_choice]
+    n_physical = len(qubit_names) * (code.num_data + code.num_ancilla)
+    console.print(
+        f"\n[dim]{code.name}: each logical qubit expands to {code.num_data + code.num_ancilla} "
+        f"physical qubits ({code.num_data} data + {code.num_ancilla} ancilla). "
+        f"{len(qubit_names)} logical qubit(s) -> {n_physical} physical qubits total.[/dim]"
+    )
+    if n_physical > 20:
+        console.print(
+            f"[yellow]That's a {2 ** n_physical:,}-dimensional state vector. "
+            "This may be slow or memory-heavy.[/yellow]"
+        )
+        if not Confirm.ask("Continue anyway?", default=True):
+            return
+
+    path = (
+        prompt("Path to logical OpenQASM (.qasm) file: ", completer=qasm_completer)
+        .strip()
+        .strip("\"'")
+    )
+    if not path or not os.path.exists(path):
+        console.print(f"[red]QASM file '{path}' not found.[/red]")
+        _pause()
+        return
+
+    coupling_items = [
+        ("capacitive", "Capacitive", "Default for syndrome-extraction CNOTs"),
+        ("inductive", "Inductive / ZZ", ""),
+        ("tunable_coupler", "Tunable coupler", ""),
+    ]
+    c_type = (
+        _flat_choose(coupling_items, title="Coupling type for syndrome extraction") or "capacitive"
+    )
+    g_val = Prompt.ask("Coupling strength (GHz)", default="0.010")
+    ec_every = Prompt.ask(
+        "Run a syndrome cycle every N gates (0 = only a final pass, safest for circuits with H gates)",
+        default="0",
+    )
+
+    console.print(f"\n[green]Initializing ErrorCorrectionEngine ({code.name})...[/green]")
+    try:
+        g_eng = GateEngine()
+        ec_eng = ErrorCorrectionEngine(engine, g_eng)
+        method = getattr(ec_eng, EC_METHODS[ec_choice])
+
+        with console.status(f"[cyan]Running {code.name} workflow...[/cyan]"):
+            res = method(
+                qubit_names,
+                path,
+                coupling_type=c_type,
+                coupling_strength=float(g_val),
+                ec_every_n_gates=int(ec_every),
+            )
+
+        logical_results = res["logical_populations"]
+        console.print(
+            "\n[bold]Decoded logical populations (feed-forward correction applied)[/bold]"
+        )
+        for l_state, prob in sorted(logical_results.items(), key=lambda x: -x[1]):
+            if prob > 0.001:
+                console.print(f"  |{l_state}>_L: {prob * 100:5.2f}%")
+
+        console.print(
+            "\n[dim]Continuous timeline plotting is skipped during active error correction, "
+            "since mid-circuit syndrome measurement collapses the wavefunction.[/dim]"
+        )
+    except Exception as e:
+        console.print(f"[red]Error-correction workflow failed: {e}[/red]")
+
+    _pause()
+
+
+# ---------------------------------------------------------------------------
+# Help
+# ---------------------------------------------------------------------------
 
 
 def _show_help():
-    """Show help information."""
-    help_md = """
-# qforge Interactive Mode Help
+    help_md = f"""
+# qforge interactive mode
 
 ## Navigation
-- Use **number keys** or **type the option name** to select
-- Type **exit** or press **Ctrl+C** to quit
-- Tab completion is available for most inputs
+- Use the **arrow keys** and **enter** to pick a menu option, or start typing its name
+- **q**, **Esc**, or **Ctrl-C** backs out of a menu
+- Tab completion is available wherever you type a qubit name or file path
 
-## Workflow Stages
+## Workflow stages
 
-1. **Create a Qubit**: Define physical parameters of superconducting qubits
-2. **Simulate Gates**: Model gate dynamics with realistic noise
-3. **Build a Circuit**: Construct multi-qubit circuits
-4. **Design Hardware**: Layout quantum chip geometry
-5. **Compare Qubits**: Side-by-side analysis of different architectures
-6. **Run Full Workflow**: End-to-end simulation pipeline
+1. **Create a qubit** - define the physical parameters of a superconducting qubit
+2. **Simulate a gate** - drive a calibrated single- or two-qubit gate and watch it evolve
+3. **Analyze multi-qubit gates** - compare capacitive, inductive, and tunable-coupler CNOT/CZ
+4. **Run full workflow** - take an OpenQASM circuit all the way to a physical execution,
+   optionally protected by the 3-qubit repetition, 7-qubit Steane, or 9-qubit Shor code
+5. **Compare qubits** - side-by-side metrics across qubit types or instances
 
 ## Tips
-- Start with creating a qubit if you're new
-- Use default values for quick testing
-- Check the documentation at: qforge --help
+- Start with "Create a qubit" if this is your first time
+- Presets (typical / high coherence / fast gates) are a fast way to get a working qubit
+- Bundled example circuits live in `examples/qasm_files/`
+- The full CLI reference is available with `qforge --help`
+
+qforge v{__version__} - built on scqubits and QuTiP.
     """
-    
     console.print(Panel(Markdown(help_md), title="Help", border_style="yellow"))
+    _pause()
 
 
-def _wizard_list_qubits():
-    """Wizard for listing qubits."""
-    console.print("\n[bold cyan]List of Qubits[/bold cyan]")
-    from qforge.cli.commands.qubit import list_qubits
-    try:
-        # Use callback to bypass Click context requirements if possible,
-        # otherwise we invoke normally. list_qubits is simple.
-        list_qubits.callback()
-    except Exception as e:
-        console.print(f"[red]Error listing qubits: {e}[/red]")
-    
-    input("\nPress Enter to continue...")
+# ---------------------------------------------------------------------------
+# Menu wiring
+# ---------------------------------------------------------------------------
 
-
-def _wizard_analyze_qubit():
-    """Wizard for analyzing a qubit."""
-    console.print("\n[bold cyan]Qubit Analysis Wizard[/bold cyan]")
-    from qforge.cli.commands.qubit import analyze
-    
-    # Get available qubits for completion
-    
-    qubits = [q["name"] for q in engine.list_qubits()]
-    qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
-    yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
-    
-    name = prompt("Enter qubit name to analyze: ", completer=qubit_completer).strip()
-    if not name: return
-
-    # Ask for options
-    do_plot = prompt("Generate plots? (y/n) [y]: ", completer=yn_completer).strip().lower() != "n"
-    do_coherence = prompt("Estimate coherence? (y/n) [y]: ", completer=yn_completer).strip().lower() != "n"
-    do_relative = prompt("Display relative energies? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y"
-    
-    try:
-        analyze.callback(name=name, plot=do_plot, coherence=do_coherence, relative=do_relative)
-    except Exception as e:
-        # Error is already printed by analyze usually
-        if "Abort" not in str(type(e)):
-            console.print(f"[red]Error: {e}[/red]")
-    
-    input("\nPress Enter to continue...")
-
-
-def _wizard_delete_qubit():
-    """Wizard for deleting a qubit."""
-    console.print("\n[bold cyan]Qubit Deletion Wizard[/bold cyan]")
-    from qforge.cli.commands.qubit import delete
-    from qforge.core.gate_engine import GateEngine  # Import the engine
-    
-    # Get available qubits
-    qubits = [q["name"] for q in engine.list_qubits()]
-    qubit_completer = WordCompleter(qubits, ignore_case=True, sentence=True)
-    yn_completer = WordCompleter(['y', 'n'], ignore_case=True)
-    
-    name = prompt("Enter qubit name to delete: ", completer=qubit_completer).strip()
-    if not name: return
-    
-    if prompt(f"Are you sure you want to delete '{name}'? (y/n) [n]: ", completer=yn_completer).strip().lower() == "y":
-        try:
-            # 1. Delete the physical qubit data
-            delete.callback(name=name)
-            
-            # 2. Clean up the GateEngine cache
-            g_eng = GateEngine() # Instantiating loads the cache from disk if it hasn't been already
-            
-            keys_to_remove = []
-            for key in GateEngine._calib_cache.keys():
-                # key[0] is q1_name, key[1] is q2_name
-                if key[0] == name or key[1] == name:
-                    keys_to_remove.append(key)
-            
-            if keys_to_remove:
-                for key in keys_to_remove:
-                    del GateEngine._calib_cache[key]
-                
-                # Force the updated RAM dictionary to overwrite the JSON file
-                g_eng._save_cache_to_disk()
-                console.print(f"[dim green]Cleared {len(keys_to_remove)} cached calibrations involving '{name}'.[/dim green]")
-                
-        except Exception as e:
-            if "Abort" not in str(type(e)):
-                console.print(f"[red]Error: {e}[/red]")
-    
-    input("\nPress Enter to continue...")
-
-
-def _wizard_compare_qubits():
-    """Wizard for comparing qubits."""
-    console.print("\n[bold cyan]Qubit Comparison Wizard[/bold cyan]")
-    from qforge.cli.commands.compare import compare_qubits
-    
-    # Get available qubits
-    qubits = [q["name"] for q in engine.list_qubits()]
-    qubit_completer = WordCompleter(qubits, ignore_case=True)
-    metric_completer = WordCompleter(["all", "frequency", "anharmonicity", "t1", "t2"], ignore_case=True)
-    
-    console.print("[dim]Tip: Use Tab to autocomplete qubit names[/dim]")
-    qubits = prompt("Enter qubit names (comma-separated): ", completer=qubit_completer).strip()
-    if not qubits: return
-    
-    metrics = prompt("Enter metrics (comma-separated) [default: all]: ", completer=metric_completer).strip() or "all"
-    
-    try:
-        compare_qubits.callback(qubits=qubits, metrics=metrics, gates=None, tag=None, output=None)
-    except Exception as e:
-        if "Abort" not in str(type(e)):
-            console.print(f"[red]Error: {e}[/red]")
-    
-    
-    input("\nPress Enter to continue...")
-
-
-def _wizard_analyze_multi_qubit():
-    """Wizard for multi-qubit gate analysis."""
-    console.print("\n[bold cyan]Multi-Qubit Gate Analysis Wizard[/bold cyan]")
-    from qforge.core.gate_engine import GateEngine
-    from rich.table import Table
-    
-    gate_engine = GateEngine()
-    
-    # Get available qubits
-    qubits = [q["name"] for q in engine.list_qubits()]
-    if len(qubits) < 2:
-        console.print("[yellow]Need at least 2 qubits to perform multi-qubit analysis.[/yellow]")
-        return
-
-    qubit_completer = WordCompleter(qubits, ignore_case=True)
-    
-    q1 = prompt("Select Control Qubit: ", completer=qubit_completer).strip()
-    if not q1: return
-    
-    remaining_qubits = [q for q in qubits if q != q1]
-    qubit_completer_2 = WordCompleter(remaining_qubits, ignore_case=True)
-    
-    q2 = prompt("Select Target Qubit: ", completer=qubit_completer_2).strip()
-    if not q2: return
-    
-    gate_completer = WordCompleter(["CNOT", "CZ"], ignore_case=True)
-    gate = prompt("Select Gate to Compare (CNOT/CZ): ", completer=gate_completer).strip().upper()
-    if not gate: return
-    
-    console.print(f"\n[green]Running comparison for {gate} on {q1} -> {q2}...[/green]")
-    
-    do_tomo = prompt("Perform State Tomography (Fidelity Check)? (y/n) [n]: ").strip().lower() == "y"
-    
-    try:
-        results = gate_engine.compare_couplings(q1, q2, gate=gate)
-        
-        # Display results in a table
-        table = Table(title=f"Coupling Comparison: {gate} ({q1}-{q2})")
-        table.add_column("Coupling Type", style="cyan")
-        table.add_column("Target Pop (Fidelity Proxy)", justify="right", style="green")
-        if gate == "CZ":
-            table.add_column("Phase (π)", justify="right", style="magenta")
-        if do_tomo:
-            table.add_column("State Fidelity", justify="right", style="yellow")
-        
-        # If Tomography requested, we need target states
-        # Ideally compare_couplings should return the state so we can check it.
-        # But compare_couplings returns metrics dict.
-        # Refactor: compare_couplings should probably store the final state or we run a focused sim?
-        # A simpler way without refactoring compare_couplings extensively:
-        # Just tell user "Fidelity included in Population if 1-qubit flip".
-        # But for CZ, Population is poor metric.
-        # Let's run a separate verification if requested.
-        
-        for coupling, metrics in results.items():
-            pop = metrics.get("population", 0.0)
-            phase = metrics.get("phase", None)
-            
-            row = [coupling, f"{pop:.4f}"]
-            if gate == "CZ":
-                row.append(f"{phase:.4f}π" if phase is not None else "N/A")
-            
-            if do_tomo:
-                # Mock fidelity for now or run a focused sim if we want real data.
-                # Actually, population |11> IS the fidelity for CNOT |10>->|11> roughly.
-                # For CZ, we need to know the state.
-                row.append("See Logs") # Placeholder until we integrate deep tomo
-                
-            table.add_row(*row)
-            
-        console.print(table)
-        
-        if do_tomo:
-             console.print("\n[bold]running Detailed Tomography on best result...[/bold]")
-             # ... Logic to run tomography on best ...
-             # Just run one explicit sim for the best method?
-             # Let's pick Inductive for CZ, Capacitive for CNOT (or Tunable)
-             if gate == "CZ":
-                 best_c = "inductive"
-                 t = 50.0
-             else:
-                 best_c = "tunable_coupler"
-                 t = 100.0 # Placeholder
-                 
-             console.print(f" -> Analyzing optimal {best_c} case...")
-             # gate_engine.simulate...
-             # Then call perform_state_tomography...
-             pass
-             
-    except Exception as e:
-        console.print(f"[red]Error during analysis: {e}[/red]")
-        
-        if gate == "CNOT":
-            console.print("[dim]Note: 'Target State Population' refers to |11> (Bit Flip Success)[/dim]")
-        elif gate == "CZ":
-            console.print("[dim]Note: 'Target State Population' refers to |11> (Leakage/Population Retention)[/dim]")
-    
-    input("\nPress Enter to continue...")
+HANDLERS.update(
+    {
+        "create": _wizard_create_qubit,
+        "list": _wizard_list_qubits,
+        "analyze": _wizard_analyze_qubit,
+        "compare": _wizard_compare_qubits,
+        "delete": _wizard_delete_qubit,
+        "gate": _wizard_simulate_gate,
+        "multi": _wizard_analyze_multi_qubit,
+        "circuit": _wizard_build_circuit,
+        "workflow": _wizard_full_workflow,
+        "hardware": _wizard_design_hardware,
+        "example": _wizard_run_example,
+        "help": _show_help,
+    }
+)

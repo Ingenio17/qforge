@@ -20,13 +20,15 @@ Key fixes in this version
 
 import os
 import sys
-import subprocess
 import threading
 import runpy
 import traceback
+import webbrowser
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
+from tkinter import ttk, simpledialog, filedialog
 import re
+
+DOCS_URL = "https://qforge.readthedocs.io/en/latest/"
 
 # Do NOT set NO_COLOR or PLOTEXT_USE_UNICODE=0 here.
 # Plotext needs to emit its full ANSI color sequences so the console
@@ -48,12 +50,14 @@ for _p in (_current_dir, _parent_dir, _project_root):
 # --------------------------------------------------------------------------- #
 _QFORGE_AVAILABLE = True
 try:
+    from qforge import __version__
     from qforge.cli.commands.example import list_example_files, get_examples_dir
     from qforge.core.qubit_engine import QubitEngine
     from qforge.core.gate_engine import GateEngine
     from qforge.core.workflow_engine import PhysicalWorkflowEngine
     from qforge.core.error_correction_engine import ErrorCorrectionEngine
-    from qforge.config.defaults import QUBIT_PRESETS
+    from qforge.core.stabilizer_codes import REPETITION_3, STEANE_7, SHOR_9
+    from qforge.config.defaults import QUBIT_PRESETS, OUTPUT_DIRS
     from qforge.cli.commands.qubit import _create_qubit, list_qubits, analyze, delete
     from qforge.cli.commands.gate import simulate
     from qforge.cli.commands.compare import compare_qubits
@@ -61,6 +65,8 @@ try:
 except ImportError:
     _QFORGE_AVAILABLE = False
     print("Warning: qforge modules not found. Running in UI testing mode.")
+
+    __version__ = "0.0.0"
 
     class _Stub:
         def __init__(self, *a, **kw): pass
@@ -72,6 +78,8 @@ except ImportError:
     QubitEngine = GateEngine = PhysicalWorkflowEngine = ErrorCorrectionEngine = _Stub
     TerminalPlotter = _Stub
     QUBIT_PRESETS = {"transmon": {"typical": {"EJ": 15.0, "EC": 0.2, "ng": 0.0, "ncut": 30}}}
+    OUTPUT_DIRS = {"base": "outputs"}
+    REPETITION_3 = STEANE_7 = SHOR_9 = None
     def list_example_files(): return []
     def get_examples_dir(): return "."
     def _create_qubit(*a, **kw): print("(stub) _create_qubit called")
@@ -79,6 +87,18 @@ except ImportError:
         @staticmethod
         def callback(**kw): print(f"(stub) callback called with {kw}")
     list_qubits = analyze = delete = simulate = compare_qubits = _FakeCmd()
+
+# Error-correcting codes offered by the full workflow wizard, and the
+# ErrorCorrectionEngine entry point each one runs through. Each dedicated
+# method (rather than the generic execute_stabilizer_workflow) reclaims
+# ancilla dimension as it goes, which is what keeps Steane and Shor
+# tractable at their larger qubit counts per logical block.
+EC_CODE_MAP = {
+    "3-qubit repetition code": (REPETITION_3, "execute_3q_repetition_workflow"),
+    "7-qubit Steane code": (STEANE_7, "execute_steane7_workflow"),
+    "9-qubit Shor code": (SHOR_9, "execute_shor9_workflow"),
+}
+EC_LABELS = ["No error correction"] + list(EC_CODE_MAP.keys())
 
 
 # --------------------------------------------------------------------------- #
@@ -415,6 +435,337 @@ class SearchablePickerDialog(tk.Toplevel):
 
 
 # --------------------------------------------------------------------------- #
+#  Multi-select dialog                                                          #
+# --------------------------------------------------------------------------- #
+
+class MultiSelectDialog(tk.Toplevel):
+    """
+    A themed modal dialog for picking several items at once: a live-filter
+    Entry, a multi-select Listbox, "Select all" / "Select none" shortcuts,
+    and OK / Cancel. Selections survive filtering (they're tracked by value,
+    not by row index), so narrowing the list and then clearing the filter
+    never silently drops a pick.
+
+    Returns the chosen items as a list in their original order, or None if
+    the user cancelled.
+    """
+
+    def __init__(self, parent, title: str, prompt: str, choices: list, preselected=None):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(True, True)
+        self.configure(bg=C["pick_bg"])
+        self.result: list | None = None
+
+        self.transient(parent)
+        self.grab_set()
+
+        self._choices = list(choices)
+        self._selected = set(preselected or [])
+        self._displayed = list(self._choices)
+
+        max_item_len = max((len(c) for c in choices), default=20)
+        computed_w = max(420, min(680, max_item_len * 8 + 100))
+
+        self._build_ui(prompt, computed_w)
+
+        list_h = min(10, max(4, len(choices)))
+        approx_h = 300 + list_h * 20
+        self.geometry(f"{computed_w}x{approx_h}")
+        self.update_idletasks()
+
+        px = parent.winfo_rootx() + parent.winfo_width() // 2 - self.winfo_width() // 2
+        py = parent.winfo_rooty() + parent.winfo_height() // 2 - self.winfo_height() // 2
+        self.geometry(f"{computed_w}x{approx_h}+{px}+{py}")
+
+        self._entry.focus_set()
+        self.bind("<Escape>", lambda _: self._cancel())
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.wait_window()
+
+    # ------------------------------------------------------------------ #
+
+    def _build_ui(self, prompt: str, dlg_width: int):
+        PAD = 16
+        wrap_w = dlg_width - PAD * 2
+
+        tk.Label(
+            self, text=prompt,
+            bg=C["pick_bg"], fg=C["accent"],
+            font=("Helvetica", 11),
+            justify="left", anchor="w", wraplength=wrap_w,
+        ).pack(fill=tk.X, padx=PAD, pady=(PAD, 8))
+
+        tk.Label(
+            self, text="🔍  Filter",
+            bg=C["pick_bg"], fg=C["fg_dim"],
+            font=("Helvetica", 9), anchor="w",
+        ).pack(fill=tk.X, padx=PAD, pady=(0, 2))
+
+        entry_frame = tk.Frame(self, bg=C["pick_border"], padx=1, pady=1)
+        entry_frame.pack(fill=tk.X, padx=PAD, pady=(0, 6))
+        self._entry = tk.Entry(
+            entry_frame, bg=C["pick_entry"], fg=C["accent"],
+            insertbackground=C["accent"], relief="flat",
+            font=("Consolas", 12), bd=0,
+        )
+        self._entry.pack(fill=tk.X, padx=6, pady=6)
+        self._entry.bind("<KeyRelease>", self._on_filter)
+        self._entry.bind("<Down>", lambda _: self._focus_list())
+
+        action_row = tk.Frame(self, bg=C["pick_bg"])
+        action_row.pack(fill=tk.X, padx=PAD, pady=(0, 4))
+        select_all = tk.Label(
+            action_row, text="Select all", bg=C["pick_bg"], fg=C["accent"],
+            font=("Helvetica", 9, "underline"), cursor="hand2",
+        )
+        select_all.pack(side=tk.LEFT)
+        select_all.bind("<Button-1>", lambda _: self._select_all())
+        select_none = tk.Label(
+            action_row, text="Select none", bg=C["pick_bg"], fg=C["fg_dim"],
+            font=("Helvetica", 9, "underline"), cursor="hand2",
+        )
+        select_none.pack(side=tk.RIGHT)
+        select_none.bind("<Button-1>", lambda _: self._select_none())
+
+        list_frame = tk.Frame(self, bg=C["pick_border"], padx=1, pady=1)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=PAD, pady=(0, 6))
+
+        sb = tk.Scrollbar(list_frame, orient=tk.VERTICAL,
+                          bg=C["bg_card"], troughcolor=C["pick_bg"],
+                          width=10, relief="flat")
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._listbox = tk.Listbox(
+            list_frame, selectmode=tk.MULTIPLE, exportselection=False,
+            bg=C["bg_console"], fg=C["fg"],
+            selectbackground=C["pick_sel"], selectforeground=C["accent"],
+            activestyle="none", font=("Consolas", 12),
+            relief="flat", bd=0, yscrollcommand=sb.set,
+            height=min(10, max(4, len(self._choices))),
+        )
+        self._listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.config(command=self._listbox.yview)
+        self._listbox.bind("<<ListboxSelect>>", self._on_listbox_select)
+        self._listbox.bind("<Return>", lambda _: self._ok())
+
+        self._count_var = tk.StringVar()
+        tk.Label(
+            self, textvariable=self._count_var,
+            bg=C["pick_bg"], fg=C["fg_dim"],
+            font=("Helvetica", 9), anchor="w",
+        ).pack(fill=tk.X, padx=PAD, pady=(0, 4))
+
+        btn_row = tk.Frame(self, bg=C["pick_bg"])
+        btn_row.pack(fill=tk.X, padx=PAD, pady=(0, PAD))
+        tk.Button(
+            btn_row, text="Cancel",
+            bg=C["bg_card"], fg=C["fg_sub"],
+            activebackground=C["bg_card"], activeforeground=C["fg"],
+            relief="flat", font=("Helvetica", 10),
+            padx=16, pady=6, cursor="hand2",
+            command=self._cancel,
+        ).pack(side=tk.RIGHT, padx=(6, 0))
+        tk.Button(
+            btn_row, text="  OK  ",
+            bg=C["accent2"], fg=C["fg"],
+            activebackground=C["accent"], activeforeground=C["fg"],
+            relief="flat", font=("Helvetica", 10, "bold"),
+            padx=16, pady=6, cursor="hand2",
+            command=self._ok,
+        ).pack(side=tk.RIGHT)
+
+        self._populate(self._choices)
+
+    # ------------------------------------------------------------------ #
+
+    def _sync_from_listbox(self):
+        """Fold the listbox's current visual selection into the master set."""
+        sel_indices = set(self._listbox.curselection())
+        for i, item in enumerate(self._displayed):
+            if i in sel_indices:
+                self._selected.add(item)
+            else:
+                self._selected.discard(item)
+
+    def _populate(self, items: list):
+        self._displayed = list(items)
+        self._listbox.delete(0, tk.END)
+        for item in items:
+            self._listbox.insert(tk.END, f"  {item}")
+        for i, item in enumerate(items):
+            if item in self._selected:
+                self._listbox.selection_set(i)
+        self._update_count()
+
+    def _update_count(self):
+        self._count_var.set(f"{len(self._selected)} of {len(self._choices)} selected")
+
+    def _on_listbox_select(self, _event=None):
+        self._sync_from_listbox()
+        self._update_count()
+
+    def _on_filter(self, _event=None):
+        self._sync_from_listbox()
+        query = self._entry.get().strip().lower()
+        filtered = [c for c in self._choices if query in c.lower()] if query else self._choices
+        self._populate(filtered)
+
+    def _focus_list(self):
+        if self._listbox.size():
+            self._listbox.focus_set()
+
+    def _select_all(self):
+        self._selected.update(self._displayed)
+        self._listbox.selection_set(0, tk.END)
+        self._update_count()
+
+    def _select_none(self):
+        for item in self._displayed:
+            self._selected.discard(item)
+        self._listbox.selection_clear(0, tk.END)
+        self._update_count()
+
+    def _ok(self):
+        self._sync_from_listbox()
+        self.result = [c for c in self._choices if c in self._selected]
+        self.destroy()
+
+    def _cancel(self):
+        self.result = None
+        self.destroy()
+
+
+# --------------------------------------------------------------------------- #
+#  Confirm / notice dialogs                                                     #
+# --------------------------------------------------------------------------- #
+
+class ConfirmDialog(tk.Toplevel):
+    """A themed Yes / No confirmation, replacing tkinter.messagebox.askyesno."""
+
+    def __init__(self, parent, title: str, message: str,
+                 confirm_text="Yes", cancel_text="No",
+                 danger: bool = False, default: bool = True):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.configure(bg=C["pick_bg"])
+        self.result = False
+
+        self.transient(parent)
+        self.grab_set()
+
+        accent_color = C["red"] if danger else C["accent"]
+        icon = "⚠" if danger else "❓"
+
+        PAD = 20
+        row = tk.Frame(self, bg=C["pick_bg"])
+        row.pack(fill=tk.BOTH, expand=True, padx=PAD, pady=(PAD, 8))
+
+        tk.Label(row, text=icon, bg=C["pick_bg"], fg=accent_color,
+                 font=("Helvetica", 22)).pack(side=tk.LEFT, padx=(0, 14), anchor="n")
+        tk.Label(row, text=message, bg=C["pick_bg"], fg=C["fg"],
+                 font=("Helvetica", 11), justify="left", anchor="w",
+                 wraplength=340).pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        btn_row = tk.Frame(self, bg=C["pick_bg"])
+        btn_row.pack(fill=tk.X, padx=PAD, pady=(4, PAD))
+
+        cancel_btn = tk.Button(
+            btn_row, text=cancel_text,
+            bg=C["bg_card"], fg=C["fg_sub"],
+            activebackground=C["bg_card"], activeforeground=C["fg"],
+            relief="flat", font=("Helvetica", 10),
+            padx=16, pady=6, cursor="hand2", command=self._no,
+        )
+        cancel_btn.pack(side=tk.RIGHT)
+
+        confirm_btn = tk.Button(
+            btn_row, text=confirm_text,
+            bg=(C["red"] if danger else C["accent2"]), fg=C["fg"],
+            activebackground=accent_color, activeforeground=C["fg"],
+            relief="flat", font=("Helvetica", 10, "bold"),
+            padx=16, pady=6, cursor="hand2", command=self._yes,
+        )
+        confirm_btn.pack(side=tk.RIGHT, padx=(0, 8))
+
+        self.bind("<Return>", lambda _: (self._yes() if default else self._no()))
+        self.bind("<Escape>", lambda _: self._no())
+        self.protocol("WM_DELETE_WINDOW", self._no)
+
+        self.update_idletasks()
+        px = parent.winfo_rootx() + parent.winfo_width() // 2 - self.winfo_width() // 2
+        py = parent.winfo_rooty() + parent.winfo_height() // 2 - self.winfo_height() // 2
+        self.geometry(f"+{px}+{py}")
+
+        (confirm_btn if default else cancel_btn).focus_set()
+        self.wait_window()
+
+    def _yes(self):
+        self.result = True
+        self.destroy()
+
+    def _no(self):
+        self.result = False
+        self.destroy()
+
+
+_NOTICE_STYLE = {
+    "info":    ("ℹ", C["accent"]),
+    "success": ("✓", C["green"]),
+    "warning": ("⚠", C["yellow"]),
+    "error":   ("✗", C["red"]),
+}
+
+
+class NoticeDialog(tk.Toplevel):
+    """A themed, single-button notice, replacing messagebox.showinfo/warning/error."""
+
+    def __init__(self, parent, title: str, message: str, kind: str = "info"):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.configure(bg=C["pick_bg"])
+
+        self.transient(parent)
+        self.grab_set()
+
+        icon, color = _NOTICE_STYLE.get(kind, _NOTICE_STYLE["info"])
+
+        PAD = 20
+        row = tk.Frame(self, bg=C["pick_bg"])
+        row.pack(fill=tk.BOTH, expand=True, padx=PAD, pady=(PAD, 8))
+
+        tk.Label(row, text=icon, bg=C["pick_bg"], fg=color,
+                 font=("Helvetica", 22)).pack(side=tk.LEFT, padx=(0, 14), anchor="n")
+        tk.Label(row, text=message, bg=C["pick_bg"], fg=C["fg"],
+                 font=("Helvetica", 11), justify="left", anchor="w",
+                 wraplength=340).pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        btn_row = tk.Frame(self, bg=C["pick_bg"])
+        btn_row.pack(fill=tk.X, padx=PAD, pady=(4, PAD))
+        ok_btn = tk.Button(
+            btn_row, text="  OK  ",
+            bg=C["accent2"], fg=C["fg"],
+            activebackground=C["accent"], activeforeground=C["fg"],
+            relief="flat", font=("Helvetica", 10, "bold"),
+            padx=16, pady=6, cursor="hand2", command=self.destroy,
+        )
+        ok_btn.pack(side=tk.RIGHT)
+
+        self.bind("<Return>", lambda _: self.destroy())
+        self.bind("<Escape>", lambda _: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+
+        self.update_idletasks()
+        px = parent.winfo_rootx() + parent.winfo_width() // 2 - self.winfo_width() // 2
+        py = parent.winfo_rooty() + parent.winfo_height() // 2 - self.winfo_height() // 2
+        self.geometry(f"+{px}+{py}")
+        ok_btn.focus_set()
+        self.wait_window()
+
+
+# --------------------------------------------------------------------------- #
 #  Console redirector — Rich markup + ANSI → Tkinter text tags                 #
 # --------------------------------------------------------------------------- #
 
@@ -645,6 +996,8 @@ class QForgeGUI(tk.Tk):
             except Exception:
                 pass
 
+        self._logo_img = self._load_logo(base_dir)
+
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
 
@@ -732,70 +1085,128 @@ class QForgeGUI(tk.Tk):
 
     def _setup_ui(self):
         # ── Top bar ───────────────────────────────────────────────────── #
-        top = tk.Frame(self, bg=C["bg_panel"], height=44)
+        top = tk.Frame(self, bg=C["bg_panel"], height=48)
         top.pack(fill=tk.X, side=tk.TOP)
         top.pack_propagate(False)
 
         tk.Frame(top, bg=C["accent2"], width=3).pack(side=tk.LEFT, fill=tk.Y)
 
-        tk.Label(
-            top, text="  ⚛  qforge",
-            bg=C["bg_panel"], fg=C["accent"],
-            font=("Helvetica", 14, "bold"),
-        ).pack(side=tk.LEFT, padx=(10, 0), pady=8)
+        brand = tk.Frame(top, bg=C["bg_panel"])
+        brand.pack(side=tk.LEFT, padx=(10, 0), pady=6)
+
+        if self._logo_img is not None:
+            tk.Label(brand, image=self._logo_img, bg=C["bg_panel"]).pack(side=tk.LEFT)
+        else:
+            tk.Label(
+                brand, text="⚛  qforge",
+                bg=C["bg_panel"], fg=C["accent"],
+                font=("Helvetica", 14, "bold"),
+            ).pack(side=tk.LEFT)
 
         tk.Label(
-            top, text=" — Quantum Simulation Environment",
+            top, text=" quantum simulation environment",
             bg=C["bg_panel"], fg=C["fg_sub"],
             font=("Helvetica", 11),
         ).pack(side=tk.LEFT, pady=8)
 
-        tk.Label(
-            top, text="v2.0 ",
+        version_lbl = tk.Label(
+            top, text=f"v{__version__} ",
             bg=C["bg_panel"], fg=C["fg_dim"],
             font=("Helvetica", 9),
-        ).pack(side=tk.RIGHT, pady=8, padx=12)
+        )
+        version_lbl.pack(side=tk.RIGHT, pady=8, padx=12)
+
+        docs_lbl = tk.Label(
+            top, text="Documentation ↗",
+            bg=C["bg_panel"], fg=C["accent"],
+            font=("Helvetica", 10, "underline"), cursor="hand2",
+        )
+        docs_lbl.pack(side=tk.RIGHT, pady=8, padx=4)
+        docs_lbl.bind("<Button-1>", lambda _: self._open_docs())
 
         # ── Main pane ─────────────────────────────────────────────────── #
         self.main_paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         self.main_paned.pack(fill=tk.BOTH, expand=True)
 
-        # ── Sidebar ───────────────────────────────────────────────────── #
-        sidebar = tk.Frame(self.main_paned, bg=C["bg_panel"], width=240)
+        # ── Sidebar (scrollable, so it never clips as more sections grow) ─ #
+        sidebar = tk.Frame(self.main_paned, bg=C["bg_panel"], width=250)
         self.main_paned.add(sidebar, weight=0)
 
-        inner = tk.Frame(sidebar, bg=C["bg_panel"])
-        inner.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(inner, text="WORKFLOWS", style="SidebarHeader.TLabel").pack(
-            fill=tk.X, padx=14, pady=(14, 2)
+        nav_canvas = tk.Canvas(sidebar, bg=C["bg_panel"], highlightthickness=0)
+        nav_scroll = ttk.Scrollbar(
+            sidebar, orient=tk.VERTICAL, command=nav_canvas.yview,
+            style="Console.Vertical.TScrollbar",
         )
-        tk.Frame(inner, bg=C["accent2"], height=1).pack(fill=tk.X, padx=14, pady=(0, 6))
+        nav_canvas.configure(yscrollcommand=nav_scroll.set)
+        nav_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        nav_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-        button_defs = [
-            ("➕   Create a qubit",           self._wizard_create_qubit),
-            ("📋   List qubits",               self._wizard_list_qubits),
-            ("🔬   Analyze a qubit",           self._wizard_analyze_qubit),
-            ("🗑   Delete a qubit",            self._wizard_delete_qubit),
-            ("⚡   Simulate gates",            self._wizard_simulate_gate),
-            ("🔗   Build a circuit",           self._wizard_build_circuit),
-            ("🖥   Design hardware",           self._wizard_design_hardware),
-            ("⚖   Compare qubits",            self._wizard_compare_qubits),
-            ("🔀   Multi-qubit gate analysis", self._wizard_analyze_multi),
-            ("▶   Run an example",            self._wizard_run_example),
-            ("🚀   Run full workflow",         self._wizard_full_workflow),
-            ("❓   Help",                      self._show_help),
+        inner = tk.Frame(nav_canvas, bg=C["bg_panel"])
+        inner_window = nav_canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def _on_inner_configure(_event=None):
+            nav_canvas.configure(scrollregion=nav_canvas.bbox("all"))
+
+        def _on_canvas_configure(event):
+            nav_canvas.itemconfig(inner_window, width=event.width)
+
+        inner.bind("<Configure>", _on_inner_configure)
+        nav_canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _on_nav_wheel(event):
+            nav_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _bind_wheel(_event=None):
+            nav_canvas.bind_all("<MouseWheel>", _on_nav_wheel)
+
+        def _unbind_wheel(_event=None):
+            nav_canvas.unbind_all("<MouseWheel>")
+
+        nav_canvas.bind("<Enter>", _bind_wheel)
+        nav_canvas.bind("<Leave>", _unbind_wheel)
+
+        sections = [
+            ("QUBITS", [
+                ("➕   Create a qubit",   self._wizard_create_qubit),
+                ("📋   List qubits",      self._wizard_list_qubits),
+                ("🔬   Analyze a qubit",  self._wizard_analyze_qubit),
+                ("⚖   Compare qubits",   self._wizard_compare_qubits),
+                ("🗑   Delete a qubit",   self._wizard_delete_qubit),
+            ]),
+            ("GATES & CIRCUITS", [
+                ("⚡   Simulate a gate",           self._wizard_simulate_gate),
+                ("🔀   Multi-qubit gate analysis", self._wizard_analyze_multi),
+                ("🔗   Build a circuit",           self._wizard_build_circuit),
+            ]),
+            ("WORKFLOWS", [
+                ("🚀   Run full workflow", self._wizard_full_workflow),
+            ]),
+            ("HARDWARE", [
+                ("🖥   Design hardware", self._wizard_design_hardware),
+            ]),
+            ("LEARN", [
+                ("▶   Run an example",     self._wizard_run_example),
+                ("❓   Help",               self._show_help),
+                ("📖   Documentation",     self._open_docs),
+            ]),
+            ("SYSTEM", [
+                ("🧹   Clear calibration cache", self._wizard_clear_cache),
+            ]),
         ]
 
-        for text, cmd in button_defs:
-            ttk.Button(inner, text=text, command=cmd, style="Nav.TButton").pack(
-                fill=tk.X, padx=6, pady=1
+        for header, buttons in sections:
+            ttk.Label(inner, text=header, style="SidebarHeader.TLabel").pack(
+                fill=tk.X, padx=14, pady=(12, 2)
             )
+            tk.Frame(inner, bg=C["accent2"], height=1).pack(fill=tk.X, padx=14, pady=(0, 4))
+            for text, cmd in buttons:
+                ttk.Button(inner, text=text, command=cmd, style="Nav.TButton").pack(
+                    fill=tk.X, padx=6, pady=1
+                )
 
-        tk.Frame(inner, bg=C["bg_panel"]).pack(fill=tk.BOTH, expand=True)
-        tk.Frame(inner, bg=C["separator"], height=1).pack(fill=tk.X, padx=14, pady=4)
+        tk.Frame(inner, bg=C["separator"], height=1).pack(fill=tk.X, padx=14, pady=(10, 4))
         ttk.Button(inner, text="✕   Exit", command=self._safe_quit,
-                   style="Danger.TButton").pack(fill=tk.X, padx=6, pady=(2, 10))
+                   style="Danger.TButton").pack(fill=tk.X, padx=6, pady=(2, 12))
 
         # ── Console panel ─────────────────────────────────────────────── #
         console_panel = tk.Frame(self.main_paned, bg=C["bg_dark"])
@@ -872,12 +1283,39 @@ class QForgeGUI(tk.Tk):
 
     def _set_sash(self):
         try:
-            self.main_paned.sashpos(0, 240)
+            self.main_paned.sashpos(0, 250)
         except Exception:
             pass
 
     def _clear_console(self):
         self.console_text.delete("1.0", tk.END)
+
+    def _load_logo(self, base_dir: str):
+        """
+        Load the qforge wordmark for the top bar, downscaled to a sensible
+        height. Uses Tk's native PNG support (no Pillow dependency needed).
+        Returns None if the asset is missing or can't be read, so the top
+        bar falls back to a text brand instead of failing to start.
+        """
+        logo_path = os.path.join(base_dir, "assets", "icon.png")
+        if not os.path.exists(logo_path):
+            return None
+        try:
+            img = tk.PhotoImage(file=logo_path)
+            target_h = 30
+            factor = max(1, -(-img.height() // target_h))  # ceil division
+            if factor > 1:
+                img = img.subsample(factor, factor)
+            return img
+        except Exception:
+            return None
+
+    def _open_docs(self):
+        try:
+            webbrowser.open(DOCS_URL)
+            self._dim(f"Opened documentation: {DOCS_URL}")
+        except Exception as e:
+            self._err(f"Could not open the browser: {e}")
 
     # ---------------------------------------------------------------------- #
     #  Register Tkinter text tags                                              #
@@ -954,6 +1392,53 @@ class QForgeGUI(tk.Tk):
         """
         dlg = SearchablePickerDialog(self, title, prompt_text, choices, default)
         return dlg.result
+
+    def _ask_multi(self, title: str, prompt_text: str,
+                   choices: list, preselected=None) -> "list | None":
+        """
+        Multi-select picker: checkbox-style list with a live filter.
+        Returns the chosen items as a list, or None if cancelled.
+        """
+        dlg = MultiSelectDialog(self, title, prompt_text, choices, preselected)
+        return dlg.result
+
+    def _confirm(self, title: str, message: str, danger: bool = False,
+                default: bool = True) -> bool:
+        """
+        Themed Yes / No confirmation. Safe to call from the main thread or
+        from a background worker thread (wizards run their engine calls on
+        a worker thread via `_run_in_thread`, and Tkinter widgets may only
+        be created on the main thread, so a cross-thread call schedules the
+        dialog on the main thread and blocks the caller until it closes).
+        """
+        if threading.current_thread() is threading.main_thread():
+            return ConfirmDialog(self, title, message, danger=danger, default=default).result
+
+        box = {}
+        event = threading.Event()
+
+        def _show():
+            box["value"] = ConfirmDialog(self, title, message, danger=danger, default=default).result
+            event.set()
+
+        self.after(0, _show)
+        event.wait()
+        return box.get("value", False)
+
+    def _notify(self, title: str, message: str, kind: str = "info") -> None:
+        """Themed notice dialog (info / success / warning / error). Thread-safe, see `_confirm`."""
+        if threading.current_thread() is threading.main_thread():
+            NoticeDialog(self, title, message, kind=kind)
+            return
+
+        event = threading.Event()
+
+        def _show():
+            NoticeDialog(self, title, message, kind=kind)
+            event.set()
+
+        self.after(0, _show)
+        event.wait()
 
     # ---------------------------------------------------------------------- #
     #  Engine helpers                                                          #
@@ -1097,8 +1582,7 @@ class QForgeGUI(tk.Tk):
             try:
                 _create_qubit(q_type, name, params)
                 self._ok(f"Qubit '{name}' created successfully!")
-                self.after(0, messagebox.showinfo, "Success",
-                           f"Qubit '{name}' created successfully!")
+                self._notify("Success", f"Qubit '{name}' created successfully.", kind="success")
             except Exception as e:
                 self._err(f"Error: {e}")
 
@@ -1156,7 +1640,7 @@ class QForgeGUI(tk.Tk):
         self._header("Qubit Analysis Wizard")
         qubits = self._get_qubit_names()
         if not qubits:
-            messagebox.showwarning("No Qubits", "No qubits found. Create one first.")
+            self._notify("No qubits", "No qubits found. Create one first.", kind="warning")
             return
 
         name = self._ask_choice(
@@ -1167,16 +1651,9 @@ class QForgeGUI(tk.Tk):
             return
         name = name.strip()
 
-        do_plot = messagebox.askyesno(
-            "Plot", "Generate plots?\n(Default: Yes)", default=messagebox.YES
-        )
-        do_coherence = messagebox.askyesno(
-            "Coherence", "Estimate coherence?\n(Default: Yes)", default=messagebox.YES
-        )
-        do_relative = messagebox.askyesno(
-            "Relative Energy", "Display relative energies?\n(Default: No)",
-            default=messagebox.NO,
-        )
+        do_plot = self._confirm("Plot", "Generate plots?", default=True)
+        do_coherence = self._confirm("Coherence", "Estimate coherence?", default=True)
+        do_relative = self._confirm("Relative energy", "Display energies relative to the ground state?", default=False)
 
         self._cprint(f"\n[green]Analyzing qubit: [bold]{name}[/bold][/green]")
 
@@ -1200,7 +1677,7 @@ class QForgeGUI(tk.Tk):
         self._header("Qubit Deletion Wizard")
         qubits = self._get_qubit_names()
         if not qubits:
-            messagebox.showwarning("No Qubits", "No qubits to delete.")
+            self._notify("No qubits", "No qubits to delete.", kind="warning")
             return
 
         name = self._ask_choice(
@@ -1211,9 +1688,10 @@ class QForgeGUI(tk.Tk):
             return
         name = name.strip()
 
-        if not messagebox.askyesno(
-            "Confirm Deletion",
-            f"Are you sure you want to delete '{name}'?\nThis cannot be undone.",
+        if not self._confirm(
+            "Confirm deletion",
+            f"Delete '{name}'? This cannot be undone.",
+            danger=True, default=False,
         ):
             self._dim("Deletion cancelled.")
             return
@@ -1233,7 +1711,7 @@ class QForgeGUI(tk.Tk):
                     self._dim(f"  Cleared {len(keys_to_remove)} cached calibration(s) "
                               f"involving '{name}'.")
                 self._ok(f"Qubit '{name}' deleted.")
-                self.after(0, messagebox.showinfo, "Deleted", f"'{name}' has been deleted.")
+                self._notify("Deleted", f"'{name}' has been deleted.", kind="success")
             except Exception as e:
                 if "Abort" not in str(type(e)):
                     self._err(f"Error: {e}")
@@ -1248,7 +1726,7 @@ class QForgeGUI(tk.Tk):
         self._header("Gate Simulation Wizard")
         qubits = self._get_qubit_names()
         if not qubits:
-            messagebox.showwarning("No Qubits", "No qubits found. Create one first.")
+            self._notify("No qubits", "No qubits found. Create one first.", kind="warning")
             return
 
         qubit = self._ask_choice(
@@ -1272,9 +1750,10 @@ class QForgeGUI(tk.Tk):
         if gate in ("CNOT", "CZ"):
             remaining = [q for q in qubits if q != qubit]
             if not remaining:
-                messagebox.showwarning(
-                    "Need More Qubits",
+                self._notify(
+                    "Need more qubits",
                     "You need at least two qubits for a two-qubit gate.",
+                    kind="warning",
                 )
                 return
 
@@ -1388,9 +1867,9 @@ class QForgeGUI(tk.Tk):
                         duration=duration, noise=noise,
                         save=False, steps=100,
                     )
-                    do_save = messagebox.askyesno("Save Plot", "Save high-resolution plot to file?")
+                    do_save = self._confirm("Save plot", "Save a high-resolution plot to file?", default=False)
                     if do_save:
-                        self._dim("Re-running to save high-res plot…")
+                        self._dim("Re-running to save a high-resolution plot...")
                         simulate.callback(
                             qubit=qubit, gate=gate,
                             duration=duration, noise=noise,
@@ -1425,18 +1904,20 @@ class QForgeGUI(tk.Tk):
     def _wizard_compare_qubits(self):
         self._header("Qubit Comparison Wizard")
         qubits = self._get_qubit_names()
-        if not qubits:
-            messagebox.showwarning("No Qubits", "No qubits to compare.")
+        if len(qubits) < 2:
+            self._notify("No qubits", "Need at least two qubits to compare.", kind="warning")
             return
 
-        # Multi-select: user picks from the picker; they can type comma-separated too
-        q_str = self._ask_choice(
+        picked = self._ask_multi(
             "Compare Qubits",
-            "Select a qubit to add (or type comma-separated names):",
+            "Tick every qubit you want in the comparison:",
             qubits,
         )
-        if not q_str:
+        if not picked:
             self._warn("Aborted.")
+            return
+        if len(picked) < 2:
+            self._notify("Pick more qubits", "Select at least two qubits to compare.", kind="warning")
             return
 
         metrics = self._ask_choice(
@@ -1453,7 +1934,7 @@ class QForgeGUI(tk.Tk):
         def _do():
             try:
                 compare_qubits.callback(
-                    qubits=q_str.strip(), metrics=metrics,
+                    qubits=",".join(picked), metrics=metrics,
                     gates=None, tag=None, output=None,
                 )
             except Exception as e:
@@ -1471,9 +1952,10 @@ class QForgeGUI(tk.Tk):
         qubits = self._get_qubit_names()
 
         if len(qubits) < 2:
-            messagebox.showwarning(
-                "Need More Qubits",
+            self._notify(
+                "Need more qubits",
                 "You need at least two qubits for multi-qubit gate analysis.",
+                kind="warning",
             )
             return
 
@@ -1496,14 +1978,11 @@ class QForgeGUI(tk.Tk):
             return
         gate = gate.strip().upper()
 
-        do_tomo = messagebox.askyesno(
-            "State Tomography", "Perform State Tomography (fidelity check)?",
-            default=messagebox.NO,
-        )
+        do_tomo = self._confirm("State tomography", "Perform state tomography (fidelity check)?", default=False)
 
         self._cprint(
             f"\n[green]Running coupling comparison for "
-            f"[bold]{gate}[/bold] on [cyan]{q1}[/cyan] → [cyan]{q2}[/cyan]…[/green]"
+            f"[bold]{gate}[/bold] on [cyan]{q1}[/cyan] → [cyan]{q2}[/cyan]...[/green]"
         )
 
         def _do():
@@ -1539,12 +2018,12 @@ class QForgeGUI(tk.Tk):
                 print(f"[dim]  {'─' * sep_len}[/dim]")
 
                 if gate == "CNOT":
-                    self._dim("  Note: 'Target Pop' = P(|11⟩) — bit-flip success proxy.")
+                    self._dim("  Note: 'Target Pop' is P(|11⟩), the bit-flip success probability.")
                 elif gate == "CZ":
-                    self._dim("  Note: 'Target Pop' = P(|11⟩) — population retention / leakage proxy.")
+                    self._dim("  Note: 'Target Pop' is P(|11⟩), a population retention / leakage proxy.")
 
                 if do_tomo:
-                    self._dim("  [Detailed tomography — future integration point]")
+                    self._dim("  (Detailed tomography is a future integration point.)")
 
             except Exception as e:
                 self._err(f"Error during analysis: {e}")
@@ -1581,7 +2060,7 @@ class QForgeGUI(tk.Tk):
 
         script_path = os.path.join(get_examples_dir(), ex_name)
         if not os.path.exists(script_path):
-            messagebox.showerror("Not Found", f"Example '{ex_name}' not found.")
+            self._notify("Not found", f"Example '{ex_name}' not found.", kind="error")
             self._err(f"Example '{ex_name}' not found.")
             return
 
@@ -1617,44 +2096,35 @@ class QForgeGUI(tk.Tk):
 
         available_qubits = self._get_qubit_names()
         if not available_qubits:
-            messagebox.showwarning("No Qubits", "No qubits exist. Create qubits first.")
+            self._notify("No qubits", "No qubits exist. Create qubits first.", kind="warning")
             return
 
-        # Qubit selection — picker for each qubit slot; user decides when to stop
-        print(f"[bold]1. Select Qubits[/bold]")
-        qubit_names = []
-        while True:
-            remaining = [q for q in available_qubits if q not in qubit_names]
-            if not remaining:
-                break
-            prompt_txt = (
-                f"{'Currently selected: ' + ', '.join(qubit_names) if qubit_names else 'No qubits selected yet.'}\n\n"
-                "Pick a qubit to add (Cancel when done):"
-            )
-            picked = self._ask_choice("Add Qubit", prompt_txt, remaining)
-            if not picked:
-                break
-            qubit_names.append(picked.strip())
-            print(f"  [green]Added:[/green] [cyan]{picked.strip()}[/cyan]")
-
+        # ── Step 1: qubit selection ──────────────────────────────────── #
+        print("[bold]1. Select qubits[/bold]")
+        qubit_names = self._ask_multi(
+            "Select Qubits",
+            "Tick every qubit this workflow should use:",
+            available_qubits,
+        )
         if not qubit_names:
             self._warn("No qubits selected. Aborted.")
             return
+        print(f"  [green]Using:[/green] [cyan]{', '.join(qubit_names)}[/cyan]")
 
-        # Coupling topology
-        print(f"\n[bold]2. Define Native Coupling Topology[/bold]")
-        print(f"[dim]   Couplings are bidirectional — specify each Q1→Q2 edge only once.[/dim]")
+        # ── Step 2: coupling topology ─────────────────────────────────── #
+        print("\n[bold]2. Define native coupling topology[/bold]")
+        print("[dim]   Couplings are bidirectional. Specify each Q1-Q2 edge only once.[/dim]")
         couplings = []
+        c_type_choices = ["capacitive", "inductive", "tunable_coupler"]
 
-        c_type_choices    = ["capacitive", "inductive", "tunable_coupler"]
-
-        while messagebox.askyesno(
-            "2. Add Coupling Edge",
+        while self._confirm(
+            "Add coupling edge",
             f"Qubits: {', '.join(qubit_names)}\n\nAdd a native coupling edge?",
+            default=False,
         ):
             q1_input = self._ask_choice(
-                "Coupling – Q1",
-                "Select Q1 (first qubit in edge):",
+                "Coupling: first qubit",
+                "Select the first qubit in the edge:",
                 qubit_names,
             )
             if not q1_input:
@@ -1663,8 +2133,8 @@ class QForgeGUI(tk.Tk):
 
             q2_choices = [q for q in qubit_names if q != q1_input]
             q2_input = self._ask_choice(
-                "Coupling – Q2",
-                f"Select Q2 (second qubit, paired with {q1_input}):",
+                "Coupling: second qubit",
+                f"Select the second qubit, paired with {q1_input}:",
                 q2_choices,
             )
             if not q2_input:
@@ -1672,18 +2142,18 @@ class QForgeGUI(tk.Tk):
             q2_input = q2_input.strip()
 
             if q1_input not in qubit_names or q2_input not in qubit_names:
-                messagebox.showerror("Invalid", f"'{q1_input}' or '{q2_input}' not in selected list.")
+                self._notify("Invalid", f"'{q1_input}' or '{q2_input}' is not in the selected list.", kind="error")
                 continue
 
             ctype = self._ask_choice(
-                "Coupling Type", "Select coupling type:",
+                "Coupling type", "Select coupling type:",
                 c_type_choices, "tunable_coupler",
             )
             if ctype is None:
                 break
             ctype = ctype.strip() or "tunable_coupler"
 
-            cstren_str = self._ask_string("Coupling Strength", "Strength (GHz):", "0.05")
+            cstren_str = self._ask_string("Coupling strength", "Strength (GHz):", "0.05")
             if cstren_str is None:
                 break
             try:
@@ -1701,17 +2171,67 @@ class QForgeGUI(tk.Tk):
             print(f"  [green]Added[/green] [cyan]{ctype}[/cyan] "
                   f"({cstren} GHz): [cyan]{q1_input}[/cyan] ↔ [cyan]{q2_input}[/cyan]")
 
+        # ── Step 3: error correction ─────────────────────────────────── #
+        print("\n[bold]3. Error correction[/bold]")
         ecc_choice = self._ask_choice(
-            "3. Error Correction",
+            "Error Correction",
             "Select the error-correcting code to use for this workflow:",
-            ["No ECC", "3-qubit repetition code", "9-qubit Shor code", "7-qubit Steane code"],
-            "No ECC",
+            EC_LABELS,
+            "No error correction",
         )
         if ecc_choice is None:
             self._warn("Aborted.")
             return
-        ecc_choice = ecc_choice.strip() or "No ECC"
+        ecc_choice = ecc_choice.strip() or "No error correction"
 
+        ec_coupling_type = "capacitive"
+        ec_coupling_strength = 0.010
+        ec_every_n_gates = 0
+
+        if ecc_choice != "No error correction":
+            code, _method_name = EC_CODE_MAP[ecc_choice]
+            per_logical = code.num_data + code.num_ancilla
+            n_physical = len(qubit_names) * per_logical
+            print(
+                f"[dim]   {code.name}: each logical qubit expands to {per_logical} physical "
+                f"qubits ({code.num_data} data + {code.num_ancilla} ancilla). "
+                f"{len(qubit_names)} logical qubit(s) -> {n_physical} physical qubits total.[/dim]"
+            )
+            if n_physical > 20 and not self._confirm(
+                "Large simulation",
+                f"That is a {2 ** n_physical:,}-dimensional state vector.\n"
+                "This may be slow or memory-heavy. Continue anyway?",
+                danger=True, default=False,
+            ):
+                self._warn("Aborted.")
+                return
+
+            ec_ctype = self._ask_choice(
+                "Syndrome coupling type",
+                "Coupling type for syndrome-extraction CNOTs:",
+                c_type_choices, "capacitive",
+            )
+            ec_coupling_type = (ec_ctype or "capacitive").strip() or "capacitive"
+
+            ec_g_str = self._ask_string("Syndrome coupling strength", "Strength (GHz):", "0.010")
+            try:
+                ec_coupling_strength = float((ec_g_str or "0.010").strip() or "0.010")
+            except ValueError:
+                self._err("Invalid strength; using 0.010 GHz.")
+                ec_coupling_strength = 0.010
+
+            ec_n_str = self._ask_string(
+                "Syndrome cycle cadence",
+                "Run a syndrome cycle every N gates (0 = only a final pass, safest with H gates):",
+                "0",
+            )
+            try:
+                ec_every_n_gates = int((ec_n_str or "0").strip() or "0")
+            except ValueError:
+                self._err("Invalid value; using 0 (final pass only).")
+                ec_every_n_gates = 0
+
+        # ── Step 4: QASM source ──────────────────────────────────────── #
         qasm_path = filedialog.askopenfilename(
             title="Select OpenQASM (.qasm) File",
             filetypes=[("QASM files", "*.qasm"), ("All files", "*.*")],
@@ -1725,39 +2245,42 @@ class QForgeGUI(tk.Tk):
             qasm_path = qasm_path.strip().strip("\"'")
 
         if not os.path.exists(qasm_path):
-            messagebox.showerror("File Not Found", f"QASM file not found:\n{qasm_path}")
+            self._notify("File not found", f"QASM file not found:\n{qasm_path}", kind="error")
             self._err(f"QASM file '{qasm_path}' not found.")
             return
 
-        print(f"\n[dim]Initializing workflow engines…[/dim]")
+        print("\n[dim]Initializing workflow engines...[/dim]")
 
         def _do():
             try:
                 g_eng = GateEngine()
-                if ecc_choice != "No ECC":
+                if ecc_choice != "No error correction":
+                    code, method_name = EC_CODE_MAP[ecc_choice]
                     ec_eng = ErrorCorrectionEngine(self.engine, g_eng)
-                    if ecc_choice == "9-qubit Shor code":
-                        print("[cyan]Using ErrorCorrectionEngine (9-qubit Shor code)…[/cyan]")
-                        res = ec_eng.execute_shor9_workflow(qubit_names, qasm_path)
-                    elif ecc_choice == "7-qubit Steane code":
-                        print("[cyan]Using ErrorCorrectionEngine (7-qubit Steane code)…[/cyan]")
-                        res = ec_eng.execute_steane7_workflow(qubit_names, qasm_path)
-                    else:
-                        print("[cyan]Using ErrorCorrectionEngine (3-qubit repetition code)…[/cyan]")
-                        res = ec_eng.execute_3q_repetition_workflow(qubit_names, qasm_path)
+                    method = getattr(ec_eng, method_name)
+                    print(f"[cyan]Using ErrorCorrectionEngine ({code.name})...[/cyan]")
+                    res = method(
+                        qubit_names, qasm_path,
+                        coupling_type=ec_coupling_type,
+                        coupling_strength=ec_coupling_strength,
+                        ec_every_n_gates=ec_every_n_gates,
+                    )
                     logical_results = res["logical_populations"]
-                    print("\n[bold green]Workflow Complete![/bold green]  "
-                          "[dim]Decoded Logical Populations:[/dim]")
+                    print("\n[bold green]Workflow complete.[/bold green]  "
+                          "[dim]Decoded logical populations:[/dim]")
                     for l_state, prob in sorted(logical_results.items(), key=lambda x: -x[1]):
                         if prob > 0.001:
                             print(f"  [cyan]|{l_state}⟩_L[/cyan]  [orange]{prob * 100:5.2f}%[/orange]")
-                    self._dim("\nNote: Timeline plotting is disabled during active error correction.")
+                    self._dim(
+                        "\nNote: timeline plotting is skipped during active error correction, "
+                        "since mid-circuit syndrome measurement collapses the wavefunction."
+                    )
                 else:
-                    print("[cyan]Using PhysicalWorkflowEngine…[/cyan]")
+                    print("[cyan]Using PhysicalWorkflowEngine...[/cyan]")
                     wf_eng = PhysicalWorkflowEngine(self.engine, g_eng)
                     res    = wf_eng.execute_workflow(qubit_names, couplings, qasm_path)
-                    print("\n[bold green]Simulation Complete![/bold green]  "
-                          "[dim]Physical Populations:[/dim]")
+                    print("\n[bold green]Simulation complete.[/bold green]  "
+                          "[dim]Physical populations:[/dim]")
                     final_pops  = {k: v[-1] for k, v in res["populations"].items()}
                     sorted_pops = sorted(final_pops.items(), key=lambda x: -x[1])
                     for state, p in sorted_pops[:8]:
@@ -1768,7 +2291,7 @@ class QForgeGUI(tk.Tk):
                     try:
                         plot_data = [res["populations"][k] for k in top_keys]
                         labels    = [f"P(|{k}⟩)" for k in top_keys]
-                        print("\n[bold]Visual Hardware Timeline:[/bold]")
+                        print("\n[bold]Visual hardware timeline:[/bold]")
                         TerminalPlotter.plot_time_evolution(
                             times=res["times"], expectations=plot_data,
                             labels=labels,
@@ -1779,10 +2302,51 @@ class QForgeGUI(tk.Tk):
                         self._dim(f"(Timeline plot unavailable: {pe})")
             except Exception as e:
                 self._err(f"Workflow execution failed: {e}")
-                import traceback
                 traceback.print_exc()
 
         self._run_in_thread(_do, done_msg="Workflow complete.")
+
+    # ---------------------------------------------------------------------- #
+    #  Wizard: Clear calibration cache                                         #
+    # ---------------------------------------------------------------------- #
+
+    def _wizard_clear_cache(self):
+        self._header("Clear Calibration Cache")
+
+        g_eng = GateEngine()
+        n_cached = len(GateEngine._calib_cache)
+        cache_path = getattr(
+            g_eng, "cache_file",
+            os.path.join(OUTPUT_DIRS.get("data", "outputs"), "calib_cache.json"),
+        )
+
+        self._dim(f"Cache file: {cache_path}")
+
+        if n_cached == 0 and not os.path.exists(cache_path):
+            self._notify("Cache already empty", "There is no calibration cache to clear.", kind="info")
+            return
+
+        print(f"[bold]{n_cached}[/bold] calibration(s) currently cached in this session.")
+
+        plural = "" if n_cached == 1 else "s"
+        if not self._confirm(
+            "Clear calibration cache",
+            f"This forgets {n_cached} cached gate calibration{plural}.\n"
+            "qforge simply recalibrates the next time it needs one, so nothing "
+            "is lost, it just takes a little longer next time.\n\n"
+            "Clear the cache now?",
+            default=False,
+        ):
+            self._dim("Cache clear cancelled.")
+            return
+
+        try:
+            GateEngine._calib_cache.clear()
+            g_eng._save_cache_to_disk()
+            self._ok(f"Calibration cache cleared ({n_cached} entr{'y' if n_cached == 1 else 'ies'} removed).")
+            self._notify("Cache cleared", "The calibration cache has been cleared.", kind="success")
+        except Exception as e:
+            self._err(f"Could not clear cache: {e}")
 
     # ---------------------------------------------------------------------- #
     #  Help                                                                    #
@@ -1790,30 +2354,41 @@ class QForgeGUI(tk.Tk):
 
     def _show_help(self):
         self._header("qforge Help")
-        print("""
+        print(f"""
 [bold]Navigation[/bold]
   [dim]·[/dim] Click a button on the left panel to launch a guided wizard.
-  [dim]·[/dim] Follow the dialog boxes to supply parameters.
+  [dim]·[/dim] Where a step needs several qubits, tick them in the picker and press OK.
+  [dim]·[/dim] Type to filter any searchable list, it narrows as you type.
   [dim]·[/dim] All output, errors, and plots appear in this console.
-  [dim]·[/dim] Use the [cyan]Clear[/cyan] link (top-right of console) to reset output.
+  [dim]·[/dim] Use the [cyan]Clear[/cyan] link above the console to reset its output.
 
-[bold]Workflow Reference[/bold]
-  [cyan] 1.[/cyan] [green]Create a Qubit[/green]       — Define physical parameters of a superconducting qubit.
-  [cyan] 2.[/cyan] [green]List Qubits[/green]           — View all saved qubits in the current session.
-  [cyan] 3.[/cyan] [green]Analyze a Qubit[/green]       — Energy spectrum, coherence estimates, and plots.
-  [cyan] 4.[/cyan] [green]Delete a Qubit[/green]        — Remove a qubit and clear its calibration cache.
-  [cyan] 5.[/cyan] [green]Simulate Gates[/green]        — Model 1Q (X/Y/Z/H) or 2Q (CNOT/CZ) gate dynamics.
-  [cyan] 6.[/cyan] [green]Build a Circuit[/green]       — [dim](Coming soon)[/dim] Construct and simulate quantum circuits.
-  [cyan] 7.[/cyan] [green]Design Hardware[/green]       — [dim](Coming soon)[/dim] Layout quantum chip geometry.
-  [cyan] 8.[/cyan] [green]Compare Qubits[/green]        — Side-by-side analysis of different qubit architectures.
-  [cyan] 9.[/cyan] [green]Multi-Qubit Gates[/green]     — Compare coupling strategies for 2-qubit gates.
-  [cyan]10.[/cyan] [green]Run an Example[/green]        — Run a bundled example script.
-  [cyan]11.[/cyan] [green]Run Full Workflow[/green]     — End-to-end: QASM → physical schedule → populations.
+[bold]Workflow reference[/bold]
+  [cyan] 1.[/cyan] [green]Create a qubit[/green]             Define the physical parameters of a superconducting qubit.
+  [cyan] 2.[/cyan] [green]List qubits[/green]                 View every qubit saved in the current session.
+  [cyan] 3.[/cyan] [green]Analyze a qubit[/green]             Energy spectrum, coherence estimates, and plots.
+  [cyan] 4.[/cyan] [green]Compare qubits[/green]              Side-by-side metrics across several qubits at once.
+  [cyan] 5.[/cyan] [green]Delete a qubit[/green]              Remove a qubit and clear its calibration cache.
+  [cyan] 6.[/cyan] [green]Simulate a gate[/green]             Model 1-qubit (X/Y/Z/H) or 2-qubit (CNOT/CZ) dynamics.
+  [cyan] 7.[/cyan] [green]Multi-qubit gate analysis[/green]   Compare coupling strategies for a 2-qubit gate.
+  [cyan] 8.[/cyan] [green]Build a circuit[/green]             [dim](coming soon)[/dim] Construct and simulate a circuit.
+  [cyan] 9.[/cyan] [green]Run full workflow[/green]           QASM in, physical execution out, with optional error correction.
+  [cyan]10.[/cyan] [green]Design hardware[/green]             [dim](coming soon)[/dim] Lay out a quantum chip.
+  [cyan]11.[/cyan] [green]Run an example[/green]              Run a bundled example script.
+  [cyan]12.[/cyan] [green]Clear calibration cache[/green]     Forget cached gate calibrations, with a confirmation first.
+
+[bold]Error correction[/bold]
+  Run full workflow now offers three codes, each mapping every logical
+  qubit onto more physical qubits so it can detect and correct errors:
+  [dim]·[/dim] [cyan]3-qubit repetition code[/cyan]   5 physical qubits per logical qubit, corrects a single bit flip.
+  [dim]·[/dim] [cyan]7-qubit Steane code[/cyan]       13 physical qubits per logical qubit, corrects any single-qubit Pauli error.
+  [dim]·[/dim] [cyan]9-qubit Shor code[/cyan]         17 physical qubits per logical qubit, corrects any single-qubit error.
 
 [bold]Tips[/bold]
-  [dim]·[/dim] Start with [cyan]Create a Qubit[/cyan] if you are new.
-  [dim]·[/dim] Accept default parameter values for quick sanity-check runs.
-  [dim]·[/dim] For command-line reference: [cyan]qforge --help[/cyan]
+  [dim]·[/dim] Start with [cyan]Create a qubit[/cyan] if you are new here.
+  [dim]·[/dim] Accept the default parameter values for a quick sanity check.
+  [dim]·[/dim] Bundled example circuits live under [cyan]examples/qasm_files[/cyan].
+  [dim]·[/dim] For the command-line reference, run [cyan]qforge --help[/cyan].
+  [dim]·[/dim] Full documentation: [cyan]{DOCS_URL}[/cyan] (also one click away at the top of this window).
 """)
 
 

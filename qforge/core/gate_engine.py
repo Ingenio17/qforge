@@ -1330,6 +1330,53 @@ class GateEngine:
         op.dims = [list(dims), list(dims)]
         return op
 
+    def _build_ideal_rz_operator(
+        self,
+        dims: List[int],
+        target_idx: int,
+        theta: float,
+        pauli_type: str = "Z",
+    ) -> qt.Qobj:
+        """
+        Build an ideal phase-rotation gate acting on one qubit in an
+        N-qubit register: diag(1, exp(i*theta)) in the eigenbasis of
+        Pauli `pauli_type` ("Z", the default, or "X" -- needed for codes
+        such as the 9-qubit Shor code whose declared logical-Z operator
+        is physically an X-type string; see stabilizer_codes.SHOR_9).
+        Every other qubit, and any leakage level (|2>, |3>, ...) of the
+        target qubit itself, is left untouched.
+
+        Uses the ASYMMETRIC diag(1, exp(i*theta)) convention, matching
+        how QASMTranspiler derives RZ angles for S/T/Z/Sdg/Tdg (e.g. T is
+        diag(1, exp(i*pi/4)), not the textbook-symmetric
+        exp(-i*theta/2) @ diag(1,-1) @ exp(i*theta/2) form). The two
+        conventions differ by a theta/2 global phase, which is physically
+        irrelevant for an isolated qubit but becomes a real RELATIVE
+        phase once the qubit is entangled with others -- exactly the
+        situation for every T/Tdg gate inside a Toffoli decomposition, so
+        the convention must match exactly for such circuits to reduce to
+        the intended multi-qubit unitary.
+
+        Implemented as R_P(theta) = P_+ + exp(i*theta) * P_-, where
+        P_+/P_- = (I +/- P)/2 are the +1/-1 eigenprojectors of Pauli `P`
+        -- built directly from the already leakage-preserving ideal
+        Pauli operator, so leakage-preservation and correct action on
+        every other qubit follow automatically.
+        """
+        if not (0 <= target_idx < len(dims)):
+            raise IndexError(f"Target index {target_idx} outside register.")
+        if pauli_type not in ("X", "Z"):
+            raise ValueError(f"Unsupported rotation axis: {pauli_type!r}")
+
+        identity = qt.tensor([qt.qeye(d) for d in dims])
+        identity.dims = [list(dims), list(dims)]
+        P = self._build_ideal_single_qubit_operator(dims, target_idx, pauli_type)
+
+        phase = complex(np.exp(1j * theta))
+        op = identity * ((1.0 + phase) / 2.0) + P * ((1.0 - phase) / 2.0)
+        op.dims = [list(dims), list(dims)]
+        return op
+
     def _apply_ideal_single_qubit_gate(
         self,
         state: qt.Qobj,

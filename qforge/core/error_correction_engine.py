@@ -663,6 +663,7 @@ class ErrorCorrectionEngine:
         ideal_cx_pairs = []  # (local_ctrl, local_targ) for ideal CX drives
         ideal_cz_pairs = []  # (local_a, local_b) for ideal CZ drives
         ideal_single_qubit_ops = []  # (gate_name, local_idx) for ideal X/H drives
+        ideal_rz_ops = []  # (local_idx, theta, pauli_type) for ideal RZ drives
         has_only_ideal = True
         x_drives = []  # (local_idx, amplitude, phase) for microwave drives
 
@@ -690,6 +691,15 @@ class ErrorCorrectionEngine:
                 else:
                     target_idx = int(target_val)
                 ideal_single_qubit_ops.append((drv_type, target_idx))
+            elif drv_type == "RZ":
+                target_val = drv.get("target")
+                if isinstance(target_val, (tuple, list)):
+                    target_idx = int(target_val[0])
+                else:
+                    target_idx = int(target_val)
+                ideal_rz_ops.append(
+                    (target_idx, float(drv["theta"]), drv.get("pauli_type", "Z"))
+                )
             elif drv_type in ("microwave",):
                 has_only_ideal = False
                 x_drives.append(
@@ -717,6 +727,15 @@ class ErrorCorrectionEngine:
                     sub_dims,
                     target_idx,
                     drv_type,
+                )
+                U_sub = U_step * U_sub
+
+            for target_idx, theta, pauli_type in ideal_rz_ops:
+                U_step = self.gate_engine._build_ideal_rz_operator(
+                    sub_dims,
+                    target_idx,
+                    theta,
+                    pauli_type,
                 )
                 U_sub = U_step * U_sub
 
@@ -1034,7 +1053,47 @@ class ErrorCorrectionEngine:
                     )
 
             elif gate == "RZ":
-                pass   # virtual-Z: no physical drive, state unchanged
+                # Logical Z-axis rotation: applied transversally, with no
+                # physical drive duration (virtual-Z -- real hardware
+                # implements this by shifting the phase reference of
+                # subsequent pulses rather than emitting one of its own,
+                # which is equivalent to applying the ideal rotation
+                # instantaneously here), to the code's declared logical-Z
+                # support (code.logical_z_qubits), rotating each physical
+                # qubit about the axis given by code.logical_z_pauli --
+                # the same axis whose pi-rotation special case is exactly
+                # the code's logical Z (see the "X" branch above, which
+                # mirrors this using code.logical_x_qubits/pauli). NOTE:
+                # this reproduces logical Z/S/Sdg exactly for every code
+                # here (repetition, Shor, Steane), and reproduces logical
+                # T/Tdg for the repetition code (whose codewords are
+                # themselves computational-basis states) -- but for the
+                # Steane code, a bare transversal T/Tdg (theta = +/- pi/4)
+                # is only an approximation: the Steane code has no exact
+                # transversal T gate (a well-known limitation, distinct
+                # from this engine's previous bug of applying no rotation
+                # at all), so circuits reaching this branch with a
+                # non-Clifford theta on a Steane block accumulate a small
+                # amount of leakage out of the code space that the
+                # subsequent syndrome/correction pass cannot fully undo.
+                theta = float(instruction.get("theta", 0.0))
+                for local_idx in code.logical_z_qubits:
+                    p = data[local_idx]
+                    current_state = self._simulate_subsystem(
+                        sub_names=[p],
+                        sub_drives=[{
+                            "type": "RZ",
+                            "target": 0,
+                            "theta": theta,
+                            "pauli_type": code.logical_z_pauli,
+                        }],
+                        duration=0.0,
+                        sub_couplings=[],
+                        full_state=current_state,
+                        full_names=physical_names,
+                        full_dims=full_dims,
+                        gate_label="EC_RZ",
+                    )
 
             else:
                 print(f"[EC] Warning: gate '{gate}' not natively supported; skipping.")

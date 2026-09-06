@@ -81,15 +81,15 @@ from typing import Dict, List, Tuple
 @dataclass(frozen=True)
 class StabilizerGenerator:
     """
-    One stabilizer generator of a CSS-type code.
+    One stabilizer generator of a CSS-type code::
 
-    basis       : "Z" or "X" -- the Pauli type shared by every data qubit
-                  this generator acts on non-trivially.
-    data_qubits : LOCAL data-qubit indices (0..code.num_data-1) the
-                  generator acts on.
-    ancilla     : LOCAL ancilla index (0..code.num_ancilla-1) used to
-                  measure this generator. Each generator must use a
-                  distinct ancilla.
+        basis       : "Z" or "X" -- the Pauli type shared by every data qubit
+                      this generator acts on non-trivially.
+        data_qubits : LOCAL data-qubit indices (0..code.num_data-1) the
+                      generator acts on.
+        ancilla     : LOCAL ancilla index (0..code.num_ancilla-1) used to
+                      measure this generator. Each generator must use a
+                      distinct ancilla.
     """
     basis: str
     data_qubits: Tuple[int, ...]
@@ -107,13 +107,13 @@ class StabilizerGenerator:
 @dataclass(frozen=True)
 class EncodingStep:
     """
-    One gate of a code's |0>_L encoding circuit, applied to LOCAL data-qubit
-    indices, starting from the data block in |00...0>.
+    One gate of a code's ``|0>_L`` encoding circuit, applied to LOCAL
+    data-qubit indices, starting from the data block in ``|00...0>``::
 
-    gate    : "H" (Hadamard on `target`) or "ICX" (ideal CNOT, `control` ->
-              `target`).
-    control : local data-qubit index (ICX only; ignored for H).
-    target  : local data-qubit index the gate acts on.
+        gate    : "H" (Hadamard on `target`) or "ICX" (ideal CNOT, `control` ->
+                  `target`).
+        control : local data-qubit index (ICX only; ignored for H).
+        target  : local data-qubit index the gate acts on.
     """
     gate: str
     target: int
@@ -130,47 +130,47 @@ class EncodingStep:
 class StabilizerCode:
     """
     Full declarative specification of a CSS stabilizer error-correcting
-    code for one logical qubit block.
+    code for one logical qubit block::
 
-    name         : human-readable code name, used only for logging.
-    num_data     : number of physical data qubits per logical block.
-    num_ancilla  : number of physical ancilla qubits per logical block
-                   (one per stabilizer generator).
-    generators   : the code's stabilizer generators. All generators must
-                   mutually commute (a requirement of being a valid
-                   stabilizer group) -- ErrorCorrectionEngine relies on this
-                   to extract and measure them one at a time rather than as
-                   one large joint operation.
-    syndrome_to_correction:
-                   maps a measured syndrome outcome (a tuple of 0/1 of
-                   length num_ancilla, ordered by ancilla index) to the
-                   LIST of corrections to apply: each entry is
-                   (data_qubit_local_idx, pauli_type) with pauli_type "X" or
-                   "Z". A syndrome absent from this dict (typically the
-                   all-zero syndrome) means "no correction". Most codes only
-                   ever need a single-element list; a list is supported
-                   because independent generators can require independent,
-                   simultaneous corrections (see the Shor code).
-    logical_x_qubits, logical_x_pauli:
-                   the physical operator that implements the transversal
-                   logical X: apply Pauli `logical_x_pauli` to every local
-                   data-qubit index in `logical_x_qubits`.
-    logical_z_qubits, logical_z_pauli:
-                   the physical operator whose +1/-1 eigenvalue is the
-                   logical Z-basis outcome: apply Pauli `logical_z_pauli` to
-                   every local data-qubit index in `logical_z_qubits`, and
-                   read the code out via P(logical=0) = (1+<Z_bar>)/2. Used
-                   directly by ErrorCorrectionEngine's decode step.
-    encoding_circuit:
-                   the sequence of `EncodingStep`s that prepares |0>_L,
-                   starting from the data block in the computational basis
-                   state |00...0>. Required because a code's logical |0>_L
-                   is not, in general, itself a computational basis state:
-                   simply initializing the physical register to |00...0>
-                   does NOT prepare a valid codeword for such codes at all.
-                   The repetition code's |0>_L happens to equal |000>, so
-                   its (still explicitly declared, for uniformity) encoding
-                   circuit is provably a no-op there.
+        name         : human-readable code name, used only for logging.
+        num_data     : number of physical data qubits per logical block.
+        num_ancilla  : number of physical ancilla qubits per logical block
+                       (one per stabilizer generator).
+        generators   : the code's stabilizer generators. All generators must
+                       mutually commute (a requirement of being a valid
+                       stabilizer group) -- ErrorCorrectionEngine relies on this
+                       to extract and measure them one at a time rather than as
+                       one large joint operation.
+        syndrome_to_correction:
+                       maps a measured syndrome outcome (a tuple of 0/1 of
+                       length num_ancilla, ordered by ancilla index) to the
+                       LIST of corrections to apply: each entry is
+                       (data_qubit_local_idx, pauli_type) with pauli_type "X" or
+                       "Z". A syndrome absent from this dict (typically the
+                       all-zero syndrome) means "no correction". Most codes only
+                       ever need a single-element list; a list is supported
+                       because independent generators can require independent,
+                       simultaneous corrections (see the Shor code).
+        logical_x_qubits, logical_x_pauli:
+                       the physical operator that implements the transversal
+                       logical X: apply Pauli `logical_x_pauli` to every local
+                       data-qubit index in `logical_x_qubits`.
+        logical_z_qubits, logical_z_pauli:
+                       the physical operator whose +1/-1 eigenvalue is the
+                       logical Z-basis outcome: apply Pauli `logical_z_pauli` to
+                       every local data-qubit index in `logical_z_qubits`, and
+                       read the code out via P(logical=0) = (1+<Z_bar>)/2. Used
+                       directly by ErrorCorrectionEngine's decode step.
+        encoding_circuit:
+                       the sequence of `EncodingStep`s that prepares |0>_L,
+                       starting from the data block in the computational basis
+                       state |00...0>. Required because a code's logical |0>_L
+                       is not, in general, itself a computational basis state:
+                       simply initializing the physical register to |00...0>
+                       does NOT prepare a valid codeword for such codes at all.
+                       The repetition code's |0>_L happens to equal |000>, so
+                       its (still explicitly declared, for uniformity) encoding
+                       circuit is provably a no-op there.
     """
     name: str
     num_data: int

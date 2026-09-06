@@ -268,8 +268,10 @@ class ErrorCorrectionEngine:
         code: StabilizerCode,
     ) -> Dict[str, Dict[str, List[str]]]:
         """
-        Return a mapping dict:
+        Return a mapping dict::
+
             { logical_name: {"data": [D0..D(n-1)], "ancilla": [A0..A(m-1)]} }
+
         where n = code.num_data and m = code.num_ancilla.
         """
         mapping = {}
@@ -287,7 +289,8 @@ class ErrorCorrectionEngine:
         """
         Backward-compatible alias: mapping for the 3-qubit repetition code.
 
-        Return a mapping dict:
+        Return a mapping dict::
+
             { logical_name: {"data": [D0, D1, D2], "ancilla": [A0, A1]} }
         """
         return self.generate_stabilizer_mapping(logical_names, REPETITION_3)

@@ -72,7 +72,7 @@ class QASMTranspiler:
     # Statements that carry no meaning for a unitary/Hamiltonian simulation
     # (classical registers, mid-circuit measurement, timing barriers, and
     # classically-conditioned execution) are intentionally dropped rather
-    # than approximated - see docs/parsing.rst.
+    # than approximated - see docs/qasm.rst.
     _IGNORED_KEYWORDS = {"openqasm", "include", "creg", "measure", "barrier", "reset", "if"}
 
     def __init__(self):
@@ -533,7 +533,7 @@ class PhysicalWorkflowEngine:
         Dynamically calibrate physical pulses for abstract gates needed.
         Currently highly automated.
         
-        TODO: Future introduction of user customization of calibration bounds via **kwargs
+        TODO: Future introduction of user customization of calibration bounds via ``**kwargs``
         """
         calibrations = {
             "single_qubit": {},

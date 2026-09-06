@@ -13,7 +13,7 @@ class ProcessTomography:
         """
         Generate the spanning basis states for QPT.
         For n qubits, we need d^2 linearly independent input states.
-        Standard choice: tensor products of {|0>, |1>, |+>, |+i>}.
+        Standard choice: tensor products of ``{|0>, |1>, |+>, |+i>}``.
         """
         # Single qubit basis
         # |0>, |1>, |+>, |+i>
@@ -48,9 +48,9 @@ class ProcessTomography:
     def calculate_process_fidelity(unitary_sim: qt.Qobj, unitary_ideal: qt.Qobj, dims: List[int]) -> float:
         """
         Calculate Process Fidelity F_pro directly from Unitaries (if available).
-        F_pro = |Tr(U_sim^dag U_ideal)|^2 / d^2 ? No.
-        
-        F_avg = ( |Tr(U)|^2 + d ) / (d(d+1))
+        ``F_pro = |Tr(U_sim^dag U_ideal)|^2 / d^2`` ? No.
+
+        ``F_avg = ( |Tr(U)|^2 + d ) / (d(d+1))``
         
         If we have the effective propagator U_sim (projected to computational subspace).
         """

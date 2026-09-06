@@ -1,51 +1,133 @@
-Multi-Qubit Couplings
-=====================
+=========
+Couplings
+=========
 
-qforge provides flexible modeling for multi-qubit interactions, essential for simulating 2-qubit gates like CNOT and CZ. This page details the physical Hamiltonians used in the simulation.
+Two qubit gates need an interaction. qforge models three of them, and which one you
+pick changes both the Hamiltonian and the gate that falls out of it naturally.
 
-Capacitive Coupling
--------------------
+Couplings live in ``qforge/core/coupling.py`` and are described to the engines as
+plain dictionaries:
 
-The most common coupling for fixed-frequency transmons (e.g., in Cross-Resonance gates). The interaction is transverse.
+.. code-block:: python
 
-.. math::
-    H_{int} = g \left( a^\dagger b + a b^\dagger \right)
+    couplings = [
+        {"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.05},
+    ]
 
-where:
-* :math:`a, a^\dagger` are operators for the control qubit (Q1).
-* :math:`b, b^\dagger` are operators for the target qubit (Q2).
-* :math:`g` is the coupling strength in GHz.
+``q1`` and ``q2`` are indices into the qubit name list you pass alongside, and
+``strength`` is :math:`g` in GHz. Ordering is preserved throughout, so index 0 is
+the first qubit you named.
 
-**Physics:**
-This term represents exchange interaction. In the dispersive limit (:math:`|\Delta| \gg g`), it leads to a small hybridization of the states. When driven at the target frequency (Cross-Resonance), it activates a :math:`ZX` interaction essential for CNOT.
-
-Inductive / ZZ Coupling
------------------------
-
-Often an effective model for weak dispersive interactions or residual coupling from higher levels.
+Capacitive
+==========
 
 .. math::
-    H_{int} = g \hat{n}_1 \hat{n}_2 = g (a^\dagger a)(b^\dagger b)
 
-where:
-* :math:`\hat{n}_i` is the number operator for qubit :math:`i`.
+    H_{\mathrm{int}} = g \left( a^\dagger b + a b^\dagger \right)
 
-**Physics:**
-This is a longitudinal coupling that shifts energy levels depending on the state of the other qubit. It naturally implements a CPHASE (CZ) evolution over time :math:`T = \pi/g`.
+A transverse exchange interaction, the usual model for two fixed frequency
+transmons sharing a coupling capacitor. Excitations hop between the qubits.
 
-Tunable Coupler (Effective)
----------------------------
+In the dispersive limit :math:`|\Delta| \gg g` the qubits barely hybridize, and
+driving the control at the target's frequency turns the interaction into an
+effective :math:`ZX` term. That is the cross resonance gate, and it is how qforge
+builds a CNOT on a capacitively coupled pair.
 
-For tunable couplers (like g-mon or transmons with flux loops), the effective coupling :math:`g` can be modulated in time. qforge models the identifying interaction Hamiltonian which is then modulated by a pulse envelope :math:`f(t)`.
+Use it for: fixed frequency architectures, cross resonance, always on coupling that
+you would rather not switch off.
 
-For a tunable exchange interaction (Swap/iSwap):
-
-.. math::
-    H(t) = g_{max} f(t) \left( a^\dagger b + a b^\dagger \right)
-
-For a tunable CZ gate (adiabatic or diabatic flux pulse):
+Inductive and ZZ
+================
 
 .. math::
-    H(t) = g_{eff}(t) |11\rangle\langle 11|
 
-(Note: The exact Hamiltonian depends on the implementation details, e.g., using a third coupler element vs. direct flux tuning).
+    H_{\mathrm{int}} = g \, \hat{n}_1 \hat{n}_2
+
+A longitudinal coupling. Neither qubit's population changes. Instead each one's
+energy shifts depending on the state of the other, which accumulates a conditional
+phase and gives you a CPHASE naturally over a time of order :math:`\pi/g`.
+
+qforge refuses an ``inductive`` coupling on a plain transmon and says so. A transmon
+lives in the charge basis and has no :math:`E_L \hat{\varphi}^2` term to couple
+through, so the model would be describing a circuit you did not build. Use a
+fluxonium or zero-pi if you want a genuine inductive branch.
+
+Use it for: dispersive interactions, native CZ, residual ZZ you want to quantify.
+
+Tunable coupler
+===============
+
+.. math::
+
+    H(t) = g_{\max} f(t) \left( a^\dagger b + a b^\dagger \right)
+
+The same exchange interaction as the capacitive case, but with the strength
+modulated in time by a flux pulse on a dedicated coupler element. That is what lets
+you turn the interaction on for exactly as long as the gate needs and leave it off
+the rest of the time.
+
+qforge shapes the coupler pulse as :math:`\sin^2`, which switches on and off smoothly
+from zero:
+
+.. math::
+
+    f(t) = \sin^2\!\left(\frac{\pi (t - t_0)}{T}\right)
+
+Use it for: iSWAP, flux activated CZ, anything where you need the interaction gated
+in time rather than always on.
+
+Choosing one
+============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 26 26 26
+
+   * -
+     - Capacitive
+     - Inductive / ZZ
+     - Tunable coupler
+   * - Interaction
+     - Transverse exchange
+     - Longitudinal
+     - Gated exchange
+   * - Native gate
+     - Cross resonance CNOT
+     - CPHASE / CZ
+     - iSWAP, CZ
+   * - On when idle
+     - Yes
+     - Yes
+     - No
+   * - Works on a transmon
+     - Yes
+     - No, needs an inductive branch
+     - Yes
+
+Comparing them directly
+=======================
+
+``GateEngine.compare_couplings`` runs the same logical gate under each model and
+reports the target state population and the accumulated interaction phase side by
+side:
+
+.. code-block:: python
+
+    results = gates.compare_couplings(q1="Q1", q2="Q2", gate="CNOT")
+
+The wizard exposes the same thing under "Analyze multi-qubit gates", which sweeps
+several coupling strengths per architecture and prints a table.
+
+Adding a coupling model
+=======================
+
+If you add one, keep it honest:
+
+* Write the Hamiltonian out explicitly, and say what :math:`g` means and in what
+  units.
+* Preserve qubit ordering and tensor dimensions. Local dimensions differ between
+  qubits and the operator has to agree with ``dims``.
+* Keep static coupling separate from driven coupling. A time dependent interaction
+  is a different object from a constant one.
+* Put it in ``coupling.py``. Do not hard code an interaction inside an engine that
+  is meant to be agnostic about it.

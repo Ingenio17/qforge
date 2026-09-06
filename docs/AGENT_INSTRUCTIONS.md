@@ -1,84 +1,95 @@
-# Agent Instructions for qforge
+# Agent instructions for qforge
 
-Use this file as a prompt for your AI coding assistant (e.g., GitHub Copilot, Cursor, etc.) when you have added a new feature to qforge.
+Hand this file to your coding assistant after adding a feature, so the docs, the
+presets and the examples do not drift away from the code.
 
-## Workflow: Finalizing a New Feature
+> "I have added a new feature: [name]. Verify it and finish the integration by
+> following `docs/AGENT_INSTRUCTIONS.md`."
 
-**Context**: You have just implemented a new feature in the `qforge` core engine (e.g., a new Qubit type in `qubit_engine.py`, or a new Gate in `gate_engine.py`).
+## Where documentation lives
 
-**Prompt for AI Agent**:
-> "I have added a new feature: [Feature Name/Type]. Please verify it and finalize the integration by following the steps in `docs/AGENT_INSTRUCTIONS.md`."
+| Page | Covers |
+|---|---|
+| `docs/quickstart.rst` | The five minute tour, in Python |
+| `docs/interfaces.rst` | Wizard, GUI, browser sandbox |
+| `docs/cli.rst` | Every CLI command and its options |
+| `docs/conventions.rst` | Units, Hilbert space, dims, persistence |
+| `docs/qubits.rst` | QubitEngine, models, presets, coherence, sweeps |
+| `docs/couplings.rst` | Coupling Hamiltonians |
+| `docs/gates.rst` | Drives, DRAG, calibration, noise, fidelity |
+| `docs/qasm.rst` | Transpiler and workflow engine |
+| `docs/error_correction.rst` | Stabilizer codes and the EC engine |
+| `docs/devices.rst` | Netlist language and device engine |
+| `docs/api.rst` | Autodoc, generated from source |
+| `docs/examples.rst` | Gallery of the bundled scripts |
 
----
-
-### checklist: Adding a Qubit Type
-
-1.  **Update `qforge/config/defaults.py`**
-    -   Add the new qubit type key to `QUBIT_PRESETS`.
-    -   Define default parameters (e.g., `EJ`, `EC`) under `"typical"`.
-    -   *Note*: The CLI and Interactive mode will automatically pick this up!
-
-2.  **Generate Documentation**
-    -   Update `docs/qubits.md` (or create it if missing).
-    -   Add a section for the new qubit.
-    -   Include the Hamiltonian and parameter definitions.
-    -   **Action**: `qforge dev sync` (if implemented) can auto-generate the parameter table.
-
-3.  **Create Example Script**
-    -   Create a new file: `examples/[qubit_type]_demo.py`.
-    -   Content should include:
-        ```python
-        from qforge.core.qubit_engine import QubitEngine
-        engine = QubitEngine()
-        q = engine.create_qubit(“[qubit_type]”, “my_qubit”, { ...params... })
-        print(q.eigenvals(5))
-        ```
-    -   Run the script to verify it works without error.
-
-4.  **Verify Interactive Mode**
-    -   Run `qforge --interactive`.
-    -   Type `create` and check if your new qubit type appears in the autocomplete list.
-
----
-
-### checklist: Adding a Gate
-
-1.  **Update `qforge/config/defaults.py`**
-    -   Add the gate key to `GATE_DEFAULTS`.
-
-2.  **Update `qforge/core/gate_engine.py`**
-    -   Implement the simulation logic in `simulate_two_qubit_dynamics` or relevant method.
-
-3.  **Generate Documentation**
-    -   Update `docs/gates.md`.
-    -   Explain the gate's physics/Hamiltonian.
-
-4.  **Create Example Script**
-    -   Create `examples/gate_[gate_name].py`.
-    -   Simulate the gate on a standard qubit pair (e.g., 2 Transmons).
-
----
-
-### checklist: Adding a CLI Command
-
-1.  **Register Command**
-    -   Ensure the command is added to `qforge/cli/main.py` or a subcommand group.
-
-2.  **Update Interactive Mode**
-    -   If the command is complex, add a "Wizard" function in `qforge/cli/interactive.py` (e.g., `_wizard_my_command`).
-    -   Add it to the main loop in `run_interactive`.
-
-3.  **Update Documentation**
-    -   Add to `getting_started.md` under "CLI Commands".
-
----
-
-## Automation Helper
-
-Run this command to auto-update documentation tables from `defaults.py`:
+Build and check before you finish:
 
 ```bash
-qforge dev sync
+pip install -r docs/requirements.txt
+python -m sphinx -b html docs docs/_build/html
 ```
 
-(Ensure you have implemented this command if strictly required, otherwise update docs manually.)
+The build should produce no new warnings. Warnings in the API pages usually mean a
+docstring is not valid reStructuredText: `|0>` reads as a substitution reference,
+`**kwargs` as bold, and an aligned `field : description` block needs to be a literal
+block introduced by `::`.
+
+## Adding a qubit type
+
+1. Add the type to `QUBIT_PRESETS` in `qforge/config/defaults.py`, with an `_info`
+   entry and a `typical` parameter set. The CLI and the wizard pick it up
+   automatically.
+2. Wire the type into `QubitEngine._create_qubit_object`.
+3. Add a section to `docs/qubits.rst` with the Hamiltonian and the parameter list.
+4. Run `qforge dev sync` to regenerate the preset table on that page.
+5. Add `examples/NN_<name>_demo.py` and run it.
+6. Check it appears in `qforge --interactive` under "Create a qubit".
+
+## Adding a gate
+
+1. Add defaults to `GATE_DEFAULTS` in `qforge/config/defaults.py`.
+2. Implement the physics in `qforge/core/gate_engine.py`. Keep the Hamiltonian, the
+   drive and the coupling explicit. Do not substitute an ideal unitary for a method
+   that is supposed to model hardware.
+3. Document the drive operator, the envelope and any approximation in
+   `docs/gates.rst`.
+4. Add a test with a physics sanity check: a known rotation angle, unitarity, or the
+   right behaviour at zero drive.
+5. Add an example script that runs it on a standard pair of transmons.
+
+## Adding a coupling
+
+1. Implement it in `qforge/core/coupling.py` and register it in
+   `CouplingGenerator.get_coupling`.
+2. Write the Hamiltonian and the units of `g` into `docs/couplings.rst`, and say
+   which native gate it produces.
+3. Test the zero coupling limit and the tensor dimensions.
+
+## Adding an error correcting code
+
+1. Write a `StabilizerCode` in `qforge/core/stabilizer_codes.py`: generators, the
+   syndrome table, logical operators and the encoding circuit. It must be CSS.
+2. No change to `ErrorCorrectionEngine` should be needed. If one is, say why in the
+   commit.
+3. Add the code to the table in `docs/error_correction.rst`.
+4. Test the generators commute, that every single qubit error maps to the right
+   correction, and that the encoding circuit really produces the codeword.
+
+## Adding a CLI command
+
+1. Add it to a group under `qforge/cli/commands/` and register it in
+   `qforge/cli/main.py`.
+2. Keep the physics in the engines. A Click handler should parse arguments, call an
+   engine and render the result.
+3. Add a wizard entry in `qforge/cli/interactive.py` if the flow needs more than a
+   couple of arguments.
+4. Document it in `docs/cli.rst`.
+
+## Before opening a pull request
+
+```bash
+black qforge tests
+ruff check qforge tests
+pytest
+```

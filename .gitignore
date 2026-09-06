@@ -88,3 +88,6 @@ docs/superpowers/
 
 # Git worktrees
 .worktrees/
+
+# Sphinx build output
+docs/_build/

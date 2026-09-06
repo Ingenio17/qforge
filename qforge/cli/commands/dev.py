@@ -23,54 +23,58 @@ def sync():
     
     console.print("\n[bold green]✓ Sync complete![/bold green]")
 
+def _rst_list_table(rows):
+    """Render header + body rows as a reStructuredText list-table."""
+    lines = [
+        ".. list-table::",
+        "   :header-rows: 1",
+        "   :widths: 18 34 18 30",
+        "",
+    ]
+    for row in rows:
+        for i, cell in enumerate(row):
+            prefix = "   * - " if i == 0 else "     - "
+            lines.append(f"{prefix}{cell}")
+    return "\n".join(lines) + "\n"
+
+
 def _sync_docs_qubits():
-    """Update Qubits table in docs/getting_started.md"""
-    docs_dir = Path("docs")
-    target_file = docs_dir / "getting_started.md"
-    
+    """Regenerate the qubit preset table in docs/qubits.rst from QUBIT_PRESETS."""
+    target_file = Path("docs") / "qubits.rst"
+
     if not target_file.exists():
         console.print(f"[yellow]File {target_file} not found. Skipping.[/yellow]")
         return
-        
+
     content = target_file.read_text(encoding="utf-8")
-    
-    start_marker = "<!-- DYNAMIC_TABLE: QUBITS -->"
-    end_marker = "<!-- END_DYNAMIC_TABLE -->"
-    
-    if start_marker in content and end_marker in content:
-        # Generate Table
-        header = "| Qubit Type | Key Parameters | Typical Frequency | Best For |\n|------------|---------------|-------------------|----------|"
-        rows = []
-        
-        for q_type, data in QUBIT_PRESETS.items():
-            # Info
-            info = data.get("_info", {})
-            freq = info.get("freq", "Unknown")
-            desc = info.get("best_for", "N/A")
-            
-            # Params (exclude standard ones for brevity)
-            typical = data.get("typical", {})
-            ignored = ["flux", "ng", "ncut", "cutoff", "grid"]
-            params = [k for k in typical.keys() if k not in ignored]
-            
-            # Format
-            q_name = q_type.capitalize()
-            # If multiple EJs (flux), handle carefully?
-            # Flux parameters: EJ1, EJ2, EJ3...
-            
-            params_str = ", ".join(params)
-            
-            rows.append(f"| **{q_name}** | {params_str} | {freq} | {desc} |")
-            
-        new_table = header + "\n" + "\n".join(rows) + "\n"
-        
-        # Replace
-        parts = content.split(start_marker)
-        pre = parts[0]
-        post = parts[1].split(end_marker)[1]
-        
-        new_content = pre + start_marker + "\n" + new_table + end_marker + post
-        target_file.write_text(new_content, encoding="utf-8")
-        console.print(f"[green]✓ Updated Qubits table in {target_file}[/green]")
-    else:
+
+    start_marker = ".. DYNAMIC_TABLE: QUBITS"
+    end_marker = ".. END_DYNAMIC_TABLE"
+
+    if start_marker not in content or end_marker not in content:
         console.print(f"[yellow]Markers not found in {target_file}[/yellow]")
+        return
+
+    rows = [("Qubit type", "Key parameters", "Typical frequency", "Best for")]
+
+    for q_type, data in QUBIT_PRESETS.items():
+        info = data.get("_info", {})
+        freq = info.get("freq", "Unknown")
+        desc = info.get("best_for", "N/A")
+
+        # Basis sizes and bias points are per-run choices, not what distinguishes
+        # one architecture from another, so they stay out of the summary table.
+        typical = data.get("typical", {})
+        ignored = ["flux", "ng", "ng1", "ng2", "ncut", "cutoff", "grid", "truncated_dim"]
+        params = [k for k in typical if k not in ignored]
+
+        rows.append((f"**{q_type.capitalize()}**", ", ".join(params), freq, desc))
+
+    new_table = _rst_list_table(rows)
+
+    pre = content.split(start_marker)[0]
+    post = content.split(end_marker, 1)[1]
+
+    new_content = f"{pre}{start_marker}\n\n{new_table}\n{end_marker}{post}"
+    target_file.write_text(new_content, encoding="utf-8")
+    console.print(f"[green]✓ Updated Qubits table in {target_file}[/green]")

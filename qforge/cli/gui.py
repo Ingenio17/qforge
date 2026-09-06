@@ -57,6 +57,12 @@ try:
     from qforge.core.workflow_engine import PhysicalWorkflowEngine
     from qforge.core.error_correction_engine import ErrorCorrectionEngine
     from qforge.core.stabilizer_codes import REPETITION_3, STEANE_7, SHOR_9
+    from qforge.core import device_report
+    from qforge.core.device_engine import DeviceEngine, DeviceError
+    from qforge.core.device_library import (
+        NETLIST_EXTENSIONS, list_templates, write_template,
+    )
+    from qforge.core.device_netlist import NetlistError
     from qforge.config.defaults import QUBIT_PRESETS, OUTPUT_DIRS
     from qforge.cli.commands.qubit import _create_qubit, list_qubits, analyze, delete
     from qforge.cli.commands.gate import simulate
@@ -76,10 +82,16 @@ except ImportError:
         def list_qubits(self): return []
 
     QubitEngine = GateEngine = PhysicalWorkflowEngine = ErrorCorrectionEngine = _Stub
-    TerminalPlotter = _Stub
+    DeviceEngine = _Stub
+    TerminalPlotter = device_report = _Stub
     QUBIT_PRESETS = {"transmon": {"typical": {"EJ": 15.0, "EC": 0.2, "ng": 0.0, "ncut": 30}}}
     OUTPUT_DIRS = {"base": "outputs"}
     REPETITION_3 = STEANE_7 = SHOR_9 = None
+    NETLIST_EXTENSIONS = (".qdl",)
+    class DeviceError(Exception): pass
+    class NetlistError(Exception): pass
+    def list_templates(): return []
+    def write_template(*a, **kw): return ""
     def list_example_files(): return []
     def get_examples_dir(): return "."
     def _create_qubit(*a, **kw): print("(stub) _create_qubit called")
@@ -1180,6 +1192,14 @@ class QForgeGUI(tk.Tk):
             ]),
             ("WORKFLOWS", [
                 ("🚀   Run full workflow", self._wizard_full_workflow),
+            ]),
+            ("DEVICE DESIGN", [
+                ("🧩   New device from template", self._wizard_device_template),
+                ("📂   Load a device netlist",    self._wizard_device_file),
+                ("🔬   Analyze a device",         self._wizard_device_analyze),
+                ("📐   Show schematic",           self._wizard_device_schematic),
+                ("📈   Sweep a parameter",        self._wizard_device_sweep),
+                ("📜   Netlist format reference", self._wizard_device_format),
             ]),
             ("HARDWARE", [
                 ("🖥   Design hardware", self._wizard_design_hardware),
@@ -2310,6 +2330,303 @@ class QForgeGUI(tk.Tk):
     #  Wizard: Clear calibration cache                                         #
     # ---------------------------------------------------------------------- #
 
+    # ---------------------------------------------------------------------- #
+    #  Wizards: device design                                                  #
+    #                                                                          #
+    #  An ngspice-style netlist of capacitors, inductors, Josephson junctions   #
+    #  and resistors, quantized into whatever circuit it describes. All the     #
+    #  physics lives in qforge.core.device_engine and all the rendering in      #
+    #  qforge.core.device_report; these methods only collect the answers and    #
+    #  hand the work to a background thread.                                    #
+    # ---------------------------------------------------------------------- #
+
+    def _device_engine(self):
+        """The window's DeviceEngine, created on first use."""
+        if getattr(self, "_dev_engine", None) is None:
+            self._dev_engine = DeviceEngine()
+        return self._dev_engine
+
+    def _device_names(self) -> list:
+        try:
+            return [entry["name"] for entry in self._device_engine().list_devices()]
+        except Exception:
+            return []
+
+    def _pick_device(self, title: str, prompt_text: str):
+        """Ask which registered device to work on. Returns the device, or None."""
+        names = self._device_names()
+        if not names:
+            self._notify(
+                "No devices",
+                "No devices designed yet.\n\n"
+                "Use 'New device from template' or 'Load a device netlist' first.",
+                kind="warning",
+            )
+            return None
+        name = self._ask_choice(title, prompt_text, names)
+        if not name:
+            self._warn("Aborted.")
+            return None
+        try:
+            return self._device_engine().get_device(name.strip())
+        except DeviceError as exc:
+            self._err(str(exc))
+            return None
+
+    def _register_netlist(self, path: str):
+        """Parse and register a netlist file, printing what qforge understood."""
+        try:
+            device = self._device_engine().create_device_from_file(path, overwrite=True)
+        except NetlistError as exc:
+            self._err("The netlist could not be parsed:")
+            print(f"[red]{exc}[/red]")
+            self._dim("  'Netlist format reference' in the sidebar documents the full syntax.")
+            self._notify("Netlist error", str(exc), kind="error")
+            return None
+        except DeviceError as exc:
+            self._err(str(exc))
+            return None
+        except Exception as exc:
+            self._err(f"{type(exc).__name__}: {exc}")
+            return None
+
+        device_report.render_netlist(device.netlist)
+        device_report.render_schematic(device.netlist)
+        self._ok(f"Registered device '{device.name}'.")
+        return device
+
+    def _analyze_device(self, device):
+        """Quantize a device, print the report, then offer to save figures."""
+        self._cprint(f"\n[green]Quantizing [bold]{device.name}[/bold]…[/green]")
+        try:
+            hilbert_dim = device.hilbert_dim
+            self._dim(f"  Truncated Hilbert space: {hilbert_dim:,} states.")
+            if hilbert_dim > 5000:
+                self._dim("  This is a large space; diagonalization may take a while.")
+            result = device.analyze()
+        except DeviceError as exc:
+            self._err(str(exc))
+            return None
+        except Exception as exc:
+            self._err(f"Analysis failed: {type(exc).__name__}: {exc}")
+            print(traceback.format_exc())
+            return None
+
+        device_report.render_analysis(result)
+        device_report.plot_spectrum_terminal(result)
+
+        if self._confirm("Save plots", "Save high-resolution figures to outputs/plots?",
+                         default=False):
+            saved = device_report.save_plots(device, result)
+            if saved:
+                for kind, path in saved.items():
+                    self._ok(f"{kind}: {path}")
+            else:
+                self._warn("No figures could be produced for this circuit.")
+
+        if self._confirm("Save results", "Save the full analysis as JSON?", default=False):
+            path = self._device_engine().save_result(device.name, result)
+            self._ok(f"Written to {path}")
+
+        return result
+
+    def _wizard_device_template(self):
+        self._header("Device Design: New From Template")
+        templates = list_templates()
+        if not templates:
+            self._err("(stub mode) qforge not installed.")
+            return
+
+        print("[dim]  Each template is a complete netlist you can edit and re-run.[/dim]\n")
+        for template in templates:
+            print(f"  [cyan]{template.title}[/cyan] [dim]({template.cost})[/dim]")
+            print(f"      [dim]{template.description}[/dim]")
+
+        labels = {template.title: template for template in templates}
+        chosen = self._ask_choice(
+            "New Device", "Start from which circuit?", list(labels), list(labels)[0]
+        )
+        if not chosen or chosen.strip() not in labels:
+            self._warn("Aborted.")
+            return
+        template = labels[chosen.strip()]
+
+        path = filedialog.asksaveasfilename(
+            title="Save the device netlist as",
+            defaultextension=".qdl",
+            initialfile=f"{template.key}.qdl",
+            filetypes=[("Device netlists", "*.qdl"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            self._warn("Aborted.")
+            return
+
+        def _do():
+            written = write_template(template.key, path=path)
+            self._ok(f"Wrote {written}")
+            self._dim("  Edit the file and reload it to explore variations.")
+            device = self._register_netlist(written)
+            if device and self._confirm("Analyze", f"Analyze '{device.name}' now?", default=True):
+                self._analyze_device(device)
+
+        self._run_in_thread(_do, done_msg="Device ready.")
+
+    def _wizard_device_file(self):
+        self._header("Device Design: Load a Netlist")
+        print(
+            "[dim]  A device netlist describes a circuit as capacitors, inductors,\n"
+            "  Josephson junctions, resistors and a ground node.[/dim]"
+        )
+
+        patterns = " ".join(f"*{extension}" for extension in NETLIST_EXTENSIONS)
+        # Open on the bundled netlists when they are there, so the first thing
+        # the dialog shows is something that runs.
+        initial_dir = os.path.join(get_examples_dir() or ".", "device_files")
+        if not os.path.isdir(initial_dir):
+            initial_dir = os.getcwd()
+        path = filedialog.askopenfilename(
+            title="Select a device netlist",
+            initialdir=initial_dir,
+            filetypes=[("Device netlists", patterns), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            path = self._ask_string("Netlist path", "Enter the full path to the netlist file:")
+            if not path:
+                self._warn("Aborted.")
+                return
+            path = path.strip().strip("\"'")
+
+        if not os.path.exists(path):
+            self._notify("File not found", f"No such file:\n{path}", kind="error")
+            self._err(f"Netlist '{path}' not found.")
+            return
+
+        def _do():
+            device = self._register_netlist(path)
+            if device and self._confirm("Analyze", f"Analyze '{device.name}' now?", default=True):
+                self._analyze_device(device)
+
+        self._run_in_thread(_do, done_msg="Netlist loaded.")
+
+    def _wizard_device_analyze(self):
+        self._header("Device Design: Analyze")
+        device = self._pick_device("Analyze Device", "Select a device to analyze:")
+        if device is None:
+            return
+        self._run_in_thread(self._analyze_device, device, done_msg="Analysis complete.")
+
+    def _wizard_device_schematic(self):
+        self._header("Device Design: Schematic")
+        device = self._pick_device("Show Schematic", "Select a device:")
+        if device is None:
+            return
+
+        def _do():
+            device_report.render_netlist(device.netlist)
+            device_report.render_schematic(device.netlist)
+            if self._confirm(
+                "scqubits circuit",
+                "Also show the circuit description qforge hands to scqubits?",
+                default=False,
+            ):
+                print(f"\n[dim]{device.scqubits_yaml}[/dim]")
+
+        self._run_in_thread(_do, done_msg="Schematic shown.")
+
+    def _wizard_device_sweep(self):
+        self._header("Device Design: Parameter Sweep")
+        device = self._pick_device("Sweep Device", "Select a device to sweep:")
+        if device is None:
+            return
+
+        try:
+            knobs = device.sweepable_parameters()
+            flux_names = device.external_flux_names()
+            charge_names = device.offset_charge_names()
+        except DeviceError as exc:
+            self._err(str(exc))
+            return
+        except Exception as exc:
+            self._err(f"{type(exc).__name__}: {exc}")
+            return
+
+        if not knobs:
+            self._notify(
+                "Nothing to sweep",
+                "This circuit has no external flux, no offset charge and no named "
+                ".param values.\n\nAdd a '.param NAME = value' to the netlist and use "
+                "it in an element to make that quantity sweepable.",
+                kind="warning",
+            )
+            return
+
+        for name, value in knobs.items():
+            if name in flux_names:
+                kind = "external flux, in flux quanta"
+            elif name in charge_names:
+                kind = "offset charge, in Cooper pairs"
+            else:
+                kind = "branch energy, in GHz"
+            print(f"  [cyan]{name}[/cyan]  [dim]{kind}, currently {value:g}[/dim]")
+
+        parameter = self._ask_choice(
+            "Sweep Parameter", "Which parameter?", list(knobs), list(knobs)[0]
+        )
+        if not parameter or parameter.strip() not in knobs:
+            self._warn("Aborted.")
+            return
+        parameter = parameter.strip()
+
+        current = knobs[parameter]
+        if parameter in flux_names:
+            low_default, high_default = "0.0", "1.0"
+        elif parameter in charge_names:
+            low_default, high_default = "-1.0", "1.0"
+        else:
+            low_default, high_default = f"{current * 0.5:g}", f"{current * 1.5:g}"
+
+        try:
+            low = float(self._ask_string("Sweep range", f"Start value for {parameter}:",
+                                         low_default) or low_default)
+            high = float(self._ask_string("Sweep range", f"End value for {parameter}:",
+                                          high_default) or high_default)
+            points = int(self._ask_string("Sweep points", "How many points?", "21") or "21")
+            levels = int(self._ask_string("Levels", "How many levels to track?", "4") or "4")
+        except (TypeError, ValueError):
+            self._err("Those values need to be numbers.")
+            return
+        if points < 2:
+            self._err("A sweep needs at least 2 points.")
+            return
+
+        def _do():
+            import numpy as np
+
+            self._cprint(
+                f"\n[green]Sweeping [bold]{parameter}[/bold] over {points} points…[/green]"
+            )
+            try:
+                sweep = device.sweep(parameter, np.linspace(low, high, points), levels=levels)
+            except DeviceError as exc:
+                self._err(str(exc))
+                return
+            device_report.render_sweep(sweep)
+            device_report.plot_sweep_terminal(sweep)
+            if self._confirm("Save plot", "Save the sweep as a figure?", default=False):
+                path = device_report.save_sweep_plot(sweep, device.name)
+                if path:
+                    self._ok(f"Written to {path}")
+                else:
+                    self._warn("Could not render the figure.")
+
+        self._run_in_thread(_do, done_msg="Sweep complete.")
+
+    def _wizard_device_format(self):
+        self._header("Device Netlist Format")
+        device_report.render_format_reference()
+
     def _wizard_clear_cache(self):
         self._header("Clear Calibration Cache")
 
@@ -2372,9 +2689,27 @@ class QForgeGUI(tk.Tk):
   [cyan] 7.[/cyan] [green]Multi-qubit gate analysis[/green]   Compare coupling strategies for a 2-qubit gate.
   [cyan] 8.[/cyan] [green]Build a circuit[/green]             [dim](coming soon)[/dim] Construct and simulate a circuit.
   [cyan] 9.[/cyan] [green]Run full workflow[/green]           QASM in, physical execution out, with optional error correction.
-  [cyan]10.[/cyan] [green]Design hardware[/green]             [dim](coming soon)[/dim] Lay out a quantum chip.
-  [cyan]11.[/cyan] [green]Run an example[/green]              Run a bundled example script.
-  [cyan]12.[/cyan] [green]Clear calibration cache[/green]     Forget cached gate calibrations, with a confirmation first.
+  [cyan]10.[/cyan] [green]Device design[/green]               Build a circuit from C, L, JJ, R and solve for its energy levels.
+  [cyan]11.[/cyan] [green]Design hardware[/green]             [dim](coming soon)[/dim] Lay out a quantum chip.
+  [cyan]12.[/cyan] [green]Run an example[/green]              Run a bundled example script.
+  [cyan]13.[/cyan] [green]Clear calibration cache[/green]     Forget cached gate calibrations, with a confirmation first.
+
+[bold]Device design[/bold]
+  The four built-in qubit types are not the only circuits you can study.
+  Describe any topology as an ngspice-style netlist and qforge quantizes it:
+
+    [dim].title  Transmon[/dim]
+    [cyan]J1[/cyan]  1  0  [yellow]Ic=30nA  Cj=2fF[/yellow]     [dim]; junction, in physical units[/dim]
+    [cyan]C1[/cyan]  1  0  [yellow]90fF[/yellow]                [dim]; shunt capacitor[/dim]
+    [dim].cutoff n1 = 30[/dim]
+    [dim].levels 6[/dim]
+
+  [dim]·[/dim] Elements are [cyan]C[/cyan] capacitor, [cyan]L[/cyan] inductor, [cyan]J[/cyan] junction, [cyan]R[/cyan] resistor, [cyan]K[/cyan] mutual inductance.
+  [dim]·[/dim] Node [cyan]0[/cyan] / [cyan]gnd[/cyan] is ground; any other label becomes a circuit node.
+  [dim]·[/dim] Values take physical units ([cyan]90fF[/cyan], [cyan]100nH[/cyan], [cyan]30nA[/cyan], [cyan]1MOhm[/cyan]) or energies in GHz ([cyan]EJ=15[/cyan]).
+  [dim]·[/dim] You get energy levels, transition frequencies, anharmonicity, drive matrix
+    elements, coherence estimates and a basis-convergence check.
+  [dim]·[/dim] [cyan]Netlist format reference[/cyan] prints the complete syntax.
 
 [bold]Error correction[/bold]
   Run full workflow now offers three codes, each mapping every logical

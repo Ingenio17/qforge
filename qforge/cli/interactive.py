@@ -23,6 +23,14 @@ from rich.table import Table
 
 from qforge import __version__
 from qforge.cli.commands.example import get_examples_dir, list_example_files
+from qforge.core import device_report
+from qforge.core.device_engine import DeviceEngine, DeviceError
+from qforge.core.device_library import (
+    NETLIST_EXTENSIONS,
+    list_templates,
+    write_template,
+)
+from qforge.core.device_netlist import NetlistError
 from qforge.core.error_correction_engine import ErrorCorrectionEngine
 from qforge.core.gate_engine import GateEngine
 from qforge.core.qubit_engine import QubitEngine
@@ -31,6 +39,18 @@ from qforge.core.workflow_engine import PhysicalWorkflowEngine
 
 console = Console()
 engine = QubitEngine()
+
+# Created on first use rather than at import: building it touches the filesystem,
+# and most sessions never open the device designer.
+_device_engine = None
+
+
+def _devices():
+    """The session's DeviceEngine, created on first use."""
+    global _device_engine
+    if _device_engine is None:
+        _device_engine = DeviceEngine()
+    return _device_engine
 
 ACCENT = "bright_cyan"
 
@@ -280,6 +300,16 @@ def _menu_sections():
                     "workflow",
                     "Run full workflow",
                     "QASM to physical execution, with optional error correction",
+                ),
+            ],
+        ),
+        (
+            "DEVICE DESIGN",
+            [
+                (
+                    "device",
+                    "Design a device",
+                    "Build a circuit from C, L, JJ and R, then solve for its energy levels",
                 ),
             ],
         ),
@@ -723,6 +753,389 @@ def _wizard_build_circuit():
     _pause()
 
 
+# ---------------------------------------------------------------------------
+# Wizards: device design (netlist -> quantized circuit -> spectrum)
+# ---------------------------------------------------------------------------
+
+
+def _device_names():
+    return [entry["name"] for entry in _devices().list_devices()]
+
+
+def _netlist_completer():
+    """Complete netlist paths from the working directory and any examples folder."""
+    found = []
+    search_dirs = [
+        os.getcwd(),
+        os.path.join(os.getcwd(), "netlists"),
+        os.path.join(os.getcwd(), "device_files"),
+    ]
+    examples_dir = get_examples_dir()
+    if examples_dir:
+        search_dirs += [
+            examples_dir,
+            os.path.join(examples_dir, "netlists"),
+            os.path.join(examples_dir, "device_files"),
+        ]
+    for directory in search_dirs:
+        if not os.path.isdir(directory):
+            continue
+        for extension in NETLIST_EXTENSIONS:
+            found.extend(
+                os.path.relpath(path) for path in glob.glob(os.path.join(directory, f"*{extension}"))
+            )
+    return WordCompleter(sorted(set(found)), ignore_case=True)
+
+
+def _pick_device(title="Which device?"):
+    """Choose one registered device, or None if there are none or the user backs out."""
+    names = _device_names()
+    if not names:
+        console.print(
+            "[yellow]No devices yet. Load a netlist file or start from a template first.[/yellow]"
+        )
+        return None
+    items = []
+    for entry in _devices().list_devices():
+        detail = (
+            f"{entry['num_nodes']} node(s), {entry['num_branches']} branches, "
+            f"{entry['num_junctions']} junction(s), {entry['num_loops']} loop(s)"
+        )
+        items.append((entry["name"], entry["title"] or entry["name"], detail))
+    key = _flat_choose(items, title=title)
+    if not key:
+        return None
+    try:
+        return _devices().get_device(key)
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return None
+
+
+def _register_netlist(source_path=None, source_text=None, name=None):
+    """Parse a netlist, register it, and show what was understood."""
+    try:
+        with console.status("[cyan]Parsing netlist...[/cyan]"):
+            if source_path:
+                device = _devices().create_device_from_file(
+                    source_path, name=name, overwrite=True
+                )
+            else:
+                device = _devices().create_device(source_text, name=name, overwrite=True)
+    except NetlistError as exc:
+        console.print(f"\n[bold red]Netlist error[/bold red]\n[red]{exc}[/red]")
+        console.print(
+            "[dim]Pick 'Netlist format reference' from the device menu for the full syntax.[/dim]"
+        )
+        return None
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return None
+
+    device_report.render_netlist(device.netlist, console=console)
+    device_report.render_schematic(device.netlist, console=console)
+    console.print(f"[green]Registered device '{device.name}'.[/green]")
+    return device
+
+
+def _analyze_device(device):
+    """Quantize a device, print the full report, and offer plots."""
+    console.print(
+        f"\n[green]Quantizing '{device.name}' and solving for its energy levels...[/green]"
+    )
+    try:
+        with console.status("[cyan]Building the circuit Hamiltonian...[/cyan]"):
+            hilbert_dim = device.hilbert_dim
+        console.print(
+            f"[dim]Truncated Hilbert space: {hilbert_dim:,} states.[/dim]"
+        )
+        with console.status("[cyan]Diagonalizing and analyzing...[/cyan]"):
+            result = device.analyze()
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return None
+    except Exception as exc:
+        console.print(f"[red]Analysis failed: {type(exc).__name__}: {exc}[/red]")
+        return None
+
+    device_report.render_analysis(result, console=console)
+    device_report.plot_spectrum_terminal(result)
+
+    if Confirm.ask("\nSave high-resolution plots to file?", default=False):
+        with console.status("[cyan]Rendering figures...[/cyan]"):
+            saved = device_report.save_plots(device, result)
+        if saved:
+            for kind, path in saved.items():
+                console.print(f"[green]  {kind}:[/green] [dim]{path}[/dim]")
+        else:
+            console.print("[yellow]  No figures could be produced for this circuit.[/yellow]")
+
+    if Confirm.ask("Save the analysis as JSON?", default=False):
+        path = _devices().save_result(device.name, result)
+        console.print(f"[green]  Written to[/green] [dim]{path}[/dim]")
+
+    return result
+
+
+def _wizard_device_from_file():
+    console.print(
+        "\n[dim]A device netlist describes a circuit as capacitors, inductors, "
+        "Josephson junctions, resistors and a ground node.[/dim]"
+    )
+    path = (
+        prompt("Path to the netlist file: ", completer=_netlist_completer()).strip().strip("\"'")
+    )
+    if not path:
+        return
+    if not os.path.exists(path):
+        console.print(f"[red]No such file: {path}[/red]")
+        return
+
+    device = _register_netlist(source_path=path)
+    if device and Confirm.ask("\nAnalyze it now?", default=True):
+        _analyze_device(device)
+
+
+def _wizard_device_from_template():
+    items = [
+        (template.key, template.title, f"{template.description}  [{template.cost}]")
+        for template in list_templates()
+    ]
+    key = _flat_choose(items, title="Start from which circuit?")
+    if not key:
+        return
+
+    default_path = f"{key}.qdl"
+    path = Prompt.ask("Save the netlist as", default=default_path).strip().strip("\"'")
+    if not path:
+        return
+    if os.path.exists(path) and not Confirm.ask(f"'{path}' exists. Overwrite?", default=False):
+        return
+
+    written = write_template(key, path=path)
+    console.print(f"[green]Wrote {written}.[/green] [dim]Edit it and reload to try variations.[/dim]")
+
+    device = _register_netlist(source_path=written)
+    if device and Confirm.ask("\nAnalyze it now?", default=True):
+        _analyze_device(device)
+
+
+def _wizard_device_list():
+    entries = _devices().list_devices()
+    if not entries:
+        console.print("[yellow]No devices designed yet.[/yellow]")
+        return
+    table = Table(title="Designed devices", show_header=True)
+    table.add_column("Name", style="cyan")
+    table.add_column("Title", style="yellow")
+    table.add_column("Nodes", justify="right")
+    table.add_column("Branches", justify="right")
+    table.add_column("Junctions", justify="right")
+    table.add_column("Loops", justify="right")
+    table.add_column("Source", style="dim")
+    for entry in entries:
+        table.add_row(
+            entry["name"],
+            entry["title"] or "-",
+            str(entry["num_nodes"]),
+            str(entry["num_branches"]),
+            str(entry["num_junctions"]),
+            str(entry["num_loops"]),
+            entry["source_path"] or "(inline)",
+        )
+    console.print(table)
+
+
+def _wizard_device_sweep():
+    device = _pick_device("Sweep which device?")
+    if device is None:
+        return
+
+    try:
+        with console.status("[cyan]Building the circuit...[/cyan]"):
+            knobs = device.sweepable_parameters()
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
+
+    if not knobs:
+        console.print(
+            "[yellow]This circuit has nothing to sweep: no external flux, no offset "
+            "charge, and no named .param values.[/yellow]\n"
+            "[dim]Add a '.param NAME = value' to the netlist and reference it from an "
+            "element to make that quantity sweepable.[/dim]"
+        )
+        return
+
+    flux_names = device.external_flux_names()
+    charge_names = device.offset_charge_names()
+    items = []
+    for name, value in knobs.items():
+        if name in flux_names:
+            kind = "external flux, in flux quanta"
+        elif name in charge_names:
+            kind = "offset charge, in Cooper pairs"
+        else:
+            kind = "branch energy, in GHz"
+        items.append((name, name, f"{kind}  ·  currently {value:g}"))
+    parameter = _flat_choose(items, title="Sweep which parameter?")
+    if not parameter:
+        return
+
+    current = knobs[parameter]
+    is_flux = parameter in flux_names
+    is_charge = parameter in charge_names
+    if is_flux:
+        low_default, high_default = "0.0", "1.0"
+    elif is_charge:
+        low_default, high_default = "-1.0", "1.0"
+    else:
+        low_default = f"{current * 0.5:g}"
+        high_default = f"{current * 1.5:g}"
+
+    try:
+        low = float(Prompt.ask("  From", default=low_default))
+        high = float(Prompt.ask("  To", default=high_default))
+        points = int(Prompt.ask("  Points", default="21"))
+        levels = int(Prompt.ask("  Levels to track", default="4"))
+    except ValueError:
+        console.print("[red]Those need to be numbers.[/red]")
+        return
+    if points < 2:
+        console.print("[red]A sweep needs at least 2 points.[/red]")
+        return
+
+    import numpy as np
+
+    console.print(f"\n[green]Sweeping {parameter} over {points} points...[/green]")
+    try:
+        with console.status("[cyan]Re-diagonalizing at each point...[/cyan]"):
+            sweep = device.sweep(parameter, np.linspace(low, high, points), levels=levels)
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
+
+    device_report.render_sweep(sweep, console=console)
+    device_report.plot_sweep_terminal(sweep)
+
+    if Confirm.ask("\nSave the sweep as a plot?", default=False):
+        path = device_report.save_sweep_plot(sweep, device.name)
+        if path:
+            console.print(f"[green]  Written to[/green] [dim]{path}[/dim]")
+        else:
+            console.print("[yellow]  Could not render the figure.[/yellow]")
+
+
+def _wizard_device_delete():
+    device = _pick_device("Delete which device?")
+    if device is None:
+        return
+    if not Confirm.ask(f"Delete '{device.name}'?", default=False):
+        return
+    try:
+        _devices().delete_device(device.name)
+        console.print(f"[green]Deleted '{device.name}'.[/green]")
+        console.print("[dim]The netlist file on disk, if any, was left alone.[/dim]")
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+
+
+def _device_menu_sections():
+    return [
+        (
+            "NEW DEVICE",
+            [
+                ("template", "Start from a template", "Transmon, fluxonium, flux qubit, zero-pi..."),
+                ("file", "Load a netlist file", "Read a circuit you have written yourself"),
+                ("format", "Netlist format reference", "The full syntax, with examples"),
+            ],
+        ),
+        (
+            "DESIGNED DEVICES",
+            [
+                ("list", "List devices", "Everything designed in this session"),
+                ("analyze", "Analyze a device", "Energy levels, anharmonicity, coherence"),
+                ("schematic", "Show the schematic", "Elements, values and connectivity"),
+                ("sweep", "Sweep a parameter", "Flux, offset charge or a named .param"),
+                ("export", "Export a netlist", "Write a device's netlist back out to a file"),
+                ("delete", "Delete a device", "Remove it from the session"),
+            ],
+        ),
+        (
+            None,
+            [("back", "Back to the main menu", "")],
+        ),
+    ]
+
+
+def _wizard_device_schematic():
+    device = _pick_device("Show which device?")
+    if device is None:
+        return
+    device_report.render_netlist(device.netlist, console=console)
+    device_report.render_schematic(device.netlist, console=console)
+    if Confirm.ask("\nShow the circuit description handed to scqubits?", default=False):
+        console.print(Panel(device.scqubits_yaml, title="scqubits circuit", border_style="dim"))
+
+
+def _wizard_device_export():
+    device = _pick_device("Export which device?")
+    if device is None:
+        return
+    path = Prompt.ask("Write the netlist to", default=f"{device.name}.qdl").strip().strip("\"'")
+    if not path:
+        return
+    if os.path.exists(path) and not Confirm.ask(f"'{path}' exists. Overwrite?", default=False):
+        return
+    written = _devices().save_netlist(device.name, path)
+    console.print(f"[green]Wrote {written}.[/green]")
+
+
+def _wizard_design_device():
+    _section("Design a device")
+    console.print(
+        "[dim]Describe a circuit in an ngspice-style netlist, and qforge quantizes it: "
+        "energy levels, transition frequencies, anharmonicity and coherence for any "
+        "topology you can build out of C, L, JJ and R.[/dim]"
+    )
+
+    def _analyze_chosen():
+        device = _pick_device("Analyze which device?")
+        if device is not None:
+            _analyze_device(device)
+
+    handlers = {
+        "template": _wizard_device_from_template,
+        "file": _wizard_device_from_file,
+        "format": lambda: device_report.render_format_reference(console=console),
+        "list": _wizard_device_list,
+        "analyze": _analyze_chosen,
+        "schematic": _wizard_device_schematic,
+        "sweep": _wizard_device_sweep,
+        "export": _wizard_device_export,
+        "delete": _wizard_device_delete,
+    }
+
+    while True:
+        count = len(_device_names())
+        subtitle = (
+            f"{count} device(s) designed"
+            if count
+            else "nothing designed yet - try 'Start from a template'"
+        )
+        choice = _choose(_device_menu_sections(), title="Device design", subtitle=subtitle)
+        if choice is None or choice == "back":
+            return
+
+        handler = handlers.get(choice)
+        if handler is None:
+            console.print(f"[red]Unknown option: {choice}[/red]")
+            continue
+
+        handler()
+        _pause()
+
+
 def _wizard_design_hardware():
     _section("Design hardware")
     console.print(
@@ -1041,10 +1454,31 @@ def _show_help():
    optionally protected by the 3-qubit repetition, 7-qubit Steane, or 9-qubit Shor code
 5. **Compare qubits** - side-by-side metrics across qubit types or instances
 
+## Design a device
+
+The four built-in qubit types are not the only circuits you can study. **Design a
+device** takes an ngspice-style netlist of capacitors, inductors, Josephson
+junctions and resistors, quantizes whatever topology it describes, and reports the
+energy levels, transition frequencies, anharmonicity and coherence estimates.
+
+```
+.title  Transmon
+J1  1  0  Ic=30nA  Cj=2fF     ; junction, in physical units
+C1  1  0  90fF                ; shunt capacitor
+.cutoff n1 = 30
+.levels 6
+```
+
+Values may be written either as circuit quantities (`90fF`, `100nH`, `30nA`,
+`1MOhm`) or as the energies used internally (`EJ=15`, `EC=0.3`, all GHz). Start
+from a bundled template - transmon, fluxonium, flux qubit, zero-pi and more - or
+load a file of your own, then sweep flux, offset charge or any named `.param`.
+
 ## Tips
 - Start with "Create a qubit" if this is your first time
 - Presets (typical / high coherence / fast gates) are a fast way to get a working qubit
 - Bundled example circuits live in `examples/qasm_files/`
+- "Design a device" -> "Netlist format reference" documents the netlist language in full
 - The full CLI reference is available with `qforge --help`
 
 qforge v{__version__} - built on scqubits and QuTiP.
@@ -1068,6 +1502,7 @@ HANDLERS.update(
         "multi": _wizard_analyze_multi_qubit,
         "circuit": _wizard_build_circuit,
         "workflow": _wizard_full_workflow,
+        "device": _wizard_design_device,
         "hardware": _wizard_design_hardware,
         "example": _wizard_run_example,
         "help": _show_help,

@@ -1,0 +1,55 @@
+* ---------------------------------------------------------------------------
+* transmon.qdl - a basic transmon qubit, as a qforge device netlist
+*
+* The whole circuit is two elements: one Josephson junction, and one big
+* capacitor shunting it. Everything that makes a transmon a transmon comes from
+* the ratio between them.
+*
+*     node 1  o--------+--------+
+*                      |        |
+*                     [X] J1   ===  Csh          J1  : the junction
+*                      |        |                Csh : the shunt capacitor
+*     node 0  o--------+--------+
+*             (ground)
+*
+* The shunt capacitor is what separates a transmon from a Cooper-pair box. It
+* makes the charging energy EC small, so EJ/EC lands in the tens, and the
+* qubit's frequency stops depending on the offset charge on the island. The
+* price is a small anharmonicity: around -235 MHz here, which is what limits how
+* fast a pulse can drive 0->1 without also driving 1->2.
+*
+* Run it with:
+*     qforge --interactive   ->  Design a device  ->  Load a netlist file
+*
+* or from Python:
+*     from qforge.core.device_engine import DeviceEngine
+*     device = DeviceEngine().create_device_from_file(
+*         "examples/device_files/transmon.qdl"
+*     )
+*     result = device.analyze()
+*     print(result["f01_ghz"], result["anharmonicity_mhz"])
+*
+* Expected results, for the values below:
+*     f01           ~ 4.79 GHz
+*     anharmonicity ~ -235 MHz
+*     EJ / EC       ~ 71
+* ---------------------------------------------------------------------------
+
+.title  Basic transmon
+.name   transmon_example
+
+* Design parameters, written the way a fabricator would specify them. Both are
+* named, so either can be swept afterwards without editing this file.
+.param  IC   = 30nA              ; junction critical current  -> EJ ~ 14.9 GHz
+.param  CSH  = 90fF              ; shunt capacitance          -> EC ~ 0.215 GHz
+
+* Elements.  <name> <node+> <node-> <values...>
+J1   1  0   EJ=IC   Cj=2fF       ; the junction, plus its own self-capacitance
+Csh  1  0   CSH                  ; the shunt that makes this a transmon
+
+* Bias and basis.
+.charge 1 = 0.0                  ; offset charge on the island, in Cooper pairs
+.cutoff n1 = 30                  ; charge-basis cutoff; 30 is plenty at this EJ/EC
+.levels 6                        ; eigenvalues to compute
+
+.end

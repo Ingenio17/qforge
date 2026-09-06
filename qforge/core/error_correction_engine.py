@@ -122,7 +122,7 @@ from typing import List, Dict, Tuple, Any
 
 from qforge.core.qubit_engine import QubitEngine
 from qforge.core.gate_engine import GateEngine
-from qforge.core.workflow_engine import PhysicalWorkflowEngine, QASMTranspiler
+from qforge.core.workflow_engine import PhysicalWorkflowEngine, QASMTranspiler, print_logical_circuit_diagram
 from qforge.core.stabilizer_codes import (
     StabilizerCode,
     StabilizerGenerator,
@@ -1490,6 +1490,8 @@ class ErrorCorrectionEngine:
         logical_circuit = transpiler.parse_file(qasm_path)
         print(f"[EC]    {len(logical_circuit)} logical instructions parsed.")
 
+        print_logical_circuit_diagram(qasm_path, title="[EC] Logical circuit (error correction hidden)")
+
         print(f"[EC] 2. Generating physical qubit mapping for '{code.name}'...")
         mapping        = self.generate_stabilizer_mapping(logical_names, code)
         physical_names = self._get_flat_physical_names(logical_names, mapping)
@@ -1910,6 +1912,8 @@ class ErrorCorrectionEngine:
         logical_circuit = transpiler.parse_file(qasm_path)
         print(f"[EC]    {len(logical_circuit)} logical instructions parsed.")
 
+        print_logical_circuit_diagram(qasm_path, title="[EC] Logical circuit (error correction hidden)")
+
         print(f"[EC] 2. Generating physical qubit mapping for '{code.name}'...")
         mapping        = self.generate_stabilizer_mapping(logical_names, code)
         physical_names = self._get_flat_physical_names(logical_names, mapping)
@@ -2178,6 +2182,8 @@ class ErrorCorrectionEngine:
         transpiler      = QASMTranspiler()
         logical_circuit = transpiler.parse_file(qasm_path)
         print(f"[EC]    {len(logical_circuit)} logical instructions parsed.")
+
+        print_logical_circuit_diagram(qasm_path, title="[EC] Logical circuit (error correction hidden)")
 
         # ── Step 2: Map & inject physical qubits (alias-only, no disk write) ─
         print(f"[EC] 2. Generating physical qubit mapping for '{code.name}'...")

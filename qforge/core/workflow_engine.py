@@ -64,6 +64,10 @@ class QASMTranspiler:
     OPAQUE_DEF_PATTERN = re.compile(r"opaque\s+[^;]+;")
     # A single statement: NAME(params)? remainder
     STATEMENT_PATTERN = re.compile(r"^([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?\s*(.*)$")
+    # "measure <qubit(s)> -> <clbit(s)>" - parsed separately for parse_logical()
+    # only, since STATEMENT_PATTERN's "remainder" group can't cleanly hold the
+    # "->" target and it is otherwise unused by the physical parse.
+    MEASURE_STATEMENT_PATTERN = re.compile(r"^measure\s+(.+?)\s*->\s*(.+)$", re.IGNORECASE)
 
     # Statements that carry no meaning for a unitary/Hamiltonian simulation
     # (classical registers, mid-circuit measurement, timing barriers, and
@@ -407,6 +411,104 @@ class QASMTranspiler:
                 instructions.extend(self._process_statement(statement))
         return instructions
 
+    # ------------------------------------------------------------------
+    # Display-only parse: gates exactly as written, never decomposed.
+    #
+    # parse_string()/_decompose() above exist to feed the physical
+    # simulator, so they expand every gate down into {x, h, rz, cx, cz,
+    # swap, cp} - a Toffoli becomes 15 instructions, not one. That is the
+    # right thing to simulate, but the wrong thing to draw: a circuit
+    # diagram should show the Toffoli a user actually wrote. parse_logical()
+    # reuses the same register/broadcast bookkeeping and expression
+    # evaluation as the physical parse, but stops short of _decompose(), so
+    # composite gates (ccx, swap, cswap, any custom `gate {...}`) and
+    # measurements survive as single logical operations. See
+    # qforge.utils.circuit_diagram.draw_circuit for the renderer this feeds.
+    # ------------------------------------------------------------------
+
+    def parse_logical_file(self, filepath: str) -> Dict[str, Any]:
+        with open(filepath, 'r') as f:
+            return self.parse_logical(f.read())
+
+    def parse_logical(self, qasm_string: str) -> Dict[str, Any]:
+        """
+        Returns {"num_qubits": int, "ops": [...]}, where each op is either
+        {"name": <gate name as written>, "qubits": [int, ...], "params":
+        [float, ...]} or {"name": "measure", "qubits": [int], "params": []}.
+        """
+        self._reset_parse_state()
+
+        text = self._strip_comments(qasm_string)
+        text = self._register_gate_defs(text)
+        text = self.OPAQUE_DEF_PATTERN.sub("", text)
+        text = " ".join(text.split())
+
+        ops: List[Dict[str, Any]] = []
+        for statement in text.split(";"):
+            statement = statement.strip()
+            if statement:
+                ops.extend(self._process_statement_logical(statement))
+
+        return {"num_qubits": self._next_qubit_offset, "ops": ops}
+
+    def _process_statement_logical(self, statement: str) -> List[Dict[str, Any]]:
+        measure_match = self.MEASURE_STATEMENT_PATTERN.match(statement)
+        if measure_match:
+            try:
+                qubit_calls = self._resolve_qubit_args(measure_match.group(1).strip())
+            except ValueError as err:
+                print(f"Warning: {err} Skipping instruction '{statement}'.")
+                return []
+            return [{"name": "measure", "qubits": [qs[0]], "params": []} for qs in qubit_calls]
+
+        match = self.STATEMENT_PATTERN.match(statement)
+        if not match:
+            return []
+
+        name, params_str, remainder = match.group(1), match.group(2), match.group(3).strip()
+        name_lower = name.lower()
+
+        if name_lower in self._IGNORED_KEYWORDS:
+            return []
+        if name_lower == "qreg":
+            self._handle_qreg(remainder)
+            return []
+        if not remainder:
+            return []
+
+        params = self._parse_params(params_str)
+        try:
+            qubit_calls = self._resolve_qubit_args(remainder)
+        except ValueError as err:
+            print(f"Warning: {err} Skipping instruction '{statement}'.")
+            return []
+
+        return [{"name": name_lower, "qubits": qubits, "params": params} for qubits in qubit_calls]
+
+
+def print_logical_circuit_diagram(qasm_path: str, title: str = "Logical circuit") -> None:
+    """
+    Parses `qasm_path` purely for display (via QASMTranspiler.parse_logical,
+    never the physical decomposition path) and prints an ASCII diagram of
+    it. Defensive by design: a malformed or unusual QASM file should never
+    be able to break an otherwise-working simulation just because its
+    diagram couldn't be drawn, so any failure here is reported and
+    swallowed rather than raised.
+    """
+    try:
+        transpiler = QASMTranspiler()
+        logical = transpiler.parse_logical_file(qasm_path)
+        n_measure = sum(1 for op in logical["ops"] if op["name"] == "measure")
+        n_gates = len(logical["ops"]) - n_measure
+        summary = f"{title}: {logical['num_qubits']} qubit(s), {n_gates} gate(s)"
+        if n_measure:
+            summary += f", {n_measure} measurement(s)"
+        print(summary)
+        from qforge.utils.circuit_diagram import draw_circuit
+        print(draw_circuit(logical["num_qubits"], logical["ops"]))
+    except Exception as e:
+        print(f"(Could not render circuit diagram: {e})")
+
 
 class PhysicalWorkflowEngine:
     """
@@ -584,7 +686,9 @@ class PhysicalWorkflowEngine:
         """
         print(f"1. Translating Qubit-Agnostic QASM from '{qasm_path}' to precise superconducting native basis...")
         transpiled = self.parse_qasm_circuit(qasm_path)
-        
+
+        print_logical_circuit_diagram(qasm_path)
+
         print("2. Automating physical hardware calibration bounds...")
         calibrations = self.automate_calibrations(qubit_names, couplings, transpiled)
         

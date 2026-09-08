@@ -112,6 +112,10 @@ EC_CODE_MAP = {
 }
 EC_LABELS = ["No error correction"] + list(EC_CODE_MAP.keys())
 
+# The one entry that stands for every custom device in the qubit-type picker, so
+# a session full of designed circuits does not bury the preset types.
+DEVICE_QUBIT_LABEL = "Select from custom device"
+
 
 # --------------------------------------------------------------------------- #
 #  Colour / style palette                                                       #
@@ -1541,15 +1545,21 @@ class QForgeGUI(tk.Tk):
             return
 
         qubit_types = list(QUBIT_PRESETS.keys())
+        # Custom devices hide behind one entry instead of being listed inline, so
+        # a session with many designed circuits does not bury the four presets.
         q_type = self._ask_choice(
             "Qubit Type",
             "Select qubit type:",
-            qubit_types,
+            qubit_types + [DEVICE_QUBIT_LABEL],
         )
         if not q_type:
             self._warn("Aborted.")
             return
-        q_type = q_type.strip().lower()
+        picked = q_type.strip()
+        if picked.lower() == DEVICE_QUBIT_LABEL.lower():
+            self._create_qubit_from_device()
+            return
+        q_type = picked.lower()
         if q_type not in qubit_types:
             self._err(f"Unknown qubit type: '{q_type}'. Aborted.")
             return
@@ -1605,6 +1615,129 @@ class QForgeGUI(tk.Tk):
                 self._notify("Success", f"Qubit '{name}' created successfully.", kind="success")
             except Exception as e:
                 self._err(f"Error: {e}")
+
+        self._run_in_thread(_do, done_msg="Create complete.")
+
+    def _create_qubit_from_device(self):
+        """
+        Register a circuit designed in the device designer as an ordinary qubit.
+
+        What gets saved is the netlist itself, so the qubit survives a restart and
+        keeps working even if the file it came from is edited afterwards. Once
+        registered it behaves like any preset qubit: gates, couplings, workflows
+        and error correction all take it by name.
+        """
+        self._header("Create a Qubit From a Custom Device")
+
+        device = self._pick_device(
+            "Custom Device", "Which designed device should become a qubit?"
+        )
+        if device is None:
+            self._dim(
+                "  Design one first: 'New device from template' or "
+                "'Load a device netlist' in the sidebar."
+            )
+            return
+
+        name = self._ask_string(
+            "Qubit Name", "Name for this qubit:", device.name
+        )
+        if not name:
+            self._warn("Aborted.")
+            return
+        name = name.strip()
+
+        # Every extra level multiplies into the Hilbert space of any multi-qubit
+        # workflow, so this is worth choosing deliberately rather than defaulting high.
+        level_choice = self._ask_choice(
+            "Levels to keep",
+            "How many levels should qforge keep?\n"
+            "4 matches the preset qubit types; fewer is cheaper in multi-qubit runs.",
+            ["4", "3", "2", "5"],
+            "4",
+        )
+        if not level_choice:
+            self._warn("Aborted.")
+            return
+        try:
+            truncated_dim = int(level_choice.strip())
+        except ValueError:
+            truncated_dim = 4
+
+        if name in self._get_qubit_names():
+            if not self._confirm(
+                "Replace qubit",
+                f"A qubit called '{name}' already exists.\n\nReplace it?",
+                danger=True,
+                default=False,
+            ):
+                self._dim("Aborted.")
+                return
+
+        def _do():
+            from qforge.core.device_qubit import device_qubit_params
+
+            self._cprint(f"\n[green]Quantizing [bold]{device.name}[/bold]…[/green]")
+            try:
+                spectrum = device.spectrum(max(3, min(4, device.hilbert_dim)))
+            except DeviceError as exc:
+                self._err(str(exc))
+                return
+            except Exception as exc:
+                self._err(f"Could not quantize '{device.name}': {exc}")
+                return
+
+            f01 = spectrum["f01_ghz"]
+            alpha = spectrum.get("anharmonicity_mhz")
+            print(f"  [yellow]f01[/yellow]            [green]{f01:.6f} GHz[/green]")
+            if alpha is not None:
+                print(f"  [yellow]Anharmonicity[/yellow]  [green]{alpha:.3f} MHz[/green]")
+            print(f"  [yellow]Modes[/yellow]          [green]{spectrum.get('num_modes', '?')}[/green]")
+
+            summary = f"f01 = {f01:.4f} GHz"
+            if alpha is not None:
+                summary += f"\nanharmonicity = {alpha:.1f} MHz"
+            if not spectrum.get("anharmonicity_meaningful", True):
+                note = spectrum.get("anharmonicity_note", "")
+                self._warn(note)
+                self._dim(
+                    "  qforge will drive the mode carrying the 0-1 transition. For a "
+                    "multi-mode circuit, check that is the one you meant."
+                )
+                summary += "\n\nThis circuit has more than one mode, so check the console note."
+
+            if not self._confirm(
+                "Register qubit", f"Register '{name}' from '{device.name}'?\n\n{summary}",
+                default=True,
+            ):
+                self._dim("Aborted.")
+                return
+
+            params = device_qubit_params(
+                device.netlist.source,
+                truncated_dim=truncated_dim,
+                device_name=device.name,
+                source_path=device.netlist.source_path,
+            )
+            try:
+                self._refresh_engine()
+                self.engine.create_qubit("device", name, params)
+            except Exception as exc:
+                self._err(f"Could not register '{name}': {exc}")
+                return
+
+            self._ok(f"Qubit '{name}' created from device '{device.name}'.")
+            self._dim(
+                f"  Saved with its netlist, so it survives a restart. It now appears "
+                f"wherever a qubit is asked for: gates, couplings, workflows and "
+                f"error correction. Keeping {truncated_dim} levels."
+            )
+            self._notify(
+                "Success",
+                f"Qubit '{name}' created from device '{device.name}'.\n\n"
+                f"It is now available in every workflow that takes a qubit.",
+                kind="success",
+            )
 
         self._run_in_thread(_do, done_msg="Create complete.")
 

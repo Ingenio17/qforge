@@ -146,6 +146,17 @@ class QubitEngine:
                 ncut=params.get("ncut", 30),
                 truncated_dim=params.get("truncated_dim", 4)
             )
+        elif qubit_type == "device":
+            # A custom circuit designed from a netlist rather than one of the
+            # four preset models. params carries the netlist source in full, so
+            # a saved session rebuilds the identical circuit without depending
+            # on the file it was written in. DeviceQubit adapts it to the same
+            # interface the preset qubits present, so everything downstream
+            # (gates, couplings, workflows, error correction) is unchanged.
+            # Imported here, like scqubits above, to keep CLI startup light.
+            from qforge.core.device_qubit import build_device_qubit
+
+            return build_device_qubit(params)
         else:
             raise ValueError(f"Unknown qubit type: {qubit_type}")
     

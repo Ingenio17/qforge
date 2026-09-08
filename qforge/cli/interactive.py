@@ -54,6 +54,10 @@ def _devices():
 
 ACCENT = "bright_cyan"
 
+# Menu key for the "custom device" branch of the qubit-type picker. Prefixed so
+# it can never collide with a qubit type name from QUBIT_PRESETS.
+DEVICE_QUBIT_KEY = "__custom_device__"
+
 MENU_STYLE = PTStyle.from_dict(
     {
         "title": "bold ansibrightcyan",
@@ -402,8 +406,30 @@ def _wizard_create_qubit():
         bits = [b for b in (info.get("freq"), info.get("best_for")) if b]
         type_items.append((qtype, qtype.capitalize(), "  ·  ".join(bits)))
 
-    qubit_type = _flat_choose(type_items, title="Choose a qubit type")
+    # Custom devices sit behind a single entry rather than being listed inline,
+    # so a session with a dozen designed circuits does not bury the four presets.
+    n_devices = len(_device_names())
+    sections = [
+        ("PRESET TYPES", type_items),
+        (
+            "CUSTOM",
+            [
+                (
+                    DEVICE_QUBIT_KEY,
+                    "Select from custom device",
+                    f"{n_devices} circuit(s) designed in 'Design a device'"
+                    if n_devices
+                    else "Nothing designed yet - use 'Design a device' first",
+                )
+            ],
+        ),
+    ]
+    qubit_type = _choose(sections, title="Choose a qubit type")
     if not qubit_type:
+        return
+
+    if qubit_type == DEVICE_QUBIT_KEY:
+        _create_qubit_from_device()
         return
 
     preset_keys = [k for k in QUBIT_PRESETS[qubit_type] if k != "_info"]
@@ -449,6 +475,105 @@ def _wizard_create_qubit():
     _create_qubit(qubit_type, name, params)
 
     console.print("\n[bold green]Qubit created successfully.[/bold green]")
+    _pause()
+
+
+def _create_qubit_from_device():
+    """
+    Register a circuit designed in 'Design a device' as an ordinary qubit.
+
+    What gets saved is the netlist itself, so the qubit survives a restart and
+    keeps working even if the file it came from is edited afterwards. Once
+    registered it behaves like any preset qubit: gates, couplings, workflows and
+    error correction all take it by name.
+    """
+    _section("Create a qubit from a custom device")
+
+    device = _pick_device("Which designed device?")
+    if device is None:
+        console.print(
+            "[dim]Design one first: main menu -> Design a device -> "
+            "Start from a template.[/dim]"
+        )
+        _pause()
+        return
+
+    console.print(f"\n[dim]Checking that '{device.name}' can be driven as a qubit...[/dim]")
+    try:
+        with console.status("[cyan]Quantizing the circuit...[/cyan]"):
+            spectrum = device.spectrum(max(3, min(4, device.hilbert_dim)))
+    except DeviceError as exc:
+        console.print(f"[red]{exc}[/red]")
+        _pause()
+        return
+    except Exception as exc:
+        console.print(f"[red]Could not quantize '{device.name}': {exc}[/red]")
+        _pause()
+        return
+
+    table = Table(title=f"{device.netlist.title or device.name}", show_header=True)
+    table.add_column("Quantity", style="yellow")
+    table.add_column("Value", justify="right", style="green")
+    table.add_row("f01", f"{spectrum['f01_ghz']:.6f} GHz")
+    if spectrum.get("anharmonicity_mhz") is not None:
+        table.add_row("Anharmonicity", f"{spectrum['anharmonicity_mhz']:.3f} MHz")
+    table.add_row("Modes", str(spectrum.get("num_modes", "?")))
+    console.print(table)
+
+    if not spectrum.get("anharmonicity_meaningful", True):
+        console.print(
+            f"[yellow]  Heads up:[/yellow] [dim]{spectrum.get('anharmonicity_note', '')}[/dim]"
+        )
+        console.print(
+            "[dim]  qforge will drive the mode carrying the 0-1 transition. For a "
+            "multi-mode circuit, check that is the one you meant.[/dim]"
+        )
+        if not Confirm.ask("Register it as a qubit anyway?", default=True):
+            return
+
+    name = prompt(f"Name for this qubit [{device.name}]: ").strip() or device.name
+    if name in _qubit_names():
+        if not Confirm.ask(f"A qubit called '{name}' already exists. Replace it?", default=False):
+            return
+
+    # Every extra level multiplies into the Hilbert space of any multi-qubit
+    # workflow, so this is worth choosing deliberately rather than defaulting high.
+    level_items = [
+        ("4", "4 levels", "Matches the preset qubit types. Keeps two leakage levels."),
+        ("3", "3 levels", "Qubit plus one leakage level. Cheaper for many-qubit runs."),
+        ("2", "2 levels", "Strict two-level qubit. Cheapest, but no leakage information."),
+        ("5", "5 levels", "More leakage detail, at a cost in every multi-qubit simulation."),
+    ]
+    dim_choice = _flat_choose(level_items, title="How many levels should qforge keep?") or "4"
+    try:
+        truncated_dim = int(dim_choice)
+    except ValueError:
+        truncated_dim = 4
+
+    from qforge.core.device_qubit import device_qubit_params
+
+    params = device_qubit_params(
+        device.netlist.source,
+        truncated_dim=truncated_dim,
+        device_name=device.name,
+        source_path=device.netlist.source_path,
+    )
+
+    console.print(f"\n[green]Registering '{name}' as a device-backed qubit...[/green]")
+    try:
+        with console.status("[cyan]Building the qubit...[/cyan]"):
+            engine.create_qubit("device", name, params)
+    except Exception as exc:
+        console.print(f"[red]Could not register '{name}': {exc}[/red]")
+        _pause()
+        return
+
+    console.print(f"\n[bold green]Qubit '{name}' created from device '{device.name}'.[/bold green]")
+    console.print(
+        f"[dim]Saved with its netlist, so it survives a restart. It now appears "
+        f"wherever a qubit is asked for: gates, couplings, workflows and error "
+        f"correction. Keeping {truncated_dim} levels.[/dim]"
+    )
     _pause()
 
 

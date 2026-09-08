@@ -1,0 +1,26 @@
+* Zero-pi: a protected qubit built from two junctions and two superinductors.
+*
+* The point of the topology is that the two logical states have disjoint support,
+* which suppresses both relaxation and dephasing. It is also the most expensive
+* circuit here: three modes, so the Hilbert space grows as the product of three
+* cutoffs, and one analysis takes tens of seconds.
+*
+* The cutoffs below are deliberately coarse, for a first look. qforge's
+* convergence check will say the spectrum has not converged, which is true: raise
+* '.cutoff all' and watch the transitions settle. That is what the check is for.
+
+.title  Zero-pi
+.name   zero_pi
+
+J1  0  2  EJ=10.0  EC=20.0
+L1  2  3  EL=0.008
+J2  3  4  EJ=10.0  EC=20.0
+L2  4  0  EL=0.008
+C1  0  3  EC=0.02
+C2  2  4  EC=0.02
+
+.flux   1 = 0.5
+.cutoff all = 10
+.levels 4
+.options generate_noise_methods=false
+.end

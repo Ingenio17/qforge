@@ -148,3 +148,9 @@ Gate calibrations live in ``outputs/calib_cache.json``, keyed by qubit names, ga
 type, coupling and drive parameters. They persist deliberately, since the sweeps are
 expensive. Clear them with ``qforge cache clear`` after changing a qubit's physical
 parameters.
+
+``outputs/qubits/.qforge_metrics.json`` memoizes the frequency and anharmonicity
+shown when qubits are listed, so menus and pickers do not re-diagonalize every
+registered qubit each time they open. Entries are keyed by qubit type and
+parameters and stamped with the scqubits version, so they invalidate themselves
+when either changes. Nothing needs to be cleared by hand.

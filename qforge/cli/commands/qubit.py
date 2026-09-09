@@ -65,8 +65,8 @@ def create(qubit_type, name, ej, ec, el, flux, preset, output, relative):
 
 def _create_qubit(qubit_type, name, params, output=None, relative=False):
     """Internal function to create qubit (used by interactive mode too)."""
-    # Warn if qubit already exists
-    if name in [q["name"] for q in engine.list_qubits()]:
+    # Warn if qubit already exists (names only, so no spectra are computed)
+    if name in engine.list_qubit_names():
         console.print(f"[yellow]⚠ Qubit '{name}' already exists and will be overwritten.[/yellow]")
     
     # Unit mapping for display

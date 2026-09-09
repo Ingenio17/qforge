@@ -1,0 +1,23 @@
+* Three-junction flux qubit.
+*
+* A loop of three junctions, one of them smaller by a factor alpha. Near half a
+* flux quantum the two lowest states are clockwise and anticlockwise persistent
+* currents, and the gap between them is the qubit.
+
+.title  Three-junction flux qubit
+.name   flux_qubit
+
+.param  EJ0   = 35.0            ; GHz, the two large junctions
+.param  ALPHA = 0.7             ; the third junction is alpha times smaller
+
+J1  0  1  EJ=EJ0    EC=1.0
+J2  1  2  EJ=EJ0    EC=1.0
+J3  2  0  EJ={EJ0*ALPHA}  EC={1.0/ALPHA}
+
+Cg1 1  0  EC=50.0               ; small capacitance from each island to ground
+Cg2 2  0  EC=50.0
+
+.flux   1 = 0.5
+.cutoff all = 10
+.levels 5
+.end

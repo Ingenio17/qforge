@@ -1470,8 +1470,10 @@ class QForgeGUI(tk.Tk):
 
     def _refresh_engine(self):
         try:
+            # QubitEngine loads the session in its constructor, so the explicit
+            # load_session() that used to follow this line repeated the same
+            # work on every picker.
             self.engine = QubitEngine()
-            self.engine.load_session()
         except Exception:
             pass
 
@@ -1480,7 +1482,9 @@ class QForgeGUI(tk.Tk):
         if not self.engine:
             return []
         try:
-            return [q["name"] for q in self.engine.list_qubits()]
+            # Names only: a picker does not need frequencies, and computing
+            # them means diagonalizing every registered qubit.
+            return self.engine.list_qubit_names()
         except Exception:
             return []
 
@@ -1901,15 +1905,28 @@ class QForgeGUI(tk.Tk):
 
         # ── Two-qubit gate ─────────────────────────────────────────────── #
         if gate in ("CNOT", "CZ"):
-            remaining = [q for q in qubits if q != qubit]
-            if not remaining:
+            # Say how many qubits there are and what is missing, rather than
+            # stopping with a bare "you need two" after the user has already
+            # chosen a control qubit and a gate.
+            if len(qubits) < 2:
                 self._notify(
-                    "Need more qubits",
-                    "You need at least two qubits for a two-qubit gate.",
+                    "Need a second qubit",
+                    f"{gate} is a two-qubit gate, but only {len(qubits)} qubit is "
+                    f"registered:\n\n    {', '.join(qubits)}\n\n"
+                    f"Create a second one with 'Create a qubit', then run this again.",
                     kind="warning",
+                )
+                self._warn(
+                    f"{gate} needs two qubits; only {len(qubits)} registered "
+                    f"({', '.join(qubits)})."
                 )
                 return
 
+            if qubit not in qubits:
+                self._err(f"No qubit called '{qubit}'. Registered: {', '.join(qubits)}")
+                return
+
+            remaining = [q for q in qubits if q != qubit]
             qubit2 = self._ask_choice(
                 "Select Target Qubit",
                 "Select target qubit:",
@@ -1919,6 +1936,11 @@ class QForgeGUI(tk.Tk):
                 self._warn("Aborted.")
                 return
             qubit2 = qubit2.strip()
+            if qubit2 not in remaining:
+                self._err(
+                    f"'{qubit2}' cannot be the target. Pick one of: {', '.join(remaining)}"
+                )
+                return
 
             duration_str = self._ask_string("Duration", "Gate duration (ns):", "50.0")
             if duration_str is None:

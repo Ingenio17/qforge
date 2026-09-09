@@ -143,6 +143,7 @@ Where output goes
 
     outputs/
       qubits/.qforge_session.json     registered qubits
+      qubits/.qforge_metrics.json     memoized frequencies, so listing stays fast
       devices/.qforge_devices.json    designed devices
       calib_cache.json                gate calibrations
       runs/                           comparison runs, one directory each

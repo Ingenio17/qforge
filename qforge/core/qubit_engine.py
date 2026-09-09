@@ -2,10 +2,11 @@
 Qubit Engine: Wrapper around scqubits for qubit physics modeling.
 """
 
+import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 import numpy as np
 # Lazy imports for heavy libraries to speed up CLI startup
@@ -17,12 +18,32 @@ from qforge.config.defaults import QUBIT_PRESETS, NOISE_DEFAULTS, OUTPUT_DIRS
 
 class QubitEngine:
     """Engine for qubit modeling and physics calculations using scqubits."""
-    
+
+    # Frequency and anharmonicity follow from a qubit's type and parameters
+    # alone, never from its name, so they are memoized for the life of the
+    # process and shared across engine instances.
+    #
+    # This exists because listing qubits is a menu operation. The CLI wizard
+    # redraws its main menu after every action, and both it and the GUI resolve
+    # the qubit list again for each picker they open. Diagonalizing a fluxonium,
+    # a zero-pi or a designed device on every one of those made the menus lag.
+    # Sessions rebuild their qubit objects from the session file, which throws
+    # away whatever scqubits had cached on the old objects, so the memo has to
+    # live on the class rather than on a qubit.
+    # It is also written to disk, so a fresh process (every CLI command is one)
+    # does not repeat the work either. That mirrors how GateEngine persists its
+    # pulse calibrations, and for the same reason.
+    _metrics_cache: Dict[str, Tuple[float, float]] = {}
+    _metrics_cache_loaded: bool = False
+    _metrics_cache_dirty: bool = False
+    _METRICS_CACHE_LIMIT = 512
+
     def __init__(self):
         """Initialize the qubit engine."""
         self._qubits = {}  # Store created qubits
         self._ensure_output_dirs()
         self._session_file = Path(OUTPUT_DIRS["qubits"]) / ".qforge_session.json"
+        self._metrics_file = Path(OUTPUT_DIRS["qubits"]) / ".qforge_metrics.json"
         self._load_session()  # Load previously created qubits
 
     def load_session(self):
@@ -71,6 +92,18 @@ class QubitEngine:
             # Recreate qubits from session
             for name, qubit_data in session_data.items():
                 try:
+                    existing = self._qubits.get(name)
+                    if (
+                        existing is not None
+                        and existing["type"] == qubit_data["type"]
+                        and existing["params"] == qubit_data["params"]
+                    ):
+                        # Already in memory and unchanged on disk. Rebuilding it
+                        # would only discard the eigenvalues scqubits has cached
+                        # on the object, and the engines call load_session()
+                        # constantly.
+                        continue
+
                     qubit_obj = self._create_qubit_object(
                         qubit_data["type"],
                         qubit_data["params"]
@@ -207,29 +240,143 @@ class QubitEngine:
         del self._qubits[name]
         self._save_session()
     
+    @staticmethod
+    def _metrics_key(qubit_type: str, params: Dict[str, Any]) -> Optional[str]:
+        """
+        A deterministic cache key for one qubit's spectrum-derived metrics.
+
+        The parameters are hashed rather than stored verbatim, because a
+        device-backed qubit carries its entire netlist source in ``params`` and
+        the key ends up on disk.
+
+        Returns None for anything that will not serialize, in which case the
+        metrics are computed and simply not memoized. Listing qubits must never
+        fail because of the cache.
+        """
+        try:
+            payload = json.dumps([qubit_type, params], sort_keys=True, default=repr)
+        except Exception:
+            return None
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _metrics_stamp() -> str:
+        """
+        Identifies what produced the cached numbers, so an upgrade discards them.
+
+        The version is read from package metadata rather than by importing
+        scqubits, which would undo the lazy import that keeps CLI startup quick.
+        """
+        try:
+            from importlib.metadata import version
+            return f"scqubits={version('scqubits')}"
+        except Exception:
+            return "scqubits=unknown"
+
+    def _ensure_metrics_cache_loaded(self):
+        """Read memoized metrics from disk, at most once per process."""
+        if QubitEngine._metrics_cache_loaded:
+            return
+        QubitEngine._metrics_cache_loaded = True
+
+        if not self._metrics_file.exists():
+            return
+        try:
+            with open(self._metrics_file, 'r') as f:
+                stored = json.load(f)
+            if stored.get("stamp") != self._metrics_stamp():
+                return  # A different scqubits computed these; recompute instead.
+            for key, value in stored.get("entries", {}).items():
+                # Honour the same bound the in-memory cache uses, so a large
+                # file cannot grow the cache past it.
+                if len(QubitEngine._metrics_cache) >= self._METRICS_CACHE_LIMIT:
+                    break
+                QubitEngine._metrics_cache[key] = (float(value[0]), float(value[1]))
+        except Exception:
+            # A corrupt or unreadable cache just means recomputing.
+            QubitEngine._metrics_cache.clear()
+
+    def _flush_metrics_cache(self):
+        """Write newly computed metrics to disk, if there are any."""
+        if not QubitEngine._metrics_cache_dirty:
+            return
+        QubitEngine._metrics_cache_dirty = False
+        try:
+            payload = {
+                "stamp": self._metrics_stamp(),
+                "entries": {k: list(v) for k, v in QubitEngine._metrics_cache.items()},
+            }
+            with open(self._metrics_file, 'w') as f:
+                json.dump(payload, f)
+        except Exception:
+            # Same policy as the session file: never break a workflow over a cache.
+            pass
+
+    @classmethod
+    def _remember_metrics(cls, key: str, metrics: Tuple[float, float]):
+        """Memoize one qubit's metrics, dropping the oldest entry when full."""
+        if len(cls._metrics_cache) >= cls._METRICS_CACHE_LIMIT:
+            cls._metrics_cache.pop(next(iter(cls._metrics_cache)))
+        cls._metrics_cache[key] = metrics
+        cls._metrics_cache_dirty = True
+
+    def _qubit_metrics(self, data: Dict[str, Any]) -> Tuple[float, float]:
+        """
+        Frequency and anharmonicity in GHz for one registered qubit.
+
+        Diagonalizes on the first request for a given type and parameter set,
+        then answers from the memo.
+        """
+        self._ensure_metrics_cache_loaded()
+
+        key = self._metrics_key(data["type"], data.get("params", {}))
+        if key is not None:
+            cached = QubitEngine._metrics_cache.get(key)
+            if cached is not None:
+                return cached
+
+        try:
+            evals = data["object"].eigenvals(evals_count=3)
+            frequency = float(evals[1] - evals[0])
+            anharmonicity = float((evals[2] - evals[1]) - (evals[1] - evals[0]))
+        except Exception:
+            frequency = 0.0
+            anharmonicity = 0.0
+
+        # A failure is cached too: the same type and parameters will fail the
+        # same way, and retrying a slow diagonalization on every redraw is the
+        # thing this cache exists to avoid.
+        metrics = (frequency, anharmonicity)
+        if key is not None:
+            self._remember_metrics(key, metrics)
+        return metrics
+
+    def list_qubit_names(self) -> List[str]:
+        """
+        Names of every registered qubit, in the order they were created.
+
+        Nothing is diagonalized, so this is the call to use for menus, pickers
+        and duplicate-name checks that need the names and not the physics.
+        """
+        return list(self._qubits.keys())
+
     def list_qubits(self) -> List[Dict]:
         """List all created qubits with their properties."""
         qubit_list = []
-        
+
         for name, data in self._qubits.items():
-            qubit = data["object"]
-            
-            # Compute basic properties
-            try:
-                evals = qubit.eigenvals(evals_count=3)
-                frequency = evals[1] - evals[0]
-                anharmonicity = (evals[2] - evals[1]) - (evals[1] - evals[0])
-            except:
-                frequency = 0.0
-                anharmonicity = 0.0
-            
+            frequency, anharmonicity = self._qubit_metrics(data)
+
             qubit_list.append({
                 "name": name,
                 "type": data["type"],
                 "frequency": frequency,
                 "anharmonicity": anharmonicity,
             })
-        
+
+        # One write per listing pass at most, rather than one per qubit.
+        self._flush_metrics_cache()
+
         return qubit_list
     
     def compute_spectrum(self, qubit, n_levels: int = 5, subtract_ground: bool = False) -> np.ndarray:

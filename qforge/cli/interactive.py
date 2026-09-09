@@ -232,7 +232,9 @@ def _section(title):
 
 
 def _qubit_names():
-    return [q["name"] for q in engine.list_qubits()]
+    # Names only: picking a qubit from a menu does not need its spectrum, and
+    # asking for one diagonalizes every registered qubit.
+    return engine.list_qubit_names()
 
 
 def _completer(words):
@@ -712,19 +714,47 @@ def _wizard_simulate_gate():
     if not gate:
         return
 
-    qubit = prompt("Qubit (control, for a two-qubit gate): ", completer=_completer(qubits)).strip()
+    # A two-qubit gate needs two qubits, so say so before asking for either of
+    # them. Prompting for a control first and only then reporting that there is
+    # nothing to pair it with is what made the target question look skipped.
+    two_qubit = gate in ("CNOT", "CZ")
+    if two_qubit and len(qubits) < 2:
+        console.print(
+            f"\n[yellow]{gate} is a two-qubit gate, but only {len(qubits)} qubit is "
+            f"registered:[/yellow] {', '.join(qubits)}"
+        )
+        console.print(
+            "[dim]Create a second one with 'Create a qubit' from the main menu, then "
+            "come back.[/dim]"
+        )
+        _pause()
+        return
+
+    qubit = prompt(
+        "Control qubit: " if two_qubit else "Qubit: ", completer=_completer(qubits)
+    ).strip()
     if not qubit:
         return
 
-    if gate in ("CNOT", "CZ"):
-        remaining = [q for q in qubits if q != qubit]
-        if not remaining:
-            console.print("[yellow]Need a second qubit for a two-qubit gate.[/yellow]")
+    if two_qubit:
+        if qubit not in qubits:
+            console.print(
+                f"[red]No qubit called '{qubit}'.[/red] "
+                f"[dim]Registered: {', '.join(qubits)}[/dim]"
+            )
             _pause()
             return
 
+        remaining = [q for q in qubits if q != qubit]
         qubit2 = prompt("Target qubit: ", completer=_completer(remaining)).strip()
         if not qubit2:
+            return
+        if qubit2 not in remaining:
+            console.print(
+                f"[red]'{qubit2}' cannot be the target.[/red] "
+                f"[dim]Pick one of: {', '.join(remaining)}[/dim]"
+            )
+            _pause()
             return
 
         duration = Prompt.ask("Duration (ns)", default="50.0")

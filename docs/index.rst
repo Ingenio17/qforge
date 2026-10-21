@@ -2,23 +2,24 @@
 qforge
 ======
 
-qforge is a terminal native toolkit for simulating superconducting quantum hardware.
-It starts from the circuit parameters you would hand a fabricator, builds the
-Hamiltonian those parameters imply, drives it with real pulses, and carries the
-result up through calibrated gates, QASM circuits and error correction.
+qforge is a terminal-native toolkit for simulating superconducting quantum hardware.
+It takes the circuit parameters that define a physical device, builds the Hamiltonian
+those parameters imply, drives it with pulses, and carries the result up through
+calibrated gates, OpenQASM circuits and stabilizer error correction.
 
-Most quantum simulators start at the gate and multiply unitaries. qforge starts one
-layer below, at :math:`E_J`, :math:`E_C`, :math:`E_L` and flux, and never throws
-that layer away. A logical X is a microwave pulse on a charge operator. A CNOT is a
-flux pulse through an avoided crossing. Leakage into :math:`|2\rangle` is something
-you can measure, because the third level is still there.
+The distinction from a gate-level simulator is where the model starts. qforge works
+from :math:`E_J`, :math:`E_C`, :math:`E_L`, flux and offset charge, and keeps that
+layer available at every stage above it. An X gate is a microwave pulse acting on a
+charge operator. A CNOT is whichever pulse the available coupling supports. Leakage
+out of the computational subspace is measurable because the higher levels are still
+in the simulation.
 
-The chain
-=========
+The simulation chain
+====================
 
 .. code-block:: text
 
-    circuit netlist  or  qubit parameters (EJ, EC, EL, flux, ng)
+    circuit netlist, or preset qubit parameters (EJ, EC, EL, flux, ng)
         │
         ▼
     Hamiltonian and eigenstates                       scqubits
@@ -33,49 +34,47 @@ The chain
     calibrated gates, fidelity, leakage, tomography
         │
         ▼
-    OpenQASM circuits scheduled on a real topology
+    OpenQASM circuits scheduled on a declared topology
         │
         ▼
     stabilizer error correction with feed-forward
 
-Every stage is a plain Python object you can inspect, and every stage has a CLI
-command behind it.
+Each stage is an ordinary Python object and can be used on its own.
 
-What is in the box
-==================
+Components
+==========
 
 .. list-table::
    :header-rows: 1
    :widths: 22 78
 
-   * - Area
-     - What it does
+   * - Page
+     - Contents
    * - :doc:`qubits`
-     - Transmon, fluxonium, flux and zero-pi models. Spectra, anharmonicity,
-       coherence estimates, parameter sweeps.
-   * - :doc:`gates`
-     - Physical single and two qubit gates. Gaussian and DRAG pulses, virtual Z,
-       tunable coupler CZ, calibration with a persistent cache, fidelity and
-       tomography.
+     - Transmon, fluxonium, flux and zero-pi models, plus qubits backed by a custom
+       circuit. Spectra, anharmonicity, coherence estimates, parameter sweeps.
    * - :doc:`couplings`
-     - Capacitive, inductive and tunable coupler interaction Hamiltonians.
+     - Capacitive, inductive and tunable-coupler interaction Hamiltonians.
+   * - :doc:`gates`
+     - Single and two-qubit gates as pulses. Gaussian and DRAG envelopes, virtual Z,
+       tunable-coupler CZ, the microwave-activated CNOT, calibration with a
+       persistent cache, fidelity and tomography.
    * - :doc:`qasm`
-     - A dependency free OpenQASM 2.0 parser that compiles down to a hardware
-       native basis and schedules it as pulses.
+     - An OpenQASM 2.0 parser with no external circuit dependency, compiling to a
+       hardware-native basis and scheduling it as pulses.
    * - :doc:`error_correction`
-     - Declarative CSS stabilizer codes. The 3 qubit repetition code, the 7 qubit
-       Steane code and the 9 qubit Shor code, with real syndrome extraction and
-       feed-forward correction.
+     - CSS stabilizer codes declared as data. The 3-qubit repetition code, the
+       7-qubit Steane code and the 9-qubit Shor code, with syndrome extraction,
+       mid-circuit measurement and feed-forward correction.
    * - :doc:`devices`
-     - Write your own circuit as a SPICE style netlist, quantize it, and get the
-       spectrum, dispersion and coherence of whatever you drew.
+     - A SPICE-style netlist language for custom circuits, quantized through
+       scqubits. Spectrum, dispersion, coherence, and registration as a qubit.
 
-Where to start
-==============
+Getting started
+===============
 
-If you have never used qforge, install it and run ``qforge --interactive``. The
-wizard covers most of the toolkit without writing any code. If you would rather
-read first, :doc:`quickstart` shows the same ground in Python.
+``qforge --interactive`` opens a guided wizard that covers most of the toolkit
+without writing code. :doc:`quickstart` covers the same ground in Python.
 
 .. toctree::
    :maxdepth: 2

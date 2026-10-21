@@ -1,0 +1,17 @@
+* Fluxonium: a junction shunted by a superinductor.
+*
+* The large inductance (hundreds of nH, from an array of junctions in practice)
+* gives a small EL, and at half a flux quantum the two lowest states are deep in
+* separate wells. That produces a very low transition frequency and long
+* coherence. Sweep the flux from 0 to 1 to see the sweet spot.
+
+.title  Fluxonium
+.name   fluxonium
+
+J1  1  0  Ic=17.9nA  Cj=7.75fF  ; EJ ~ 8.9 GHz, EC ~ 2.5 GHz
+L1  1  0  327nH                 ; superinductor -> EL ~ 0.5 GHz
+
+.flux   1 = 0.5                 ; half a flux quantum: the sweet spot
+.cutoff ext1 = 110              ; the flux variable needs a fine grid here
+.levels 6
+.end

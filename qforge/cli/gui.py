@@ -1989,10 +1989,23 @@ class QForgeGUI(tk.Tk):
                     times = res["times"]
                     pops  = res["populations"]
 
+                    schedule = res.get("schedule")
+                    if schedule:
+                        self._dim(
+                            f"Conditional π pulse on {qubit2} at "
+                            f"{schedule['frequency']:.5f} GHz "
+                            f"(amplitude {schedule['amplitude'] * 1e3:.2f} MHz). "
+                            f"The control shifts that transition by "
+                            f"{schedule['zeta_ghz'] * 1e3:.3f} MHz."
+                        )
+
                     print(f"\n[bold]Final Populations:[/bold]")
                     for state, p_arr in pops.items():
                         bar = "█" * int(p_arr[-1] * 20) + "░" * (20 - int(p_arr[-1] * 20))
                         print(f"  [cyan]|{state}⟩[/cyan]  {bar}  [orange]{p_arr[-1]:.4f}[/orange]")
+
+                    for warning in res.get("warnings", []):
+                        self._warn(warning)
 
                     try:
                         data   = [pops[k] for k in ("00", "01", "10", "11") if k in pops]

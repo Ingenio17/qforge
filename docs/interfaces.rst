@@ -2,10 +2,10 @@
 Interfaces
 ==========
 
-qforge has four front ends over the same engines: an interactive terminal wizard, a
-desktop GUI, a scriptable CLI, and the Python API. None of them owns any physics.
-Every one of them delegates to the engines described in the rest of this
-documentation, so anything you can do in the wizard you can also do in a script.
+qforge provides four front ends over the same engines: an interactive terminal
+wizard, a desktop GUI, a scriptable CLI, and the Python API. None of them contains
+physics. Each delegates to the engines described elsewhere in this documentation, so
+anything available in the wizard is also available from a script.
 
 Interactive mode
 ================
@@ -26,23 +26,23 @@ The menu
 --------
 
 **Qubits.** Create a qubit from a type and a preset, with the wizard prompting for
-whichever parameters that model actually needs. List, analyze (spectrum,
-anharmonicity, coherence), compare several side by side, or delete one along with its
-cached calibrations.
+the parameters that model requires, or from a circuit designed under "Design a
+device". List, analyze (spectrum, anharmonicity, coherence), compare several side by
+side, or delete one along with its cached calibrations.
 
 **Gates and circuits.** Simulate a one or two qubit gate and watch the populations
 evolve, with the coupling type, pulse duration and noise model all adjustable.
 "Analyze multi-qubit gates" benchmarks CNOT or CZ across coupling architectures and
 strengths and prints a comparison table.
 
-**Workflows.** Run a full workflow: pick your qubits, define the topology, point at
-an OpenQASM file, and choose whether to run it bare or encoded. Error correction
-offers the repetition, Steane and Shor codes, and warns you before it builds a state
-vector large enough to hurt.
+**Workflows.** Select the qubits, define the topology, supply an OpenQASM file, and
+choose whether to run it unencoded or under a code. Error correction offers the
+repetition, Steane and Shor codes, and warns before building a state vector large
+enough to exhaust memory.
 
-**Device design.** Start from one of nine templates or load a netlist you wrote. Then
-analyze it, show its schematic, sweep a parameter, or export the netlist back out.
-The format reference is one menu item away.
+**Device design.** Start from one of nine templates or load an existing netlist, then
+analyze it, display its schematic, sweep a parameter, or export the netlist. The
+format reference is available from the same menu.
 
 **Learn.** Run any of the bundled example scripts, or open the help page.
 
@@ -54,9 +54,9 @@ Graphical interface
     $ qforge --gui
 
 The GUI is a tkinter application covering the same workflows as the wizard, with a
-dark theme, a sidebar of actions and a console pane that renders Rich tables and
-plotext charts faithfully, box drawing characters and all. Pickers are searchable, so
-selecting a qubit or a template is click or type rather than remembering a name.
+sidebar of actions and a console pane that reproduces Rich tables and plotext charts,
+including their box-drawing characters. Selection dialogs are searchable, so a qubit
+or template can be chosen from a filtered list rather than typed from memory.
 
 It needs a desktop session. Everything else in qforge runs headless.
 
@@ -75,7 +75,7 @@ full reference.
 Python API
 ==========
 
-The engines are the real interface. Import them and go:
+The engines are the primary interface:
 
 .. code-block:: python
 
@@ -86,14 +86,14 @@ The engines are the real interface. Import them and go:
     from qforge.core.device_engine import DeviceEngine
 
 Simulation methods return structured results rather than plotting, so they compose
-into your own analysis. See :doc:`quickstart` to get going and :doc:`api` for the
-generated reference.
+into further analysis. See :doc:`quickstart` for a worked introduction and
+:doc:`api` for the generated reference.
 
 Try it in a browser
 ===================
 
-Below is a working sandbox with qforge and its numerical backends already installed,
-running on MyBinder. Nothing to install locally.
+The sandbox below runs on MyBinder with qforge and its numerical backends already
+installed, and requires no local installation.
 
 .. note::
 

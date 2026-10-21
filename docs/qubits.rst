@@ -2,10 +2,10 @@
 Qubits
 ======
 
-``QubitEngine`` is the front door to qforge. It builds superconducting qubit models
-through scqubits, keeps them in a named registry, and answers the questions you ask
-of a circuit before you ever drive it: where are its levels, how anharmonic is it,
-how long will it live, and what happens if you change one parameter.
+``QubitEngine`` builds superconducting qubit models through scqubits, keeps them in
+a named registry, and answers the questions that precede any dynamics: where the
+levels sit, how anharmonic the circuit is, how long it is likely to live, and how
+those change with a parameter.
 
 .. code-block:: python
 
@@ -15,13 +15,14 @@ how long will it live, and what happens if you change one parameter.
     q = engine.create_qubit("transmon", "Q1", {"EJ": 15.0, "EC": 0.3})
 
 The registry is persistent. Every other engine refers to qubits by name, so ``"Q1"``
-is enough to drive a gate, build a coupling or run a circuit.
+is sufficient to drive a gate, declare a coupling or run a circuit.
 
 Supported models
 ================
 
-Four scqubits circuit types are wired up. They take different parameters, and qforge
-deliberately does not paper over that.
+Four scqubits circuit types are available, along with a fifth backed by a custom
+netlist. They take different parameters, and qforge keeps those differences
+explicit rather than hiding them behind a common signature.
 
 Transmon
 --------
@@ -30,9 +31,8 @@ Transmon
 
     H = 4 E_C (\hat{n} - n_g)^2 - E_J \cos\hat{\varphi}
 
-A junction shunted by a large capacitor. Large :math:`E_J/E_C` flattens the charge
-dispersion, which is the entire point, at the cost of a small anharmonicity of
-roughly 200 to 300 MHz.
+A junction shunted by a large capacitor. A large :math:`E_J/E_C` ratio flattens the
+charge dispersion, at the cost of a small anharmonicity of roughly 200 to 300 MHz.
 
 .. list-table::
    :header-rows: 1
@@ -55,7 +55,8 @@ roughly 200 to 300 MHz.
      - Charge basis cutoff. Too small and the ground state lands hundreds of MHz off.
    * - ``truncated_dim``
      - 4
-     - How many eigenstates the rest of qforge keeps. This is your leakage budget.
+     - Eigenstates retained by the rest of qforge, which sets how much leakage the
+       simulation can represent.
 
 Fluxonium
 ---------
@@ -85,23 +86,48 @@ Parameters: ``EJ1``, ``EJ2``, ``EJ3`` (10.0 each), ``ECJ1``, ``ECJ2``, ``ECJ3``
 Zero-pi
 -------
 
-A noise protected circuit with two junctions, two superinductors and three modes.
-Slow to diagonalize, which is the price of the topology.
+A noise-protected circuit with two junctions, two superinductors and three modes.
+The three-mode Hilbert space makes it considerably slower to diagonalize than the
+other presets.
 
 Parameters: ``EJ`` (10.0), ``EL`` (0.1), ``ECJ`` (20.0), ``EC`` (0.04), ``ng``
 (0.0), ``flux`` (0.0), ``grid`` (a ``(min, max, points)`` tuple, default
 ``(-6.0, 6.0, 100)``), ``ncut`` (30).
 
-.. note::
+Device-backed
+-------------
 
-   If the circuit you want is none of these four, write it as a netlist and let
-   qforge quantize it. See :doc:`devices`.
+A circuit described by a netlist, quantized through scqubits' symbolic circuit
+support and adapted to the same interface the preset models present. Registering one
+uses the ``"device"`` type, with the netlist source carried in ``params``:
+
+.. code-block:: python
+
+    from qforge.core.device_qubit import device_qubit_params
+
+    params = device_qubit_params(netlist_source, truncated_dim=4)
+    engine.create_qubit("device", "custom", params)
+
+The source is stored in full rather than as a path, so a registered qubit survives
+edits to the file it came from and a session file remains a complete record of the
+circuit. Once registered it behaves like any preset qubit throughout gates,
+couplings, workflows and error correction.
+
+Two details distinguish it from a preset model. A designed circuit may carry several
+modes, so the adapter selects the one holding the 0-1 transition by scoring each
+mode's charge operator as :math:`|\langle 0|Q|1\rangle| / \sqrt{\langle 0|Q^2|0\rangle}`,
+which compares modes on equal footing despite their different operator scalings. And
+``phi_operator`` is exposed only for extended modes, since a periodic mode's phase is
+compact and has no well-defined operator, which keeps the ``hasattr`` check in
+``GateEngine`` honest.
+
+The full workflow, from netlist to registered qubit, is in :doc:`devices`.
 
 Presets
 =======
 
-``qforge/config/defaults.py`` holds starting points for each type, so you do not
-have to remember plausible values.
+``qforge/config/defaults.py`` holds starting points for each of the four preset
+types.
 
 .. code-block:: python
 
@@ -158,14 +184,13 @@ Spectra
     f12 = evals[2] - evals[1]
     alpha_mhz = (f12 - f01) * 1e3
 
-Eigenvalues come back in GHz. With ``subtract_ground=True`` the ground state sits at
-zero, which is what you want for reading transition frequencies straight off the
-array.
+Eigenvalues are returned in GHz. With ``subtract_ground=True`` the ground state sits
+at zero, so transition frequencies can be read directly off the array.
 
-Anharmonicity is the number that decides whether a circuit is usable as a qubit. A
-pulse short enough to be fast has a bandwidth wide enough to drive
-:math:`1 \rightarrow 2` along with :math:`0 \rightarrow 1`, and it is
-:math:`\alpha = f_{12} - f_{01}` that separates them.
+Anharmonicity determines whether a circuit is usable as a qubit at all. A pulse short
+enough to be fast is spectrally wide enough to drive :math:`1 \rightarrow 2` along
+with :math:`0 \rightarrow 1`, and :math:`\alpha = f_{12} - f_{01}` is what separates
+the two.
 
 Coherence
 =========
@@ -183,12 +208,12 @@ to microseconds.
 
 :math:`T_2` is estimated as :math:`1.4 \times T_1`, that is the :math:`2T_1` ceiling
 scaled by 0.7 to stand in for typical pure dephasing. It is a rule of thumb, not a
-noise calculation. If dephasing is the interesting part of your problem, model it
-explicitly rather than leaning on this number.
+noise calculation. Where dephasing is the quantity under study, it should be modelled
+explicitly rather than inferred from this estimate.
 
-When scqubits cannot compute a channel for the model in question, qforge falls back
-to the values in ``NOISE_DEFAULTS`` and labels them ``"Estimated"``. Check the
-``limit`` field before quoting a number.
+When scqubits cannot compute a channel for a given model, qforge falls back to the
+values in ``NOISE_DEFAULTS`` and labels them ``"Estimated"``. The ``limit`` field
+records which case applies.
 
 For a noise channel breakdown driven by the circuit topology itself, design the
 circuit as a device and call ``QuantumDevice.coherence()``. See :doc:`devices`.
@@ -208,9 +233,9 @@ Parameter sweeps
         property_name="frequency",   # or "anharmonicity", "T1", "T2"
     )
 
-Each point builds a fresh qubit, computes the property and moves on. Frequency comes
-back in GHz, anharmonicity in MHz, coherence times in microseconds. Points that fail
-to converge are skipped rather than aborting the sweep.
+Each point builds a fresh qubit and computes the requested property. Frequency is
+returned in GHz, anharmonicity in MHz, and coherence times in microseconds. Points
+that fail to converge are skipped rather than aborting the sweep.
 
 Visualization
 =============
@@ -227,12 +252,12 @@ Visualization
         save=True,
     )
 
-``TerminalPlotter`` draws in the terminal through plotext and needs no display.
+``TerminalPlotter`` draws through plotext and requires no display.
 ``visualize_enhanced`` writes matplotlib figures under ``outputs/plots/`` and returns
-the paths it wrote.
+the paths written.
 
-The engines themselves never plot. Simulation produces a structured result and
-rendering is a separate step, so everything stays usable headless.
+The engines do not plot. Simulation produces a structured result and rendering is a
+separate step, which keeps every method usable headless.
 
 Export
 ======
@@ -255,5 +280,5 @@ Managing the registry
     engine.delete_qubit("Q1")
     engine.load_session()    # re-read the session file from disk
 
-``get_qubit`` raises when the name is unknown rather than returning ``None``, so a
-typo fails where you made it.
+``get_qubit`` raises on an unknown name rather than returning ``None``, so a mistyped
+name fails at the point of use.

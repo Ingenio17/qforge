@@ -11,9 +11,9 @@ From PyPI
 
    $ pip install qforge
 
-That pulls in the whole simulation stack: scqubits for circuit physics, QuTiP for
-dynamics, plus NumPy, SciPy, matplotlib, pandas, Click, Rich, prompt-toolkit and
-plotext for the terminal interface.
+This installs the full simulation stack: scqubits for circuit physics, QuTiP for
+dynamics, and NumPy, SciPy, matplotlib, pandas, Click, Rich, prompt-toolkit and
+plotext for the numerics and the terminal interface.
 
 From source
 ===========
@@ -24,8 +24,8 @@ From source
    $ cd qforge
    $ pip install -e .
 
-Use ``pip install -e ".[dev]"`` if you plan to run the test suite. That adds
-pytest, pytest-cov, Black, Ruff and mypy.
+Use ``pip install -e ".[dev]"`` to run the test suite, which adds pytest,
+pytest-cov, Black, Ruff and mypy.
 
 Optional extras
 ===============
@@ -44,8 +44,8 @@ Optional extras
      - Qiskit Metal, for chip layout work. Large, and not needed for any of the
        physics in this documentation.
 
-Nothing in the core toolkit imports Qiskit Metal, so skip that extra unless you
-are doing layout.
+No part of the core toolkit imports Qiskit Metal, so that extra is only needed for
+layout work.
 
 Checking the install
 ====================
@@ -55,16 +55,15 @@ Checking the install
    $ qforge info
    $ qforge --interactive
 
-``qforge info`` prints the version and the engines that loaded. If the interactive
-wizard opens and lets you create a transmon, the numerical stack is working.
+``qforge info`` prints the version and the components that loaded. If the wizard
+opens and can create a transmon, the numerical stack is working.
 
 Notes
 =====
 
-Installing from source builds no native extensions of its own, but scqubits and
-QuTiP do ship compiled code. On platforms without prebuilt wheels you will need a
-working C/C++ toolchain.
+qforge builds no native extensions of its own, but scqubits and QuTiP ship compiled
+code. A C/C++ toolchain is required on platforms without prebuilt wheels for them.
 
-qforge writes simulation output under ``outputs/`` relative to the directory you
-run it from: registered qubits, designed devices, plots, runs and the gate
-calibration cache. ``qforge clean`` clears it out.
+Simulation output is written under ``outputs/``, relative to the working directory:
+registered qubits, designed devices, plots, runs and the gate calibration cache.
+``qforge clean`` removes it.

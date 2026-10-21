@@ -2,13 +2,13 @@
 Error correction
 ================
 
-qforge runs stabilizer error correction as physics, not bookkeeping. Logical qubits
-are expanded into real physical qubits, syndromes are extracted with actual CNOT
-drives onto ancillas, those ancillas are projectively measured so the wavefunction
-genuinely collapses, and the correction is fed forward as a Pauli applied to the
-data.
+Stabilizer error correction is simulated at the physical level rather than tracked
+symbolically. Logical qubits are expanded into physical qubits, syndromes are
+extracted with CNOT drives onto ancillas, those ancillas are projectively measured so
+the wavefunction collapses, and the correction is fed forward as a Pauli applied to
+the data.
 
-Three codes ship today:
+Three codes are implemented:
 
 .. list-table::
    :header-rows: 1
@@ -86,15 +86,15 @@ The workflow
         ▼
     decode by projective measurement of the logical Z operator
 
-Physical qubits are clones of the logical qubit: same scqubits type, same
-parameters. They are registered while the workflow runs and deleted in a ``finally``
-block afterwards, so they never linger in your qubit list.
+Physical qubits are clones of the logical qubit, with the same scqubits type and
+parameters. They are registered for the duration of the workflow and deleted in a
+``finally`` block afterwards, so they do not remain in the qubit list.
 
 Stabilizer codes are data
 =========================
 
-The engine hard codes nothing about any particular code. Everything it needs lives in
-a ``StabilizerCode`` in ``qforge/core/stabilizer_codes.py``:
+The engine hard-codes nothing about any particular code. Everything it requires is
+declared in a ``StabilizerCode`` in ``qforge/core/stabilizer_codes.py``:
 
 .. code-block:: python
 
@@ -122,10 +122,10 @@ Adding a fourth CSS code means writing one of these. It does not mean touching
 The CSS restriction
 -------------------
 
-Every generator must be uniformly X-type or Z-type across the qubits it touches.
-No mixed generators, no bare Y. That is the Calderbank-Shor-Steane restriction, and
-it is what makes one generic syndrome extraction circuit work for every code the
-engine supports.
+Every generator must be uniformly X-type or Z-type across the qubits it acts on,
+with no mixed generators and no bare Y. This is the Calderbank-Shor-Steane
+restriction, and it is what allows one generic syndrome-extraction circuit to serve
+every code the engine supports.
 
 Corrections are lists rather than single tuples because independent generators can
 diagnose independent errors that need fixing at the same time. A Shor code syndrome
@@ -146,12 +146,12 @@ Then that one ancilla is measured, the wavefunction collapses, and the bit is
 recorded. Once every generator has reported, the full syndrome is looked up and each
 correction applied, and any ancilla left in :math:`|1\rangle` is reset with an X.
 
-Measuring generators one at a time is not an approximation. A valid stabilizer code's
-generators mutually commute, so sequential measurement gives exactly the same joint
-outcome distribution and the same post-measurement state as a joint measurement
-would. The reason to do it this way is size: each simulated subsystem is bounded by
-the largest generator weight, up to 7 qubits for Shor, instead of the code's full
-qubit count.
+Measuring generators one at a time is exact rather than an approximation. The
+generators of a valid stabilizer code mutually commute, so sequential measurement
+yields the same joint outcome distribution and the same post-measurement state as a
+joint measurement. The motivation is size: each simulated subsystem is bounded by the
+largest generator weight, at most 7 qubits for the Shor code, rather than by the
+code's full qubit count.
 
 Decoding
 ========
@@ -165,12 +165,12 @@ Decoding is a joint projective measurement of the declared logical Z operator, w
 It is joint across all logical qubits, so entanglement between logical qubits
 survives into the returned populations.
 
-This matters, and a simpler reading of the data qubit populations would be wrong in
-general. The repetition code's codewords happen to be computational basis states, so
-majority voting the raw populations gives the same answer there. It does not for the
-Shor code: :math:`|0\rangle_L` and :math:`|1\rangle_L` touch exactly the same basis
-strings with exactly the same probabilities and differ only in relative phase. A
-population reading of the diagonal cannot see that. A logical Z measurement can.
+A simpler reading of the data-qubit populations would be incorrect in general. The
+repetition code's codewords are computational basis states, so majority voting the
+raw populations gives the same answer there. It does not for the Shor code, where
+:math:`|0\rangle_L` and :math:`|1\rangle_L` occupy the same basis strings with the
+same probabilities and differ only in relative phase. Reading the diagonal cannot
+distinguish them; a logical Z measurement can.
 
 The codes
 =========
@@ -187,8 +187,8 @@ Data D0, D1, D2 with ancillas measuring :math:`Z_0 Z_1` and :math:`Z_1 Z_2`.
     (A0=1, A1=1)  X on D1
     (A0=0, A1=1)  X on D2
 
-Bit flips only. Its :math:`|0\rangle_L` is just :math:`|000\rangle`, so the encoding
-circuit is a formal no-op, declared anyway for uniformity.
+Bit flips only. Its :math:`|0\rangle_L` is :math:`|000\rangle`, so the encoding
+circuit is a formal no-op, declared for uniformity with the other codes.
 
 7 qubit Steane
 --------------
@@ -202,10 +202,10 @@ X-type and Z-type generators come from the same 3 by 7 parity check matrix:
         [ 0 1 1 0 0 1 1 ]   qubits {1,2,5,6}
         [ 0 0 0 1 1 1 1 ]   qubits {3,4,5,6}
 
-Column :math:`j` is the binary representation of :math:`j+1`, so decoding needs no
-lookup search: read the three Z-type syndrome bits as a binary number and you have
-the 1-indexed qubit that suffered a bit flip. The three X-type bits do the same for
-phase flips, and both corrections can apply together.
+Column :math:`j` is the binary representation of :math:`j+1`, so decoding requires no
+lookup search: the three Z-type syndrome bits read as a binary number give the
+1-indexed qubit that suffered a bit flip. The three X-type bits do the same for phase
+flips, and both corrections may apply together.
 
 Steane uses the obvious logical operators, transversal X for :math:`\bar{X}` and
 transversal Z for :math:`\bar{Z}`. It also has a valid transversal Hadamard, and
@@ -256,8 +256,8 @@ final pass and nothing mid-circuit.
 Do not turn it on casually for circuits containing Hadamards. Stabilizer measurement
 projects the state, and measuring Z-type stabilizers on a qubit sitting in an X-basis
 superposition collapses it. That is correct physics, and it will also destroy the
-superposition your algorithm depends on. Use ``ec_every_n_gates=0`` unless you
-specifically want to study repeated rounds.
+superposition the algorithm depends on. Leave ``ec_every_n_gates=0`` unless repeated
+rounds are the subject of the study.
 
 Memory
 ======
@@ -305,5 +305,5 @@ Writing a new code
            code=MY_CODE,
        )
 
-No decode callback is needed. The generic decoder measures whatever logical Z
-operator you declared.
+No decode callback is required. The generic decoder measures the declared logical Z
+operator.

@@ -791,9 +791,22 @@ def _wizard_simulate_gate():
             times = res["times"]
             pops = res["populations"]
 
+            schedule = res.get("schedule")
+            if schedule:
+                console.print(
+                    f"\n[dim]Conditional pi pulse on {qubit2} at "
+                    f"{schedule['frequency']:.5f} GHz "
+                    f"(amplitude {schedule['amplitude'] * 1e3:.2f} MHz). "
+                    f"The control shifts that transition by "
+                    f"{schedule['zeta_ghz'] * 1e3:.3f} MHz.[/dim]"
+                )
+
             console.print("\n[bold]Final populations[/bold]")
             for state, p_arr in pops.items():
                 console.print(f"  |{state}>: {p_arr[-1]:.4f}")
+
+            for warning in res.get("warnings", []):
+                console.print(f"\n[yellow]Heads up:[/yellow] [dim]{warning}[/dim]")
 
             from qforge.utils.terminal_plot import TerminalPlotter
 

@@ -2,8 +2,8 @@
 CLI reference
 =============
 
-Every command delegates to an engine. Nothing here holds physics of its own, so
-anything below is also reachable from Python.
+Every command delegates to an engine. The CLI contains no physics of its own, so
+everything below is also reachable from Python.
 
 ``--help`` works at every level: ``qforge --help``, ``qforge qubit --help``,
 ``qforge qubit create --help``.
@@ -21,8 +21,8 @@ Top level
     $ qforge info              # version and loaded components
     $ qforge citations         # BibTeX for scqubits, QuTiP and Qiskit
 
-Please do run ``qforge citations`` if you publish. qforge stands on scqubits and
-QuTiP, and both deserve the citation.
+``qforge citations`` prints BibTeX entries for the libraries qforge is built on.
+scqubits and QuTiP carry most of the numerical work and should be cited alongside it.
 
 Qubits
 ======
@@ -55,9 +55,10 @@ Qubits
    * - ``delete``
      - ``NAME``
 
-``--type`` is an option, not a positional argument. Explicit ``--EJ`` and friends
-override whatever ``--preset`` supplied. ``--relative`` displays energies against the
-ground state, which is usually what you want for reading off transition frequencies.
+``--type`` is an option rather than a positional argument. Explicit parameters such
+as ``--EJ`` override any value supplied by ``--preset``. ``--relative`` displays
+energies against the ground state, which is the convenient form for reading
+transition frequencies.
 
 Gates
 =====
@@ -73,8 +74,8 @@ matplotlib figure under ``outputs/plots/``.
 
 Populations are plotted in the terminal either way.
 
-Two qubit gates, calibration and QASM workflows are Python API and wizard territory
-today. See :doc:`quickstart` and :doc:`interfaces`.
+Two-qubit gates, calibration and QASM workflows are currently available only through
+the Python API and the wizard. See :doc:`quickstart` and :doc:`interfaces`.
 
 Comparison
 ==========
@@ -88,8 +89,9 @@ Options: ``--qubits`` (comma separated names or types), ``--metrics`` (coherence
 fidelity, frequency, anharmonicity, all), ``--gates`` to also simulate dynamics per
 qubit, ``--tag`` to label the run, ``--output/-o`` for raw JSON.
 
-Named qubits are taken from your session. Bare type names build one from that type's
-defaults, so you can compare architectures without registering anything.
+Named qubits are taken from the session. A bare type name builds a temporary qubit
+from that type's defaults, which allows architectures to be compared without
+registering anything.
 
 Results land in a timestamped directory under ``outputs/runs/`` with a report and any
 plots.
@@ -114,9 +116,10 @@ Housekeeping
     $ qforge clean --dry-run         # show what would go, delete nothing
 
 Clear the calibration cache after changing a qubit's physical parameters. Calibrated
-durations are keyed by qubit name, and a stale entry is worse than no entry at all.
+durations are keyed by qubit name, so a stale entry describes a gate that no longer
+exists.
 
-``clean`` asks before deleting unless you pass ``--force``.
+``clean`` asks for confirmation before deleting unless ``--force`` is given.
 
 Developer
 =========
@@ -133,8 +136,8 @@ Stubs
 =====
 
 ``qforge circuit build``, ``qforge workflow run`` and ``qforge hardware design`` are
-placeholders. They print a notice and exit. The functionality behind the first two
-exists today through ``PhysicalWorkflowEngine`` and the wizard's workflow menu.
+placeholders that print a notice and exit. The functionality behind the first two is
+available through ``PhysicalWorkflowEngine`` and the wizard's workflow menu.
 
 Where output goes
 =================
@@ -150,5 +153,5 @@ Where output goes
       plots/                          saved figures
       gates/  circuits/  hardware/  comparisons/
 
-Paths are relative to where you run qforge, and are configured in
+Paths are relative to the working directory and are configured in
 ``qforge/config/defaults.py`` under ``OUTPUT_DIRS``.

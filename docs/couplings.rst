@@ -2,11 +2,11 @@
 Couplings
 =========
 
-Two qubit gates need an interaction. qforge models three of them, and which one you
-pick changes both the Hamiltonian and the gate that falls out of it naturally.
+A two-qubit gate requires an interaction between the qubits. qforge models three,
+and the choice determines both the interaction Hamiltonian and the gate that the
+interaction can produce.
 
-Couplings live in ``qforge/core/coupling.py`` and are described to the engines as
-plain dictionaries:
+Couplings are passed to the engines as dictionaries:
 
 .. code-block:: python
 
@@ -14,70 +14,88 @@ plain dictionaries:
         {"q1": 0, "q2": 1, "type": "tunable_coupler", "strength": 0.05},
     ]
 
-``q1`` and ``q2`` are indices into the qubit name list you pass alongside, and
-``strength`` is :math:`g` in GHz. Ordering is preserved throughout, so index 0 is
-the first qubit you named.
+``q1`` and ``q2`` are indices into the accompanying list of qubit names, and
+``strength`` is :math:`g` in GHz. Index order is preserved throughout, so index 0
+refers to the first name in that list.
+
+Interaction Hamiltonians
+========================
+
+``GateEngine._get_n_qubit_hamiltonian`` builds the static N-qubit Hamiltonian as the
+sum of the local terms plus one interaction term per declared coupling:
+
+.. math::
+
+    \mathcal{H}_{\mathrm{sys}} = \sum_i \mathcal{H}_{0,i}
+        + \sum_{\langle i,j \rangle} g_{ij}\, \hat{O}_i \otimes \hat{O}_j
+
+The operators :math:`\hat{O}` are taken from the circuit's own eigenbasis through
+``matrixelement_table``, not from a harmonic approximation, which is what allows the
+interaction to remain correct outside the two lowest levels.
 
 Capacitive
-==========
+----------
 
 .. math::
 
-    H_{\mathrm{int}} = g \left( a^\dagger b + a b^\dagger \right)
+    H_{\mathrm{int}} = g \, \hat{n}_i \otimes \hat{n}_j
 
-A transverse exchange interaction, the usual model for two fixed frequency
-transmons sharing a coupling capacitor. Excitations hop between the qubits.
+A charge-charge interaction between two circuits sharing a coupling capacitor. This
+is the standard model for fixed-frequency transmons, and it is always on: there is
+no knob that switches it off between gates.
 
-In the dispersive limit :math:`|\Delta| \gg g` the qubits barely hybridize, and
-driving the control at the target's frequency turns the interaction into an
-effective :math:`ZX` term. That is the cross resonance gate, and it is how qforge
-builds a CNOT on a capacitively coupled pair.
+Two consequences follow from that, and both are measured rather than assumed by the
+CNOT calibration described in :doc:`gates`. The eigenstates of the coupled pair are
+dressed, so bare :math:`|01\rangle` and :math:`|10\rangle` hybridize with each
+other and bare :math:`|11\rangle` with :math:`|02\rangle` and :math:`|20\rangle`.
+And the interaction shifts each qubit's 0-1 transition depending on the state of the
+other, which is the ZZ shift the microwave-activated CNOT relies on.
 
-Use it for: fixed frequency architectures, cross resonance, always on coupling that
-you would rather not switch off.
-
-Inductive and ZZ
-================
+Inductive
+---------
 
 .. math::
 
-    H_{\mathrm{int}} = g \, \hat{n}_1 \hat{n}_2
+    H_{\mathrm{int}} = g \, \hat{\varphi}_i \otimes \hat{\varphi}_j
 
-A longitudinal coupling. Neither qubit's population changes. Instead each one's
-energy shifts depending on the state of the other, which accumulates a conditional
-phase and gives you a CPHASE naturally over a time of order :math:`\pi/g`.
+A flux-flux interaction, appropriate when the two circuits share a geometric
+inductance.
 
-qforge refuses an ``inductive`` coupling on a plain transmon and says so. A transmon
-lives in the charge basis and has no :math:`E_L \hat{\varphi}^2` term to couple
-through, so the model would be describing a circuit you did not build. Use a
-fluxonium or zero-pi if you want a genuine inductive branch.
-
-Use it for: dispersive interactions, native CZ, residual ZZ you want to quantify.
+This requires a circuit with an explicit inductive branch. A transmon is a junction
+shunted by a capacitor, has no :math:`E_L \hat{\varphi}^2` term, and its scqubits
+model in the charge basis exposes no phase operator, so qforge raises an error
+explaining this rather than substituting an approximation. Fluxonium, the flux qubit
+and zero-pi all carry a real inductor and accept this coupling.
 
 Tunable coupler
-===============
+---------------
 
 .. math::
 
-    H(t) = g_{\max} f(t) \left( a^\dagger b + a b^\dagger \right)
+    H_{\mathrm{int}}(t) = g\, f(t)\, \hat{n}_i \otimes \hat{n}_j
 
-The same exchange interaction as the capacitive case, but with the strength
-modulated in time by a flux pulse on a dedicated coupler element. That is what lets
-you turn the interaction on for exactly as long as the gate needs and leave it off
-the rest of the time.
+The same charge-charge interaction, modulated in time by a flux pulse on a dedicated
+coupler element. There is no static term: a tunable coupler contributes nothing to
+the Hamiltonian until its envelope is switched on, which is what allows the
+interaction to be gated for exactly the duration of a gate.
 
-qforge shapes the coupler pulse as :math:`\sin^2`, which switches on and off smoothly
-from zero:
+Two envelopes appear, depending on how the interaction is driven:
 
-.. math::
+.. list-table::
+   :header-rows: 1
+   :widths: 38 62
 
-    f(t) = \sin^2\!\left(\frac{\pi (t - t_0)}{T}\right)
+   * - Where
+     - Envelope
+   * - A two-qubit call with no explicit coupler pulse
+     - Gaussian, :math:`\sigma = T/6`, centred at :math:`T/2`.
+   * - A scheduled ``coupler_pulse`` drive, as emitted by the workflow engine and by
+       the compiled CNOT
+     - :math:`f(t) = \sin^2\!\left(\pi (t - t_0) / T\right)`, which starts and ends
+       at zero.
 
-Use it for: iSWAP, flux activated CZ, anything where you need the interaction gated
-in time rather than always on.
-
-Choosing one
-============
+Which gate each supports
+========================
 
 .. list-table::
    :header-rows: 1
@@ -85,49 +103,60 @@ Choosing one
 
    * -
      - Capacitive
-     - Inductive / ZZ
+     - Inductive
      - Tunable coupler
    * - Interaction
-     - Transverse exchange
-     - Longitudinal
-     - Gated exchange
-   * - Native gate
-     - Cross resonance CNOT
-     - CPHASE / CZ
-     - iSWAP, CZ
-   * - On when idle
+     - Charge-charge, :math:`\hat{n}\hat{n}`
+     - Flux-flux, :math:`\hat{\varphi}\hat{\varphi}`
+     - Gated charge-charge
+   * - Active when idle
      - Yes
      - Yes
      - No
-   * - Works on a transmon
+   * - Two-qubit gate
+     - Microwave-activated CNOT
+     - CZ by accumulated interaction phase
+     - CZ, and CNOT compiled from it
+   * - Valid on a transmon
      - Yes
-     - No, needs an inductive branch
+     - No, requires an inductive branch
      - Yes
 
-Comparing them directly
-=======================
+Analytic forms in ``coupling.py``
+=================================
 
-``GateEngine.compare_couplings`` runs the same logical gate under each model and
-reports the target state population and the accumulated interaction phase side by
-side:
+``CouplingGenerator`` in ``qforge/core/coupling.py`` provides harmonic-oscillator
+versions of the same interactions, built from ladder operators on a truncated
+oscillator: :math:`g(a^\dagger b + a b^\dagger)` for the capacitive case and
+:math:`g\,\hat{n}_1 \hat{n}_2` for the inductive one.
+
+These are convenient for analytic work and are what the coupling unit tests exercise,
+but they are not what the simulation path builds. When reasoning about a simulation
+result, use the Hamiltonians above.
+
+Comparing couplings
+===================
+
+``GateEngine.compare_couplings`` runs the same logical gate under several couplings
+and reports the final population of :math:`|11\rangle` for each, along with the
+accumulated interaction phase in units of :math:`\pi` when the gate is a CZ:
 
 .. code-block:: python
 
     results = gates.compare_couplings(q1="Q1", q2="Q2", gate="CNOT")
+    # {"capacitive": {"population": ...}, "inductive": {...}, "tunable_coupler": {...}}
 
-The wizard exposes the same thing under "Analyze multi-qubit gates", which sweeps
-several coupling strengths per architecture and prints a table.
+Passing ``coupling_type``, ``strength`` and ``duration`` together runs that single
+scenario instead of the default set. The wizard exposes the same comparison under
+"Analyze multi-qubit gates", sweeping several strengths per coupling.
 
 Adding a coupling model
 =======================
 
-If you add one, keep it honest:
-
-* Write the Hamiltonian out explicitly, and say what :math:`g` means and in what
-  units.
+* State the Hamiltonian explicitly, together with the meaning and units of its
+  coupling strength.
 * Preserve qubit ordering and tensor dimensions. Local dimensions differ between
-  qubits and the operator has to agree with ``dims``.
-* Keep static coupling separate from driven coupling. A time dependent interaction
-  is a different object from a constant one.
-* Put it in ``coupling.py``. Do not hard code an interaction inside an engine that
-  is meant to be agnostic about it.
+  qubits, and the operator has to agree with ``dims``.
+* Keep static and time-dependent interactions distinct.
+* Implement it in ``coupling.py`` and in ``_get_n_qubit_hamiltonian`` rather than
+  inside an engine that should not depend on a particular interaction.

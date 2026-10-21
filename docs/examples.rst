@@ -2,17 +2,16 @@
 Examples
 ========
 
-Thirteen worked scripts ship with qforge, under ``examples/``. They run in order of
-difficulty, from a single qubit's spectrum to Grover's algorithm executed as physical
-microwave pulses.
+Thirteen worked scripts are bundled under ``examples/``, ordered by difficulty from a
+single qubit's spectrum to Grover's algorithm executed as physical microwave pulses.
 
 .. code-block:: bash
 
     $ qforge example list
     $ qforge example run --name 02_single_qubit_gates
 
-Or from the wizard, "Run an example" under LEARN. Each script prints what it is doing
-and plots its results in the terminal.
+The wizard offers the same list under "Run an example". Each script reports what it is
+doing and plots its results in the terminal.
 
 Qubits and single qubit gates
 =============================
@@ -49,8 +48,7 @@ Two and three qubit gates
        excitation hopping, then a calibrated X drive applied to all four qubits at
        once.
    * - ``09_CNOT_drag_scheme_simulation.py``
-     - The same CNOT with and without DRAG, so you can see what the correction buys
-       you.
+     - The same CNOT with and without DRAG, isolating the effect of the correction.
    * - ``11_pairwise_CNOT_simulation.py``
      - Pairwise CNOTs among three qubits, comparing fidelity and leakage across
        pairs.
@@ -102,6 +100,5 @@ Other bundled files
 Notebook walkthrough
 ====================
 
-:doc:`tutorial` is an executable narrative version: build a transmon, calibrate a
-gate analytically, simulate the dynamics, and plot it. Start there if you would
-rather read prose than scripts.
+:doc:`tutorial` is an executable walkthrough covering the same ground: build a
+transmon, calibrate a gate analytically, simulate the dynamics and plot the result.

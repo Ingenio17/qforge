@@ -2,6 +2,8 @@
 Gate Engine: Simulation of quantum gates and dynamics using QuTiP.
 """
 
+import math
+
 import numpy as np
 import qutip as qt
 from typing import Dict, List, Any, Tuple, Optional
@@ -16,6 +18,33 @@ from qforge.config.defaults import OUTPUT_DIRS
 
 last_print = ""
 
+# Every microwave drive in this engine uses the same Gaussian envelope:
+# exp(-0.5*((t - T/2)/sigma)^2) with sigma = T/6, truncated to [0, T]. Its area
+# is sigma*sqrt(2*pi)*erf(3/sqrt(2)), so the area per ns of gate duration is the
+# constant below. A rotation angle is (pulse area) x (matrix element), so this is
+# what converts a required rotation angle into a peak drive amplitude. It must
+# stay in sync with the envelope in _build_time_dependent_hamiltonian.
+GAUSSIAN_AREA_PER_NS = math.sqrt(2.0 * math.pi) * math.erf(3.0 / math.sqrt(2.0)) / 6.0
+
+# A ZZ-activated conditional rotation (the capacitively-coupled CNOT below)
+# separates the control=0 and control=1 branches purely by frequency: the two
+# branches differ by the ZZ shift zeta, and the drive is tuned to the control=1
+# branch. The pulse only leaves the control=0 branch alone if its spectral width
+# is narrower than zeta, i.e. if |zeta| * T is comfortably above 1. Empirically
+# |zeta| * T >= ~2 already keeps the control=0 branch above 99% population, so
+# 2.5 is used both as the warning threshold and as the target when suggesting a
+# workable duration.
+CONDITIONAL_SELECTIVITY_TARGET = 2.5
+
+# The capacitive coupling is always on, so the eigenstates of the coupled pair
+# are dressed: bare |01> and |10> hybridize with each other, and bare |11> with
+# |02> and |20>. Populations are reported in the bare product basis, so once a
+# computational eigenstate carries less than this much of its bare state, no
+# two-qubit gate can look clean in that basis no matter how well it is
+# calibrated. That is a statement about the chosen coupling strength, not about
+# the gate, so it is reported as a warning rather than silently absorbed.
+DRESSED_PURITY_WARN = 0.90
+
 class GateEngine:
     """Engine for simulating quantum gates and dynamics."""
 
@@ -29,6 +58,13 @@ class GateEngine:
     # _calculate_resonant_flux() estimate. In-memory only (not persisted to
     # disk): it's a per-session refinement, not a portable calibration value.
     _detuning_cache: Dict[Tuple, float] = {}
+    # Drive parameters for the ZZ-activated conditional rotation used by the
+    # capacitively-coupled CNOT, keyed by (ctrl, targ, coupling_strength,
+    # duration). Computing them means diagonalizing the coupled two-qubit
+    # Hamiltonian, which is wasteful to repeat inside a calibration sweep.
+    # In-memory only: it is derived entirely from the registered qubits, so
+    # there is nothing worth persisting across sessions.
+    _conditional_cache: Dict[Tuple, Dict[str, Any]] = {}
 
     def __init__(self):
         """Initialize the gate engine."""
@@ -1017,30 +1053,17 @@ class GateEngine:
                     H_total.append([op_int, pulse_func])
                 
         # C) Specific gate overrides for compatibility with old 2-qubit caller
-        if N == 2:
-            if gate_type == "CNOT" and couplings[0].get("type") == "capacitive":
-                H0_2, _ = self._get_qubit_hamiltonian(qubit_names[1])
-                e2 = H0_2.diag() / (2*np.pi)
-                w2 = e2[1] - e2[0]
-                
-                if not any(d["target"] == 1 for d in drives):
-                    op_list = [qt.qeye(d) for d in dims]
-                    op_list[0] = self.get_control_hamiltonian("X", local_ops[0])
-                    op_drive = qt.tensor(op_list)
-                    amp = 0.040 * 2 * np.pi 
-                    
-                    def cr_drive(t, args):
-                        T = args['dur']
-                        mu = T / 2.0
-                        sigma = T / 6.0 if T > 0 else 1.0
-                        env = np.exp(-0.5 * ((t - mu) / sigma)**2) if (0 <= t <= T) else 0.0
-                        return args['cr_amp'] * env * np.cos(args['cr_w'] * t)
-                    H_total.append([op_drive, cr_drive])
-                    args['cr_amp'] = amp
-                    args['cr_w'] = w2 * 2 * np.pi
-                    args['dur'] = duration
-                    
-            elif gate_type == "CZ":
+        #
+        # The capacitively-coupled CNOT used to sit here as a fixed 40 MHz tone
+        # on the control at the target's bare frequency. That is a cross-resonance
+        # drive, but it was never calibrated against the pair it was driving: the
+        # amplitude ignored the coupling strength, the detuning and the duration,
+        # and the frequency ignored the dressing from the coupling itself. For any
+        # pair whose frequencies are far apart it produced no measurable evolution
+        # at all. It is now compiled in simulate_n_qubit_dynamics() as a calibrated
+        # ZZ-activated conditional rotation instead.
+        if N == 2 and couplings:
+            if gate_type == "CZ":
                 if couplings[0]["type"] == "tunable_coupler":
                     op_list = [qt.qeye(d) for d in dims]
                     op_list[1] = qt.num(dims[1]) 
@@ -1157,6 +1180,241 @@ class GateEngine:
 
         return w1 - w2 - alpha2
     
+    def _dressed_computational_basis(
+        self, H: qt.Qobj, dims: List[int]
+    ) -> Dict[Tuple[int, ...], Tuple[float, qt.Qobj, float]]:
+        """
+        Label the eigenstates of a coupled multi-qubit Hamiltonian by the bare
+        product state each one is closest to.
+
+        With an always-on coupling the eigenstates are not bare product states,
+        so "the |11> level" means "the eigenstate with the largest overlap on
+        bare |11>". Any drive frequency or matrix element used to calibrate a
+        two-qubit gate has to be read off these dressed states, not off the bare
+        ones, or the drive lands off-resonance.
+
+        Each eigenvector is gauge-fixed so its dominant bare amplitude is real
+        and positive. Without that, QuTiP's arbitrary eigenvector phases leak
+        into every matrix element computed from them and the relative phase
+        between two of them is meaningless.
+
+        Args:
+            H: Hermitian Hamiltonian on the full tensor-product space.
+            dims: Local dimensions, one per subsystem.
+
+        Returns:
+            Mapping from a bare label tuple to (energy in rad/ns, gauge-fixed
+            eigenvector, overlap weight on that bare state in [0, 1]). Labels
+            that no eigenstate claims are absent.
+        """
+        evals, evecs = H.eigenstates()
+        labelled: Dict[Tuple[int, ...], Tuple[float, qt.Qobj, float]] = {}
+
+        for energy, vec in zip(evals, evecs):
+            column = vec.full().flatten()
+            weights = np.abs(column) ** 2
+            idx = int(np.argmax(weights))
+            label = tuple(int(k) for k in np.unravel_index(idx, dims))
+            weight = float(weights[idx])
+
+            # Two eigenstates can both be closest to the same bare state when
+            # levels are strongly hybridized. Keep the better-matching one.
+            if label in labelled and labelled[label][2] >= weight:
+                continue
+
+            gauge = column[idx] / abs(column[idx])
+            labelled[label] = (
+                float(np.real(energy)),
+                qt.Qobj((column / gauge).reshape(-1, 1), dims=vec.dims),
+                weight,
+            )
+
+        return labelled
+
+    def _conditional_rotation_schedule(
+        self,
+        ctrl_name: str,
+        targ_name: str,
+        coupling_strength: float,
+        duration: float,
+    ) -> Dict[str, Any]:
+        """
+        Calibrate a ZZ-activated conditional pi rotation: the physical CNOT for
+        two qubits held at fixed frequencies by an always-on capacitive coupling.
+
+        The mechanism is the standard microwave-activated controlled rotation.
+        The capacitive interaction g*n1*n2 shifts the target's 0-1 transition by
+        the ZZ shift zeta depending on whether the control sits in |0> or |1>:
+
+            w_targ(control=0) = (E_01 - E_00) / 2pi
+            w_targ(control=1) = (E_11 - E_10) / 2pi
+            zeta              = w_targ(control=1) - w_targ(control=0)
+
+        Driving the target with a pi pulse at w_targ(control=1) therefore flips
+        it only when the control is excited, which is a CNOT up to single-qubit
+        phases. All four energies and the drive matrix element are read off the
+        dressed eigenstates of the coupled pair, so the calibration stays correct
+        as the coupling hybridizes the levels.
+
+        Both quantities that limit the gate are measured and returned rather than
+        assumed:
+
+        * selectivity |zeta| * T, which says whether the pulse is spectrally
+          narrow enough to leave the control=0 branch alone. Below roughly 1 the
+          pulse flips the target regardless of the control, which is an
+          unconditional X, not a CNOT.
+        * the bare-state purity of the four computational eigenstates, which
+          bounds how clean the gate can look in the bare product basis that
+          populations are reported in.
+
+        Args:
+            ctrl_name: Control qubit name.
+            targ_name: Target qubit name.
+            coupling_strength: Capacitive coupling g in GHz, as it enters
+                H_int = g*n_ctrl*n_targ.
+            duration: Gate duration in ns.
+
+        Returns:
+            Dict with the drive parameters ("frequency" in GHz, "amplitude" in
+            GHz, "phase" in rad), the diagnostics behind them, and a list of
+            human-readable "warnings".
+
+        Raises:
+            ValueError: if the pair has no usable conditional transition at all,
+                for instance when the target cannot be driven through the charge
+                operator or the coupled spectrum has no identifiable |11> level.
+        """
+        cache_key = (
+            ctrl_name,
+            targ_name,
+            float(coupling_strength),
+            round(float(duration), 6),
+        )
+        if cache_key in GateEngine._conditional_cache:
+            return GateEngine._conditional_cache[cache_key]
+
+        if duration <= 0:
+            raise ValueError(
+                f"A CNOT needs a positive gate duration, got {duration} ns. The "
+                f"pulse amplitude is fixed by the area it has to accumulate over "
+                f"that time, so a zero-length gate has no solution."
+            )
+
+        couplings = [
+            {"q1": 0, "q2": 1, "type": "capacitive", "strength": float(coupling_strength)}
+        ]
+        H_sys, qubits, local_ops = self._get_n_qubit_hamiltonian(
+            [ctrl_name, targ_name], couplings
+        )
+        dims = [q.truncated_dim for q in qubits]
+
+        if min(dims) < 2:
+            raise ValueError(
+                f"A CNOT needs at least two levels per qubit, but "
+                f"'{ctrl_name}'/'{targ_name}' have dimensions {dims}."
+            )
+
+        basis = self._dressed_computational_basis(H_sys, dims)
+        needed = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        missing = [state for state in needed if state not in basis]
+        if missing:
+            raise ValueError(
+                f"Could not identify the computational levels "
+                f"{', '.join(f'|{a}{b}>' for a, b in missing)} in the coupled "
+                f"spectrum of '{ctrl_name}'-'{targ_name}' at g = "
+                f"{coupling_strength} GHz. The coupling is strong enough that "
+                f"these levels no longer map onto bare product states; reduce "
+                f"the coupling strength."
+            )
+
+        # Drive the target through the same physical operator a single-qubit X
+        # uses, embedded in the two-qubit space.
+        op_targ = qt.tensor(
+            qt.qeye(dims[0]), self.get_control_hamiltonian("X", local_ops[1])
+        )
+
+        def element(state_a, state_b):
+            return complex(basis[state_a][1].dag() * op_targ * basis[state_b][1])
+
+        # Target transition frequencies (GHz) for each control branch.
+        w_targ_off = (basis[(0, 1)][0] - basis[(0, 0)][0]) / (2 * np.pi)
+        w_targ_on = (basis[(1, 1)][0] - basis[(1, 0)][0]) / (2 * np.pi)
+        zeta = w_targ_on - w_targ_off
+
+        # Drive matrix element on the conditional (control=1) transition.
+        m_on = element((1, 0), (1, 1))
+        if abs(m_on) < 1e-9:
+            raise ValueError(
+                f"Target qubit '{targ_name}' has a vanishing drive matrix "
+                f"element on its conditional 0-1 transition, so no microwave "
+                f"pulse can flip it. Check that the qubit's charge operator "
+                f"connects levels 0 and 1."
+            )
+
+        # Rotation angle = pulse area x matrix element, so a pi flip needs this
+        # area; the phase puts the rotation axis along x for a clean CNOT.
+        area = np.pi / abs(m_on)
+        amplitude_ang = area / (duration * GAUSSIAN_AREA_PER_NS)
+        amplitude = amplitude_ang / (2 * np.pi)
+        phase = -float(np.angle(m_on))
+
+        selectivity = abs(zeta) * duration
+        purity = min(basis[state][2] for state in needed)
+
+        warnings: List[str] = []
+        if selectivity < CONDITIONAL_SELECTIVITY_TARGET:
+            needed_duration = CONDITIONAL_SELECTIVITY_TARGET / abs(zeta) if zeta else float("inf")
+            # zeta grows roughly as g^2 in the dispersive regime, so the coupling
+            # that reaches the same selectivity at this duration scales as sqrt.
+            needed_strength = (
+                coupling_strength * math.sqrt(CONDITIONAL_SELECTIVITY_TARGET / selectivity)
+                if selectivity > 0
+                else float("inf")
+            )
+            if selectivity < 1.0:
+                verdict = (
+                    "The pulse cannot tell the two control branches apart, so it "
+                    "drives the target whatever the control does. What this "
+                    "simulates is an unconditional X on the target, not a CNOT."
+                )
+            else:
+                verdict = (
+                    "That is only just enough separation, so expect the control=0 "
+                    "branch to pick up some unwanted rotation."
+                )
+            warnings.append(
+                f"Weak conditionality: the control shifts the target's 0-1 "
+                f"transition by {zeta * 1e3:.3f} MHz, while a {duration:g} ns pulse "
+                f"is about {1e3 / duration:.1f} MHz wide. {verdict} Lengthening the "
+                f"gate to about {needed_duration:.0f} ns fixes it. Raising the "
+                f"coupling to about {needed_strength:.3f} GHz would too, but a "
+                f"stronger coupling also hybridizes the levels further."
+            )
+
+        if purity < DRESSED_PURITY_WARN:
+            warnings.append(
+                f"Strong hybridization: the computational levels of "
+                f"'{ctrl_name}'-'{targ_name}' are only {purity * 100:.1f}% bare "
+                f"product states at g = {coupling_strength} GHz, so populations "
+                f"reported in the |00>/|01>/|10>/|11> basis cannot exceed roughly "
+                f"that even for a perfectly calibrated gate. Reduce the coupling "
+                f"strength, or move the two qubit frequencies further apart."
+            )
+
+        schedule = {
+            "frequency": float(w_targ_on),
+            "amplitude": float(amplitude),
+            "phase": float(phase),
+            "target_frequency_control_0": float(w_targ_off),
+            "target_frequency_control_1": float(w_targ_on),
+            "zeta_ghz": float(zeta),
+            "selectivity": float(selectivity),
+            "dressed_purity": float(purity),
+            "warnings": warnings,
+        }
+        GateEngine._conditional_cache[cache_key] = schedule
+        return schedule
+
     def _calculate_stark_shift(self, detuning: float, duration: float, edge_frac: float = 0.15) -> float:
         """
         Calculates the dynamical phase (Stark shift) accumulated by the target qubit
@@ -1623,6 +1881,62 @@ class GateEngine:
                 use_drag=use_drag,
                 drag_lambda=drag_lambda
             )
+
+        # With a fixed capacitive coupling there is no coupler to pulse and no
+        # flux knob to sweep, so a CNOT is realized the microwave-activated way:
+        # a pi pulse on the target at the transition frequency it only has while
+        # the control is excited. _conditional_rotation_schedule() reads that
+        # frequency and the required pulse area off the dressed eigenstates of
+        # the coupled pair, which is what makes the drive actually land on
+        # resonance. Compile it into an ordinary drive and hand it back through
+        # the normal path so it picks up the same envelope and DRAG treatment as
+        # every other microwave pulse.
+        if (
+            N == 2
+            and gate_type == "CNOT"
+            and couplings
+            and couplings[0].get("type") == "capacitive"
+            and not any(d.get("target") == 1 for d in drives)
+        ):
+            schedule = self._conditional_rotation_schedule(
+                qubit_names[0],
+                qubit_names[1],
+                float(couplings[0].get("strength", 0.0)),
+                duration,
+            )
+
+            compiled_drives = list(drives) + [
+                {
+                    "target": 1,
+                    "type": "X",
+                    "amplitude": schedule["amplitude"],
+                    "frequency": schedule["frequency"],
+                    "phase": schedule["phase"] + virtual_z,
+                    "start_time": 0.0,
+                    "end_time": duration,
+                }
+            ]
+
+            result = self.simulate_n_qubit_dynamics(
+                qubit_names=qubit_names,
+                gate_type="CNOT_COMPILED",
+                duration=duration,
+                couplings=couplings,
+                drives=compiled_drives,
+                initial_state=initial_state,
+                steps=steps,
+                detuning=detuning,
+                use_drag=use_drag,
+                virtual_z=virtual_z,
+                drag_lambda=drag_lambda,
+            )
+            # Hand back copies: the schedule itself is cached and shared between
+            # every call at these parameters, so a caller poking at the result
+            # must not be able to edit it out from under the next one.
+            warnings = list(schedule["warnings"])
+            result["schedule"] = {**schedule, "warnings": warnings}
+            result["warnings"] = warnings
+            return result
 
         # --- Original simulation logic for all other gate types ---
 

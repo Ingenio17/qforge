@@ -2,15 +2,15 @@
 Quickstart
 ==========
 
-This page walks the whole toolkit in about five minutes: build a qubit, look at its
-spectrum, drive a gate, entangle two qubits, then run a QASM circuit on the pair.
-Everything here is plain Python. The same ground is covered by the wizard described
-in :doc:`interfaces`, and by the commands in :doc:`cli`.
+This page covers the toolkit end to end: build a qubit, examine its spectrum, drive
+a gate, couple two qubits, run a QASM circuit on the pair, and encode it in a
+stabilizer code. Everything here is plain Python. The wizard in :doc:`interfaces`
+and the commands in :doc:`cli` cover the same ground.
 
 1. Build a qubit
 ================
 
-``QubitEngine`` wraps scqubits and keeps a named registry of every qubit you create.
+``QubitEngine`` wraps scqubits and keeps a named registry of every qubit created.
 Parameters are energies in GHz.
 
 .. code-block:: python
@@ -25,12 +25,13 @@ Parameters are energies in GHz.
         params={"EJ": 15.0, "EC": 0.3},
     )
 
-Qubits are registered by name and persisted to ``outputs/qubits/.qforge_session.json``,
-so the rest of the toolkit refers to them as ``"Q1"`` rather than passing objects
-around. See :doc:`conventions` for what that means for cleanup.
+Qubits are registered by name and persisted to
+``outputs/qubits/.qforge_session.json``, so the rest of the toolkit refers to them
+as ``"Q1"`` rather than by passing objects around. :doc:`conventions` describes what
+that implies for cleanup.
 
-2. Look at it
-=============
+2. Examine its spectrum
+=======================
 
 .. code-block:: python
 
@@ -44,16 +45,16 @@ around. See :doc:`conventions` for what that means for cleanup.
         print(f"{channel}: {data['value']:.1f} us  ({data['limit']})")
 
 ``compute_spectrum`` returns eigenvalues in GHz. With ``subtract_ground=True`` the
-first entry is zero and the second is :math:`f_{01}`. The gap between the first two
-spacings is the anharmonicity, which is what makes the circuit addressable as a
-qubit at all.
+first entry is zero and the second is :math:`f_{01}`. The difference between the
+first two level spacings is the anharmonicity, which determines whether the circuit
+can be addressed as a qubit.
 
 3. Drive a gate
 ===============
 
-An X gate here is not a matrix. It is a Gaussian microwave pulse on the charge
-operator, resonant with :math:`\omega_{01}`, with a DRAG quadrature term that
-suppresses leakage into :math:`|2\rangle`.
+An X gate is a Gaussian microwave pulse on the charge operator, resonant with
+:math:`\omega_{01}`, carrying a DRAG quadrature term that suppresses leakage into
+:math:`|2\rangle`.
 
 .. code-block:: python
 
@@ -76,19 +77,19 @@ suppresses leakage into :math:`|2\rangle`.
         title="Rabi flop under an X pulse",
     )
 
-``noise_model="realistic"`` pulls :math:`T_1` from the qubit's own coherence
-estimate and feeds it to QuTiP's master equation as a collapse operator. With
+``noise_model="realistic"`` takes :math:`T_1` from the qubit's own coherence
+estimate and supplies it to QuTiP's master equation as a collapse operator. With
 ``"none"`` the evolution is closed and unitary.
 
-The populations you get back cover every level in the truncated space, not just
-:math:`|0\rangle` and :math:`|1\rangle`. Whatever shows up in :math:`|2\rangle` is
-leakage, and it is real.
+The returned populations cover every level in the truncated space, not only
+:math:`|0\rangle` and :math:`|1\rangle`. Population appearing in :math:`|2\rangle`
+is leakage out of the computational subspace.
 
-4. Calibrate it
-===============
+4. Calibrate the pulse
+======================
 
-You rarely know the right pulse length up front. ``calibrate_gate`` sweeps a
-parameter, finds the peak, then re-sweeps a narrow window around it.
+``calibrate_gate`` sweeps one parameter, locates the peak, then re-sweeps a narrow
+window around it.
 
 .. code-block:: python
 
@@ -99,43 +100,66 @@ parameter, finds the peak, then re-sweeps a narrow window around it.
     )
     print(f"pi pulse at {duration:.2f} ns, target population {score:.4f}")
 
-Calibrations are cached to ``outputs/calib_cache.json`` and survive between
-sessions, because the sweeps are the expensive part of most workflows. Change a
-qubit's parameters and you want a fresh sweep, so run ``qforge cache clear``.
+Calibrations are cached to ``outputs/calib_cache.json`` and persist between
+sessions, since the sweeps dominate the cost of most workflows. Run
+``qforge cache clear`` after changing a qubit's parameters, because a calibration
+keyed to the old ones no longer describes the gate.
 
-5. Entangle two qubits
-======================
+5. Couple two qubits
+====================
 
 .. code-block:: python
 
-    qubits.create_qubit("transmon", "Q2", {"EJ": 14.2, "EC": 0.28})
+    qubits.create_qubit("transmon", "Q2", {"EJ": 11.63, "EC": 0.3})
 
     result = gates.simulate_two_qubit_dynamics(
         qubit1_name="Q1",
         qubit2_name="Q2",
         gate_type="CNOT",
-        coupling_type="tunable_coupler",
+        coupling_type="capacitive",
         coupling_strength=0.05,     # GHz
-        duration=150.0,             # ns
+        duration=280.0,             # ns
+        initial_state="10",
     )
 
     final = {k: v[-1] for k, v in result["populations"].items()}
-    for state, p in sorted(final.items(), key=lambda kv: -kv[1])[:4]:
+    for state, p in sorted(final.items(), key=lambda kv: -kv[1])[:3]:
         print(f"|{state}>: {p:.3f}")
+    # |11>: 0.953
+    # |20>: 0.037
+    # |01>: 0.006
 
-A tunable coupler natively gives you a controlled phase, so a CNOT request is
-compiled into the physical sequence :math:`X(-\pi/2)`, CZ, :math:`X(+\pi/2)` on the
-target, with the Stark phase accumulated during the flux pulse folded into the
-second pulse. :doc:`gates` walks through that.
+    for warning in result["warnings"]:
+        print(warning)
 
-The three coupling models and what each is good for are in :doc:`couplings`.
+The two-qubit gate follows from the coupling. A fixed capacitive coupling has no
+knob to switch, so the CNOT is a microwave-activated conditional rotation: a
+:math:`\pi` pulse on the target at the transition frequency it only has while the
+control is excited. A tunable coupler instead produces a controlled phase natively,
+and a CNOT is compiled as :math:`X(-\pi/2)`, CZ, :math:`X(+\pi/2)` on the target.
+
+The control starts in :math:`|1\rangle` here, so the target flips and the pair ends
+in :math:`|11\rangle`. Starting from :math:`|00\rangle` the same pulse leaves the
+state untouched, which is what makes it conditional rather than an unconditional X.
+The remaining few percent sits in :math:`|20\rangle`, leakage the simulation reports
+because the third level is part of the model.
+
+The capacitive path returns the diagnostics behind its calibration.
+``result["schedule"]`` carries the ZZ shift, the selectivity and the dressed-state
+purity, and ``result["warnings"]`` describes any operating point that cannot support
+the gate. The duration above was chosen from the ZZ shift for that reason: at
+:math:`g = 0.05` GHz these two qubits give :math:`\zeta = -9.5` MHz, and separating
+the two control branches needs a pulse spectrally narrower than that.
+
+:doc:`gates` covers both mechanisms, and :doc:`couplings` covers the three
+interaction models.
 
 6. Run a circuit
 ================
 
-``PhysicalWorkflowEngine`` takes an OpenQASM 2.0 file, decomposes it to a hardware
-native basis, calibrates whatever pulses it needs, schedules them in time, then
-solves the whole thing as one continuous Hamiltonian.
+``PhysicalWorkflowEngine`` takes an OpenQASM 2.0 file, decomposes it into a
+hardware-native basis, calibrates the pulses it requires, schedules them in time,
+and solves the result as one continuous Hamiltonian.
 
 .. code-block:: python
 
@@ -153,16 +177,16 @@ solves the whole thing as one continuous Hamiltonian.
 
     print(results["final_state"])
 
-There is no gate by gate reset between instructions. The schedule is one pulse
-sequence, so accumulated phase, leakage and decoherence carry across the circuit
-the way they would on hardware. :doc:`qasm` covers what the parser accepts.
+There is no reset between instructions. The schedule is a single pulse sequence, so
+accumulated phase, leakage and decoherence carry across the circuit as they would on
+hardware. :doc:`qasm` describes what the parser accepts.
 
-7. Add error correction
-=======================
+7. Encode it
+============
 
-Same circuit, now encoded. Each logical qubit expands into physical data and
-ancilla qubits, syndromes are extracted with real CNOT drives, and corrections are
-fed forward.
+The same circuit, run on a stabilizer code. Each logical qubit expands into physical
+data and ancilla qubits, syndromes are extracted with CNOT drives, ancillas are
+measured mid-circuit, and corrections are fed forward.
 
 .. code-block:: python
 
@@ -179,16 +203,16 @@ fed forward.
 
     print(result["logical_populations"])
 
-Three codes ship today: the 3 qubit repetition code, the 7 qubit Steane code and
-the 9 qubit Shor code. Adding a fourth means writing a specification, not touching
-the engine. See :doc:`error_correction`.
+Three codes are implemented: the 3-qubit repetition code, the 7-qubit Steane code
+and the 9-qubit Shor code. Adding a fourth means writing a code specification rather
+than modifying the engine. See :doc:`error_correction`.
 
-Where next
+Next steps
 ==========
 
-* :doc:`conventions` if you are about to write numerical code. Units and Hilbert
-  space dimensions are where this kind of work goes wrong.
-* :doc:`devices` if you want to design a circuit that is not one of the four preset
-  qubit types.
+* :doc:`conventions` before writing numerical code. Units and Hilbert-space
+  dimensions are the usual source of error.
+* :doc:`devices` to simulate a circuit that is not one of the preset qubit types,
+  and to register one as a qubit.
 * :doc:`examples` for thirteen worked scripts, from a single Rabi flop to Grover's
-  algorithm on physical pulses.
+  algorithm executed as physical pulses.

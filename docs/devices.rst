@@ -2,10 +2,9 @@
 Device design
 ==============
 
-The four preset qubit types cover a lot of ground, but not everything. If you want a
-circuit that is not a transmon, a fluxonium, a flux qubit or zero-pi, draw it: write
-the capacitors, inductors, junctions and resistors as a netlist, and qforge quantizes
-whatever you wrote.
+The four preset qubit types do not cover every circuit worth simulating. Any other
+topology can be described as a netlist of capacitors, inductors, junctions and
+resistors, which qforge then quantizes.
 
 .. code-block:: text
 
@@ -26,17 +25,17 @@ whatever you wrote.
         ▼  device_report
     tables, terminal plots, saved figures
 
-Three modules, cleanly split. ``device_netlist`` does the language and unit
-conversion and no physics. ``device_engine`` does the physics and never prints.
-``device_report`` renders and never computes. Simulation therefore stays usable
-headless, and the CLI and GUI share one renderer.
+The split across three modules is deliberate. ``device_netlist`` owns the language
+and unit conversion and performs no physics. ``device_engine`` performs the physics
+and prints nothing. ``device_report`` renders and computes nothing. Simulation
+therefore remains usable headless, and the CLI and GUI share a single renderer.
 
 Getting started
 ===============
 
-The fastest route is the wizard: ``qforge --interactive``, then "Design a device",
-then "Start from a template". Nine worked circuits ship with qforge, from an LC
-resonator to zero-pi.
+The quickest route is the wizard: ``qforge --interactive``, then "Design a device",
+then "Start from a template". Nine worked circuits are bundled, from an LC resonator
+to zero-pi.
 
 From Python:
 
@@ -53,8 +52,8 @@ From Python:
 The netlist language
 ====================
 
-Free form, one card per line, keywords case insensitive. If you have written SPICE,
-this will look familiar.
+Free form, one card per line, with case-insensitive keywords. The layout follows
+SPICE closely.
 
 .. code-block:: text
 
@@ -210,10 +209,10 @@ result:
     print(check["converged"], check["max_transition_shift_mhz"])
 
 ``check_convergence`` re-diagonalizes with every cutoff raised by 50 percent and
-reports the largest change in any transition frequency, so the spectrum comes with an
-honest error bar. Move more than 1 MHz and it is called unconverged. It runs
+reports the largest change in any transition frequency, which gives the reported
+spectrum an error bar. A shift above 1 MHz is reported as unconverged. It runs
 automatically inside ``analyze()`` for Hilbert spaces below 40,000 states, where the
-second diagonalization is cheap. The circuit's cutoffs are restored before it
+second diagonalization is cheap, and the circuit's cutoffs are restored before it
 returns.
 
 Analysis
@@ -266,7 +265,7 @@ then a spacing between two unrelated transitions. A circuit with no junctions is
 purely harmonic and has no anharmonicity at all.
 
 qforge does not quietly report a misleading number. ``anharmonicity_meaningful``
-tells you which case you are in and ``anharmonicity_note`` explains it in words.
+records which case applies, and ``anharmonicity_note`` explains it in words.
 
 Matrix elements
 ---------------
@@ -274,8 +273,8 @@ Matrix elements
 ``charge_matrix_elements`` gives :math:`|\langle i|Q|j\rangle|` in the energy
 eigenbasis: periodic variables report the Cooper pair number operator, extended
 variables the conjugate charge. These set how strongly a voltage drive couples one
-level to another, which is what tells you whether a designed device can be driven at
-all and which transition a drive will hit hardest. They are a coupling, not a gate
+level to another, and therefore whether a designed device can be driven at all and
+which transition a drive reaches most strongly. They describe a coupling, not a gate
 rate.
 
 Coherence and dissipation
@@ -323,9 +322,68 @@ Handing a device to the gate engine
     ops["H_rad_per_ns"]      # the same thing times 2*pi, ready for QuTiP
     ops["charge_operators"]  # projected into the same basis
 
-The conversion to rad/ns happens here rather than being left for you to remember.
-Ask for three levels or more and :math:`|2\rangle` stays in the model instead of
-being projected away, which is the whole point of keeping leakage visible.
+The conversion to rad/ns happens here rather than being left to the caller.
+Requesting three levels or more retains :math:`|2\rangle` in the model instead of
+projecting it away, which is what allows leakage to be observed downstream.
+
+Registering a device as a qubit
+===============================
+
+A designed circuit can be registered with ``QubitEngine`` under the ``"device"``
+type, after which it is usable anywhere a preset qubit is: gates, couplings,
+workflows and error correction.
+
+.. code-block:: python
+
+    from qforge.core.device_engine import DeviceEngine
+    from qforge.core.qubit_engine import QubitEngine
+    from qforge.core.device_qubit import device_qubit_params
+
+    device = DeviceEngine().create_device_from_file("transmon.qdl")
+
+    params = device_qubit_params(
+        device.netlist.source,
+        truncated_dim=4,
+        device_name=device.name,
+        source_path=device.netlist.source_path,
+    )
+    QubitEngine().create_qubit("device", "custom_q", params)
+
+In the wizard this is "Create a qubit" followed by "Select from custom device",
+which checks that the circuit can be driven, shows its spectrum, and asks how many
+levels to keep before registering it.
+
+``DeviceQubit`` is the adapter that makes this work. It implements the narrow
+interface the engines expect from an scqubits qubit: ``truncated_dim``,
+``eigenvals``, ``eigensys``, ``n_operator``, ``matrixelement_table``,
+``t1_capacitive``, and ``phi_operator`` where the mode has one.
+
+Two points are worth knowing before relying on it.
+
+**Mode selection.** A preset qubit has one mode and one charge operator. A designed
+circuit may have several, so the adapter picks the mode carrying the 0-1 transition
+by scoring each mode's charge operator as
+
+.. math::
+
+    \frac{|\langle 0|Q|1\rangle|}{\sqrt{\langle 0|Q^2|0\rangle}}
+
+Normalising by each mode's own zero-point spread is what makes the comparison
+meaningful, since a periodic variable's :math:`n` counts Cooper pairs while an
+extended variable's :math:`Q` is in scqubits' oscillator units and the raw matrix
+elements are not on the same footing. In the transmon-plus-resonator template the raw
+elements favour the resonator, 1.32 against 1.21; normalised, the transmon wins 0.999
+to 0.487, which is correct, since level 1 of that circuit is the transmon excitation.
+The chosen mode is recorded on ``qubit_mode``.
+
+**Truncation cost.** Every retained level multiplies into the Hilbert space of any
+multi-qubit simulation the qubit takes part in. Four levels matches the preset types
+and keeps two leakage levels; two levels is cheapest but reports no leakage at all.
+
+Registration stores the netlist source rather than a path, so the qubit survives
+edits to the file it came from and the session file remains a complete record of the
+circuit. Rebuilt qubits are cached by netlist and truncation, since quantization is
+not cheap and a session reload reconstructs every registered qubit.
 
 Templates
 =========

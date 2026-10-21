@@ -1,0 +1,14 @@
+* LC resonator: the simplest circuit this language can describe.
+*
+* No junction, so the potential is exactly quadratic, the ladder is evenly spaced
+* and the anharmonicity is zero. Useful as a sanity check: the frequency should
+* come out at 1/(2 pi sqrt(LC)) = 1.678 GHz.
+
+.title  LC resonator
+.name   lc_resonator
+
+L1  1  0  100nH
+C1  1  0  90fF
+
+.levels 5
+.end

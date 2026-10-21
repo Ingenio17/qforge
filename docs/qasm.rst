@@ -2,11 +2,10 @@
 Circuits and QASM
 ====================
 
-qforge reads OpenQASM 2.0 with its own parser, no external circuit framework
-required. What happens next is the interesting part: the circuit is decomposed into
-a gate set the hardware can actually produce, each of those gates is calibrated as a
-pulse, the pulses are laid out on a timeline, and the whole thing is solved as one
-continuous Hamiltonian.
+qforge parses OpenQASM 2.0 directly, with no external circuit framework. The circuit
+is then decomposed into a gate set the hardware can produce, each of those gates is
+calibrated as a pulse, the pulses are laid out on a timeline, and the result is
+solved as one continuous Hamiltonian.
 
 Two classes do the work, both in ``qforge/core/workflow_engine.py``:
 
@@ -52,13 +51,13 @@ The result carries ``times``, ``states``, ``populations`` keyed by computational
 basis string, and ``final_state``.
 
 There is no reset between gates. Accumulated phase, leakage and decoherence carry
-from one instruction to the next, which is exactly what happens on hardware.
+from one instruction to the next, as they do on hardware.
 
 The native basis
 ================
 
-Real control electronics cannot execute arbitrary mathematics. Everything is funnelled
-into this set:
+Control electronics cannot execute an arbitrary unitary, so every instruction is
+reduced to this set:
 
 ``{x, h, rz, cx, cz, swap, cp}``
 
@@ -77,10 +76,13 @@ into this set:
      - A virtual Z. A phase update in the software frame. Zero duration, zero
        decoherence. Aliases ``p`` and ``u1``.
    * - ``cz``
-     - A tunable coupler or cross resonance interaction pulse.
+     - A coupler pulse on the interaction operator, with a :math:`\sin^2` envelope.
    * - ``cx`` / ``cnot``
-     - Compiled to :math:`X(-\pi/2) \rightarrow \mathrm{CZ} \rightarrow X(+\pi/2)`
-       on the target, with a Stark shift corrected closing pulse.
+     - On a tunable coupler, compiled to
+       :math:`X(-\pi/2) \rightarrow \mathrm{CZ} \rightarrow X(+\pi/2)` on the target,
+       with a flux pulse holding the avoided crossing and a Stark-shift-corrected
+       closing pulse. On any other coupling the scheduler emits a single drive on the
+       control at the target's frequency.
    * - ``swap``
      - Three alternating ``cx`` sequences, laid out in time.
    * - ``cp(theta)``
@@ -166,8 +168,8 @@ Instead of measuring, read populations off the final state:
     final = {k: v[-1] for k, v in results["populations"].items()}
     print(final["11"])
 
-If you want genuine mid-circuit measurement with feed-forward, that is what the
-error correction engine does. See :doc:`error_correction`.
+Mid-circuit measurement with feed-forward is implemented in the error-correction
+engine. See :doc:`error_correction`.
 
 Unsupported gates
 =================
@@ -185,18 +187,25 @@ simulated: an X and an H duration for each qubit, and a CZ and CX duration for e
 declared coupling, in both directions. Results come from the calibration cache when
 they are already there, so a second run of the same topology is fast.
 
-``compile_schedule`` then walks the instruction list keeping a running clock per
-qubit. Single qubit drives advance one clock. Two qubit gates synchronise both
-clocks to the later of the two, then advance together. Virtual Z instructions
-advance nothing, because they cost no time. The schedule is a list of drive
-dictionaries with ``start_time`` and ``end_time`` in ns, plus the total circuit
-depth in ns.
+``compile_schedule`` then walks the instruction list, keeping a running clock per
+qubit. Single-qubit drives advance one clock. Two-qubit gates synchronise both clocks
+to the later of the two and advance together. Virtual Z instructions advance nothing,
+since they cost no time. The schedule is a list of drive dictionaries with
+``start_time`` and ``end_time`` in ns, together with the total circuit depth.
+
+.. note::
+
+   The scheduler's CX for a fixed capacitive coupling drives the control at the
+   target's frequency, which is the cross-resonance form. The calibrated
+   microwave-activated CNOT described in :doc:`gates` is compiled by
+   ``simulate_n_qubit_dynamics`` for direct two-qubit calls and is not yet used by
+   this scheduling path.
 
 Reading the logical circuit
 ===========================
 
 ``print_logical_circuit_diagram`` draws the circuit as written, before decomposition,
-which is usually what you want when checking that the file says what you meant:
+which is the useful view when checking that a file expresses the intended circuit:
 
 .. code-block:: python
 
@@ -209,7 +218,7 @@ Both ``execute_workflow`` and the error correction workflows print it automatica
 Bundled circuits
 ================
 
-``examples/qasm_files/`` carries ``bell_state.qasm``, ``deutsch.qasm``,
-``toffoli.qasm`` and ``single_state.qasm``. They are small on purpose, since a
-physical simulation of a wide circuit costs a great deal more than a statevector
-one.
+``examples/qasm_files/`` contains ``bell_state.qasm``, ``deutsch.qasm``,
+``toffoli.qasm`` and ``single_state.qasm``. They are deliberately small, since
+simulating a wide circuit at the pulse level is far more expensive than a statevector
+simulation of the same circuit.

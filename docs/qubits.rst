@@ -9,7 +9,7 @@ those change with a parameter.
 
 .. code-block:: python
 
-    from qforge.core.qubit_engine import QubitEngine
+    from QubitWeave.core.qubit_engine import QubitEngine
 
     engine = QubitEngine()
     q = engine.create_qubit("transmon", "Q1", {"EJ": 15.0, "EC": 0.3})
@@ -21,7 +21,7 @@ Supported models
 ================
 
 Four scqubits circuit types are available, along with a fifth backed by a custom
-netlist. They take different parameters, and qforge keeps those differences
+netlist. They take different parameters, and QubitWeave keeps those differences
 explicit rather than hiding them behind a common signature.
 
 Transmon
@@ -55,7 +55,7 @@ charge dispersion, at the cost of a small anharmonicity of roughly 200 to 300 MH
      - Charge basis cutoff. Too small and the ground state lands hundreds of MHz off.
    * - ``truncated_dim``
      - 4
-     - Eigenstates retained by the rest of qforge, which sets how much leakage the
+     - Eigenstates retained by the rest of QubitWeave, which sets how much leakage the
        simulation can represent.
 
 Fluxonium
@@ -103,7 +103,7 @@ uses the ``"device"`` type, with the netlist source carried in ``params``:
 
 .. code-block:: python
 
-    from qforge.core.device_qubit import device_qubit_params
+    from QubitWeave.core.device_qubit import device_qubit_params
 
     params = device_qubit_params(netlist_source, truncated_dim=4)
     engine.create_qubit("device", "custom", params)
@@ -126,12 +126,12 @@ The full workflow, from netlist to registered qubit, is in :doc:`devices`.
 Presets
 =======
 
-``qforge/config/defaults.py`` holds starting points for each of the four preset
+``QubitWeave/config/defaults.py`` holds starting points for each of the four preset
 types.
 
 .. code-block:: python
 
-    from qforge.config.defaults import QUBIT_PRESETS
+    from QubitWeave.config.defaults import QUBIT_PRESETS
 
     params = QUBIT_PRESETS["transmon"]["high_coherence"]
     engine.create_qubit("transmon", "Q_hc", params)
@@ -170,7 +170,7 @@ variants. The flux qubit and zero-pi carry ``typical`` only.
 
 .. note::
 
-   The table above is generated from ``QUBIT_PRESETS`` by ``qforge dev sync``. Edit
+   The table above is generated from ``QUBIT_PRESETS`` by ``QubitWeave dev sync``. Edit
    the presets, not the table.
 
 Spectra
@@ -203,7 +203,7 @@ Coherence
 
 :math:`T_1` comes from scqubits' capacitive loss channel at the given bath
 temperature, with a quality factor of :math:`10^6`. scqubits returns times in units
-of inverse frequency, which with GHz energies means nanoseconds, and qforge converts
+of inverse frequency, which with GHz energies means nanoseconds, and QubitWeave converts
 to microseconds.
 
 :math:`T_2` is estimated as :math:`1.4 \times T_1`, that is the :math:`2T_1` ceiling
@@ -211,7 +211,7 @@ scaled by 0.7 to stand in for typical pure dephasing. It is a rule of thumb, not
 noise calculation. Where dephasing is the quantity under study, it should be modelled
 explicitly rather than inferred from this estimate.
 
-When scqubits cannot compute a channel for a given model, qforge falls back to the
+When scqubits cannot compute a channel for a given model, QubitWeave falls back to the
 values in ``NOISE_DEFAULTS`` and labels them ``"Estimated"``. The ``limit`` field
 records which case applies.
 
@@ -242,7 +242,7 @@ Visualization
 
 .. code-block:: python
 
-    from qforge.utils.terminal_plot import TerminalPlotter
+    from QubitWeave.utils.terminal_plot import TerminalPlotter
 
     TerminalPlotter.plot_spectrum(evals, title="Q1 levels")
 

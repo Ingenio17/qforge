@@ -3,7 +3,7 @@ Tests for comparison engine.
 """
 
 import pytest
-from qforge.comparison.comparator import Comparator
+from QubitWeave.comparison.comparator import Comparator
 
 
 def test_compare_qubit_types():

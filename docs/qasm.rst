@@ -2,21 +2,21 @@
 Circuits and QASM
 ====================
 
-qforge parses OpenQASM 2.0 directly, with no external circuit framework. The circuit
+QubitWeave parses OpenQASM 2.0 directly, with no external circuit framework. The circuit
 is then decomposed into a gate set the hardware can produce, each of those gates is
 calibrated as a pulse, the pulses are laid out on a timeline, and the result is
 solved as one continuous Hamiltonian.
 
-Two classes do the work, both in ``qforge/core/workflow_engine.py``:
+Two classes do the work, both in ``QubitWeave/core/workflow_engine.py``:
 
 * ``QASMTranspiler`` parses and decomposes.
 * ``PhysicalWorkflowEngine`` calibrates, schedules and simulates.
 
 .. code-block:: python
 
-    from qforge.core.qubit_engine import QubitEngine
-    from qforge.core.gate_engine import GateEngine
-    from qforge.core.workflow_engine import PhysicalWorkflowEngine
+    from QubitWeave.core.qubit_engine import QubitEngine
+    from QubitWeave.core.gate_engine import GateEngine
+    from QubitWeave.core.workflow_engine import PhysicalWorkflowEngine
 
     q_eng = QubitEngine()
     g_eng = GateEngine()
@@ -152,7 +152,7 @@ Registers and indexing
 Measurement and classical control
 =================================
 
-qforge simulates the Hamiltonian, so there is no classical register to collapse into
+QubitWeave simulates the Hamiltonian, so there is no classical register to collapse into
 mid circuit. These directives are deliberately ignored:
 
 ``measure``, ``barrier``, ``creg``, ``reset``, and ``if (...)``.
@@ -209,7 +209,7 @@ which is the useful view when checking that a file expresses the intended circui
 
 .. code-block:: python
 
-    from qforge.core.workflow_engine import print_logical_circuit_diagram
+    from QubitWeave.core.workflow_engine import print_logical_circuit_diagram
 
     print_logical_circuit_diagram("bell_state.qasm", title="Bell state")
 

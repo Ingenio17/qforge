@@ -2,20 +2,20 @@
 01_qubit_creation.py
 
 Description:
-This example introduces qforge's core feature: treating qubits as physical, multi-level 
+This example introduces QubitWeave's core feature: treating qubits as physical, multi-level 
 superconducting circuits. It creates qubits, calculates their spectrum, and extracts 
 physical operators.
 
 Terminal CLI Equivalents:
 -------------------------
-qforge qubit create --type transmon --name T1 --EJ 15.0 --EC 0.3
-qforge qubit analyze --name T1
+QubitWeave qubit create --type transmon --name T1 --EJ 15.0 --EC 0.3
+QubitWeave qubit analyze --name T1
 
-qforge qubit create --type fluxonium --name F1 --EJ 9.0 --EC 2.4 --EL 0.5
-qforge qubit analyze --name F1
+QubitWeave qubit create --type fluxonium --name F1 --EJ 9.0 --EC 2.4 --EL 0.5
+QubitWeave qubit analyze --name F1
 """
 import numpy as np
-from qforge import QubitEngine
+from QubitWeave import QubitEngine
 
 def main():
     print("============================================================")

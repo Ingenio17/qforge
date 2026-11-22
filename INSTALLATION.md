@@ -1,8 +1,8 @@
-# qforge Installation Summary
+# QubitWeave Installation Summary
 
 ## Installation Status: ✅ COMPLETE
 
-**qforge v0.1.0** has been successfully installed and verified!
+**QubitWeave v0.1.0** has been successfully installed and verified!
 
 ---
 
@@ -21,9 +21,9 @@
   - pandas, click, rich, prompt-toolkit, plotext
   - All other required packages
 
-### 3. qforge Package Installation
-- ✅ Installed qforge 0.1.0 in editable mode
-- ✅ Created qforge CLI command
+### 3. QubitWeave Package Installation
+- ✅ Installed QubitWeave 0.1.0 in editable mode
+- ✅ Created QubitWeave CLI command
 - ✅ Package registered with pip
 
 ---
@@ -33,7 +33,7 @@
 ### ✅ All Verification Tests Passed
 
 ```
-[OK] qforge version: 0.1.0
+[OK] QubitWeave version: 0.1.0
 [OK] Core modules imported successfully
 [OK] QubitEngine created
 [OK] Transmon qubit created (EJ=15.0 GHz, EC=0.3 GHz)
@@ -41,9 +41,9 @@
 [OK] Comparison engine working - compared comprehensive_comparison
 ```
 
-### ✅ Command Line Interface-  `qforge --version` → Works!
-- `qforge --help` → Works!
-- `pip show qforge` → Confirmed installed
+### ✅ Command Line Interface-  `QubitWeave --version` → Works!
+- `QubitWeave --help` → Works!
+- `pip show QubitWeave` → Confirmed installed
 - Python import → Works perfectly
 
 ---
@@ -52,23 +52,23 @@
 
 ### Method 1: Check Version
 ```powershell
-qforge --version
+QubitWeave --version
 ```
-**Output:** `qforge, version 0.1.0`
+**Output:** `QubitWeave, version 0.1.0`
 
 ### Method 2: Python Import
 ```powershell
-python -c "import qforge; print('qforge v' + qforge.__version__)"
+python -c "import QubitWeave; print('QubitWeave v' + QubitWeave.__version__)"
 ```
-**Output:** `qforge v0.1.0`
+**Output:** `QubitWeave v0.1.0`
 
 ###Method 3: Pip Show
 ```powershell
-pip show qforge
+pip show QubitWeave
 ```
 **Output:**
 ```
-Name: qforge
+Name: QubitWeave
 Version: 0.1.0
 Summary: End-to-end quantum simulation toolkit...
 Location: ...\\site-packages
@@ -94,7 +94,7 @@ python verify_installation.py
 - Use Windows Terminal instead of PowerShell for better Unicode support
 - Or ignore the display warnings - everything works correctly
 
-**Note:** This is a Windows console limitation, not a qforge issue.
+**Note:** This is a Windows console limitation, not a QubitWeave issue.
 
 ### ⚠️ Qiskit Metal (Optional)
 **Issue:** Qiskit Metal requires Visual C++ compiler (for gdspy dependency)
@@ -103,7 +103,7 @@ python verify_installation.py
 
 **Solution:**
 - Install Visual Studio Build Tools if needed
-- Or use: `pip install qforge[hardware]` in the future
+- Or use: `pip install QubitWeave[hardware]` in the future
 - Current installation is complete without it
 
 ---
@@ -112,17 +112,17 @@ python verify_installation.py
 
 ### 1. Interactive Mode
 ```powershell
-qforge --interactive
+QubitWeave --interactive
 ```
 
 ### 2. Create a Qubit
 ```powershell
-qforge qubit create --type transmon --name my_transmon --EJ 15 --EC 0.3
+QubitWeave qubit create --type transmon --name my_transmon --EJ 15 --EC 0.3
 ```
 
 ### 3. Compare Qubits
 ```powershell
-qforge compare qubits --qubits transmon,fluxonium --metrics all
+QubitWeave compare qubits --qubits transmon,fluxonium --metrics all
 ```
 
 ### 4. Run Tests
@@ -142,7 +142,7 @@ python examples\comprehensive_comparison.py
 ## Installed Package Info
 
 ```
-Name: qforge
+Name: QubitWeave
 Version: 0.1.0
 Description: End-to-end quantum simulation toolkit from qubit physics to hardware design
 Author: Saumya Shah
@@ -193,13 +193,13 @@ Dependencies:
 
 1. **Try the CLI:**
    ```powershell
-   qforge --help
-   qforge --interactive
+   QubitWeave --help
+   QubitWeave --interactive
    ```
 
 2. **Create Your First Qubit:**
    ```powershell
-   qforge qubit create --type transmon --name test --preset typical
+   QubitWeave qubit create --type transmon --name test --preset typical
    ```
 
 3. **Run Tests:**
@@ -216,6 +216,6 @@ Dependencies:
 
 ## Installation Complete! 🎉
 
-qforge is now fully installed and ready to use for quantum simulations!
+QubitWeave is now fully installed and ready to use for quantum simulations!
 
-**Quick verification:** Run `qforge --version` to confirm.
+**Quick verification:** Run `QubitWeave --version` to confirm.

@@ -12,11 +12,11 @@ import re
 import pytest
 from rich.console import Console
 
-from qforge.core import device_report
-from qforge.core.device_library import list_templates, template_source
-from qforge.core.device_netlist import parse_netlist
+from QubitWeave.core import device_report
+from QubitWeave.core.device_library import list_templates, template_source
+from QubitWeave.core.device_netlist import parse_netlist
 
-# Mirrors _RICH_TAG_RE in qforge/cli/gui.py, which the GUI console uses to strip
+# Mirrors _RICH_TAG_RE in QubitWeave/cli/gui.py, which the GUI console uses to strip
 # Rich markup out of anything printed to it. It is duplicated rather than
 # imported so this test does not need tkinter.
 GUI_MARKUP_RE = re.compile(r"\[(/?)([a-zA-Z][^\[\]/]*?)\]")
@@ -109,7 +109,7 @@ def test_schematic_survives_a_markup_stripping_console():
 
 
 def test_analysis_report_survives_a_markup_stripping_console():
-    from qforge.core.device_engine import QuantumDevice
+    from QubitWeave.core.device_engine import QuantumDevice
 
     device = QuantumDevice(parse_netlist(TRANSMON))
     result = device.analyze(coherence=False, matrix_elements=True, convergence=False)
@@ -137,7 +137,7 @@ def test_render_schematic_lists_connectivity():
 
 def test_render_format_reference_fits_a_narrow_console():
     """The reference is printed inside a panel, so its lines must leave room."""
-    from qforge.core.device_netlist import FORMAT_REFERENCE
+    from QubitWeave.core.device_netlist import FORMAT_REFERENCE
 
     assert max(len(line) for line in FORMAT_REFERENCE.splitlines()) <= 74
     output = render(lambda console: device_report.render_format_reference(console=console))

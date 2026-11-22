@@ -1,5 +1,5 @@
 """
-Tests for registering a netlist-designed device as an ordinary qforge qubit.
+Tests for registering a netlist-designed device as an ordinary QubitWeave qubit.
 
 The load-bearing test here is ``test_device_route_matches_preset_route``: the
 same physical circuit, reached once through a netlist and once through
@@ -11,16 +11,16 @@ and nothing else in this file would notice.
 import numpy as np
 import pytest
 
-from qforge.core.device_engine import DeviceError
-from qforge.core.device_library import template_source
-from qforge.core.device_qubit import (
+from QubitWeave.core.device_engine import DeviceError
+from QubitWeave.core.device_library import template_source
+from QubitWeave.core.device_qubit import (
     DEFAULT_TRUNCATED_DIM,
     DeviceQubit,
     build_device_qubit,
     clear_cache,
     device_qubit_params,
 )
-from qforge.core.qubit_engine import QubitEngine
+from QubitWeave.core.qubit_engine import QubitEngine
 
 scq = pytest.importorskip("scqubits")
 
@@ -293,7 +293,7 @@ def test_gate_engine_uses_the_real_charge_operator():
     neither n_operator nor phi_operator. That fallback is a different physical
     model, so landing in it silently would be a real regression.
     """
-    from qforge.core.gate_engine import GateEngine
+    from QubitWeave.core.gate_engine import GateEngine
 
     engine = QubitEngine()
     engine.create_qubit("device", "dq", device_qubit_params(EQUIVALENT_TRANSMON, 4, "dq"))
@@ -312,7 +312,7 @@ def test_gate_engine_uses_the_real_charge_operator():
 
 @pytest.mark.slow
 def test_x_gate_on_a_device_qubit_inverts_the_population():
-    from qforge.core.gate_engine import GateEngine
+    from QubitWeave.core.gate_engine import GateEngine
 
     engine = QubitEngine()
     engine.create_qubit("device", "xq", device_qubit_params(EQUIVALENT_TRANSMON, 3, "xq"))

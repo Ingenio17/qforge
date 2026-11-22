@@ -3,7 +3,7 @@ Basic tests for QubitEngine.
 """
 
 import pytest
-from qforge.core.qubit_engine import QubitEngine
+from QubitWeave.core.qubit_engine import QubitEngine
 
 
 def test_create_transmon():

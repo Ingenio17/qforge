@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from qforge.core.workflow_engine import QASMTranspiler
+from QubitWeave.core.workflow_engine import QASMTranspiler
 
 
 def _types(instrs):

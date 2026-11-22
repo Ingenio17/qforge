@@ -25,9 +25,9 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
-from qforge.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
 
 def main():
     print("============================================================")

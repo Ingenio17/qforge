@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from qforge.core.coupling import CouplingGenerator
+from QubitWeave.core.coupling import CouplingGenerator
 
 def test_capacitive_splitting():
     """

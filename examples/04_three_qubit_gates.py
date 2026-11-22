@@ -3,21 +3,21 @@
 
 Description:
 Simulates a native 3-qubit Continuous-Time interaction implementing a Toffoli (CCX) gate.
-In qforge, we simulate multi-qubit topologies dynamically by applying conditional 
+In QubitWeave, we simulate multi-qubit topologies dynamically by applying conditional 
 energy shifts or drives. We will plot the state evolution directly.
 
 Terminal CLI Equivalents:
 -------------------------
-qforge qubit create --type transmon --name Q0 --EJ 15.0 --EC 0.3
-qforge qubit create --type transmon --name Q1 --EJ 15.0 --EC 0.3
-qforge qubit create --type transmon --name Q2 --EJ 15.0 --EC 0.3
+QubitWeave qubit create --type transmon --name Q0 --EJ 15.0 --EC 0.3
+QubitWeave qubit create --type transmon --name Q1 --EJ 15.0 --EC 0.3
+QubitWeave qubit create --type transmon --name Q2 --EJ 15.0 --EC 0.3
 (Note: Toffoli continuous physical layout simulation is executed via the `GateEngine` API natively)
 """
 import numpy as np
 import os
-from qforge.utils.terminal_plot import TerminalPlotter
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 def main():
     print("============================================================")

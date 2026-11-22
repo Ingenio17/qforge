@@ -2,7 +2,7 @@
 Interfaces
 ==========
 
-qforge provides four front ends over the same engines: an interactive terminal
+QubitWeave provides four front ends over the same engines: an interactive terminal
 wizard, a desktop GUI, a scriptable CLI, and the Python API. None of them contains
 physics. Each delegates to the engines described elsewhere in this documentation, so
 anything available in the wizard is also available from a script.
@@ -12,14 +12,14 @@ Interactive mode
 
 .. code-block:: bash
 
-    $ qforge --interactive
+    $ QubitWeave --interactive
 
 The wizard is built on prompt-toolkit and Rich. Move with the arrow keys and enter,
 or start typing an option's name to filter. ``q``, ``Esc`` or ``Ctrl-C`` backs out
 of a menu. Tab completes qubit names, file paths and coupling choices.
 
 .. image:: images/landing_interactive.png
-   :alt: The qforge interactive wizard
+   :alt: The QubitWeave interactive wizard
    :align: center
 
 The menu
@@ -51,14 +51,14 @@ Graphical interface
 
 .. code-block:: bash
 
-    $ qforge --gui
+    $ QubitWeave --gui
 
 The GUI is a tkinter application covering the same workflows as the wizard, with a
 sidebar of actions and a console pane that reproduces Rich tables and plotext charts,
 including their box-drawing characters. Selection dialogs are searchable, so a qubit
 or template can be chosen from a filtered list rather than typed from memory.
 
-It needs a desktop session. Everything else in qforge runs headless.
+It needs a desktop session. Everything else in QubitWeave runs headless.
 
 Command line
 ============
@@ -68,9 +68,9 @@ full reference.
 
 .. code-block:: bash
 
-    $ qforge qubit create --type transmon --name Q1 --EJ 15 --EC 0.3
-    $ qforge qubit analyze --name Q1 --plot --coherence
-    $ qforge gate simulate --qubit Q1 --gate X --duration 40 --noise realistic
+    $ QubitWeave qubit create --type transmon --name Q1 --EJ 15 --EC 0.3
+    $ QubitWeave qubit analyze --name Q1 --plot --coherence
+    $ QubitWeave gate simulate --qubit Q1 --gate X --duration 40 --noise realistic
 
 Python API
 ==========
@@ -79,11 +79,11 @@ The engines are the primary interface:
 
 .. code-block:: python
 
-    from qforge.core.qubit_engine import QubitEngine
-    from qforge.core.gate_engine import GateEngine
-    from qforge.core.workflow_engine import PhysicalWorkflowEngine
-    from qforge.core.error_correction_engine import ErrorCorrectionEngine
-    from qforge.core.device_engine import DeviceEngine
+    from QubitWeave.core.qubit_engine import QubitEngine
+    from QubitWeave.core.gate_engine import GateEngine
+    from QubitWeave.core.workflow_engine import PhysicalWorkflowEngine
+    from QubitWeave.core.error_correction_engine import ErrorCorrectionEngine
+    from QubitWeave.core.device_engine import DeviceEngine
 
 Simulation methods return structured results rather than plotting, so they compose
 into further analysis. See :doc:`quickstart` for a worked introduction and
@@ -92,7 +92,7 @@ into further analysis. See :doc:`quickstart` for a worked introduction and
 Try it in a browser
 ===================
 
-The sandbox below runs on MyBinder with qforge and its numerical backends already
+The sandbox below runs on MyBinder with QubitWeave and its numerical backends already
 installed, and requires no local installation.
 
 .. note::
@@ -101,7 +101,7 @@ installed, and requires no local installation.
    Do not close or refresh the page while it loads.
 
 1. Wait for Binder to finish. A terminal appears and boots straight into
-   ``qforge --interactive``.
+   ``QubitWeave --interactive``.
 2. Work through the menus. Arrow keys and enter, or type an option's name.
 3. Tab completes qubit names and coupling choices.
 4. Type ``exit`` or ``quit``, or press ``Ctrl-C``, to leave.
@@ -109,7 +109,7 @@ installed, and requires no local installation.
 .. raw:: html
 
    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border: 1px solid #2b2b2b; border-radius: 8px; margin: 20px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-       <iframe src="https://mybinder.org/v2/gh/Ingenio17/qforge/master?urlpath=terminals/1"
+       <iframe src="https://mybinder.org/v2/gh/Ingenio17/QubitWeave/master?urlpath=terminals/1"
                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; background: #1a1a1a;"
                allowfullscreen>
        </iframe>

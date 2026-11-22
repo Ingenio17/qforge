@@ -9,15 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🚀 New Features
 -   **Expanded Qubit Library**: Added full support for **Fluxonium**, **Flux**, and **Zero-π** qubits alongside Transmons.
--   **Interactive Mode**: New `qforge --interactive` command launches a guided wizard for creating qubits, simulating gates, and running workflows.
+-   **Interactive Mode**: New `QubitWeave --interactive` command launches a guided wizard for creating qubits, simulating gates, and running workflows.
 -   **Gate Dynamics**: Time-domain gate simulation (Rabi oscillations, pulses) backed by QuTiP.
 -   **Comparison Engine**: Compare parameters and coherence times of multiple qubits side-by-side.
 -   **Dynamic Configuration**: CLI options now load dynamically from `defaults.py`, enabling easier extension.
 
 ### 🛠️ Developer Tools & Automation
--   **Docs Sync**: New `qforge dev sync` command automatically updates documentation tables from source code metadata.
+-   **Docs Sync**: New `QubitWeave dev sync` command automatically updates documentation tables from source code metadata.
 -   **Agent Instructions**: Added `docs/AGENT_INSTRUCTIONS.md` to guide AI agents in adding new features.
--   **Citations**: New `qforge citations` command outputs BibTeX entries for dependency libraries.
+-   **Citations**: New `QubitWeave citations` command outputs BibTeX entries for dependency libraries.
 
 ### ⚖️ Compliance
 -   **Licensing**: Added `NOTICE` (Apache 2.0) and `ThirdPartyNotices.md` (BSD-3) for legal compliance.
@@ -49,4 +49,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rich terminal UI components using click, rich, and prompt-toolkit
 - Scientific computing stack: numpy, scipy, matplotlib, pandas
 
-[0.1.1]: https://github.com/Ingenio17/qforge/releases/tag/v0.1.1
+[0.1.1]: https://github.com/Ingenio17/QubitWeave/releases/tag/v0.1.1

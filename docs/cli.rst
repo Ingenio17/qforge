@@ -5,23 +5,23 @@ CLI reference
 Every command delegates to an engine. The CLI contains no physics of its own, so
 everything below is also reachable from Python.
 
-``--help`` works at every level: ``qforge --help``, ``qforge qubit --help``,
-``qforge qubit create --help``.
+``--help`` works at every level: ``QubitWeave --help``, ``QubitWeave qubit --help``,
+``QubitWeave qubit create --help``.
 
 Top level
 =========
 
 .. code-block:: bash
 
-    $ qforge --interactive     # guided terminal wizard
-    $ qforge --gui             # desktop interface
-    $ qforge --cache-clear     # empty the calibration cache and exit
-    $ qforge --version
+    $ QubitWeave --interactive     # guided terminal wizard
+    $ QubitWeave --gui             # desktop interface
+    $ QubitWeave --cache-clear     # empty the calibration cache and exit
+    $ QubitWeave --version
 
-    $ qforge info              # version and loaded components
-    $ qforge citations         # BibTeX for scqubits, QuTiP and Qiskit
+    $ QubitWeave info              # version and loaded components
+    $ QubitWeave citations         # BibTeX for scqubits, QuTiP and Qiskit
 
-``qforge citations`` prints BibTeX entries for the libraries qforge is built on.
+``QubitWeave citations`` prints BibTeX entries for the libraries QubitWeave is built on.
 scqubits and QuTiP carry most of the numerical work and should be cited alongside it.
 
 Qubits
@@ -29,12 +29,12 @@ Qubits
 
 .. code-block:: bash
 
-    $ qforge qubit create --type transmon --name Q1 --EJ 15 --EC 0.3
-    $ qforge qubit create --type fluxonium --name F1 --preset high_coherence
-    $ qforge qubit list
-    $ qforge qubit analyze --name Q1 --plot --coherence
-    $ qforge qubit export Q1 --format qutip --output q1.py
-    $ qforge qubit delete Q1
+    $ QubitWeave qubit create --type transmon --name Q1 --EJ 15 --EC 0.3
+    $ QubitWeave qubit create --type fluxonium --name F1 --preset high_coherence
+    $ QubitWeave qubit list
+    $ QubitWeave qubit analyze --name Q1 --plot --coherence
+    $ QubitWeave qubit export Q1 --format qutip --output q1.py
+    $ QubitWeave qubit delete Q1
 
 .. list-table::
    :header-rows: 1
@@ -65,8 +65,8 @@ Gates
 
 .. code-block:: bash
 
-    $ qforge gate simulate --qubit Q1 --gate X --duration 40 --noise realistic
-    $ qforge gate simulate --qubit Q1 --gate H --duration 40 --steps 200 --save
+    $ QubitWeave gate simulate --qubit Q1 --gate X --duration 40 --noise realistic
+    $ QubitWeave gate simulate --qubit Q1 --gate H --duration 40 --steps 200 --save
 
 Options: ``--qubit``, ``--gate`` (X, Y, Z, H), ``--duration`` in ns (default 20),
 ``--noise`` (none, realistic), ``--steps`` (default 100), ``--save`` to write a
@@ -82,8 +82,8 @@ Comparison
 
 .. code-block:: bash
 
-    $ qforge compare qubits --qubits transmon,fluxonium --metrics all
-    $ qforge compare qubits --qubits Q1,F1 --gates X,H --tag demo
+    $ QubitWeave compare qubits --qubits transmon,fluxonium --metrics all
+    $ QubitWeave compare qubits --qubits Q1,F1 --gates X,H --tag demo
 
 Options: ``--qubits`` (comma separated names or types), ``--metrics`` (coherence,
 fidelity, frequency, anharmonicity, all), ``--gates`` to also simulate dynamics per
@@ -101,19 +101,19 @@ Examples
 
 .. code-block:: bash
 
-    $ qforge example list
-    $ qforge example run --name 02_single_qubit_gates
+    $ QubitWeave example list
+    $ QubitWeave example run --name 02_single_qubit_gates
 
 Housekeeping
 ============
 
 .. code-block:: bash
 
-    $ qforge cache clear             # drop the gate calibration cache
-    $ qforge clean                   # remove outputs/runs
-    $ qforge clean --all             # everything under outputs/, plus the session
-    $ qforge clean --days 7          # only runs older than a week
-    $ qforge clean --dry-run         # show what would go, delete nothing
+    $ QubitWeave cache clear             # drop the gate calibration cache
+    $ QubitWeave clean                   # remove outputs/runs
+    $ QubitWeave clean --all             # everything under outputs/, plus the session
+    $ QubitWeave clean --days 7          # only runs older than a week
+    $ QubitWeave clean --dry-run         # show what would go, delete nothing
 
 Clear the calibration cache after changing a qubit's physical parameters. Calibrated
 durations are keyed by qubit name, so a stale entry describes a gate that no longer
@@ -126,16 +126,16 @@ Developer
 
 .. code-block:: bash
 
-    $ qforge dev sync
+    $ QubitWeave dev sync
 
 Regenerates the preset table in ``docs/qubits.rst`` from ``QUBIT_PRESETS`` in
-``qforge/config/defaults.py``. Run it after adding a qubit type or changing a preset,
+``QubitWeave/config/defaults.py``. Run it after adding a qubit type or changing a preset,
 so the documentation and the code cannot drift apart.
 
 Stubs
 =====
 
-``qforge circuit build``, ``qforge workflow run`` and ``qforge hardware design`` are
+``QubitWeave circuit build``, ``QubitWeave workflow run`` and ``QubitWeave hardware design`` are
 placeholders that print a notice and exit. The functionality behind the first two is
 available through ``PhysicalWorkflowEngine`` and the wizard's workflow menu.
 
@@ -145,13 +145,13 @@ Where output goes
 .. code-block:: text
 
     outputs/
-      qubits/.qforge_session.json     registered qubits
-      qubits/.qforge_metrics.json     memoized frequencies, so listing stays fast
-      devices/.qforge_devices.json    designed devices
+      qubits/.QubitWeave_session.json     registered qubits
+      qubits/.QubitWeave_metrics.json     memoized frequencies, so listing stays fast
+      devices/.QubitWeave_devices.json    designed devices
       calib_cache.json                gate calibrations
       runs/                           comparison runs, one directory each
       plots/                          saved figures
       gates/  circuits/  hardware/  comparisons/
 
 Paths are relative to the working directory and are configured in
-``qforge/config/defaults.py`` under ``OUTPUT_DIRS``.
+``QubitWeave/config/defaults.py`` under ``OUTPUT_DIRS``.

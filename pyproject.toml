@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "qforge"
+name = "QubitWeave"
 version = "0.2.0"
 description = "End-to-end quantum simulation toolkit from qubit physics to hardware design"
 readme = "README.md"
@@ -57,22 +57,22 @@ docs = [
     "sphinx-rtd-theme>=1.0",
 ]
 hardware = [
-    # Install separately if needed: pip install qforge[hardware]
+    # Install separately if needed: pip install QubitWeave[hardware]
     "qiskit-metal>=0.1",
 ]
 
 [project.scripts]
-qforge = "qforge.cli.main:cli"
+QubitWeave = "QubitWeave.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/Ingenio17/qforge"
-Documentation = "https://qforge.readthedocs.io"
-Repository = "https://github.com/Ingenio17/qforge"
-Issues = "https://github.com/Ingenio17/qforge/issues"
+Homepage = "https://github.com/Ingenio17/QubitWeave"
+Documentation = "https://QubitWeave.readthedocs.io"
+Repository = "https://github.com/Ingenio17/QubitWeave"
+Issues = "https://github.com/Ingenio17/QubitWeave/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["qforge*"]
+include = ["QubitWeave*"]
 exclude = ["compliance*"]
 
 
@@ -81,7 +81,7 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=qforge --cov-report=term-missing --cov-report=html"
+addopts = "-v --cov=QubitWeave --cov-report=term-missing --cov-report=html"
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

@@ -15,7 +15,7 @@ Parameters are energies in GHz.
 
 .. code-block:: python
 
-    from qforge.core.qubit_engine import QubitEngine
+    from QubitWeave.core.qubit_engine import QubitEngine
 
     qubits = QubitEngine()
 
@@ -26,7 +26,7 @@ Parameters are energies in GHz.
     )
 
 Qubits are registered by name and persisted to
-``outputs/qubits/.qforge_session.json``, so the rest of the toolkit refers to them
+``outputs/qubits/.QubitWeave_session.json``, so the rest of the toolkit refers to them
 as ``"Q1"`` rather than by passing objects around. :doc:`conventions` describes what
 that implies for cleanup.
 
@@ -35,7 +35,7 @@ that implies for cleanup.
 
 .. code-block:: python
 
-    from qforge.utils.terminal_plot import TerminalPlotter
+    from QubitWeave.utils.terminal_plot import TerminalPlotter
 
     spectrum = qubits.compute_spectrum(q1, n_levels=5, subtract_ground=True)
     TerminalPlotter.plot_spectrum(spectrum, title="Q1 energy levels")
@@ -58,7 +58,7 @@ An X gate is a Gaussian microwave pulse on the charge operator, resonant with
 
 .. code-block:: python
 
-    from qforge.core.gate_engine import GateEngine
+    from QubitWeave.core.gate_engine import GateEngine
 
     gates = GateEngine()
 
@@ -102,7 +102,7 @@ window around it.
 
 Calibrations are cached to ``outputs/calib_cache.json`` and persist between
 sessions, since the sweeps dominate the cost of most workflows. Run
-``qforge cache clear`` after changing a qubit's parameters, because a calibration
+``QubitWeave cache clear`` after changing a qubit's parameters, because a calibration
 keyed to the old ones no longer describes the gate.
 
 5. Couple two qubits
@@ -163,7 +163,7 @@ and solves the result as one continuous Hamiltonian.
 
 .. code-block:: python
 
-    from qforge.core.workflow_engine import PhysicalWorkflowEngine
+    from QubitWeave.core.workflow_engine import PhysicalWorkflowEngine
 
     workflow = PhysicalWorkflowEngine(qubits, gates)
 
@@ -190,7 +190,7 @@ measured mid-circuit, and corrections are fed forward.
 
 .. code-block:: python
 
-    from qforge.core.error_correction_engine import ErrorCorrectionEngine
+    from QubitWeave.core.error_correction_engine import ErrorCorrectionEngine
 
     ec = ErrorCorrectionEngine(qubits, gates)
 

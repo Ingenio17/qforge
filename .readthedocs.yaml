@@ -14,7 +14,7 @@ build:
 sphinx:
   configuration: docs/conf.py
 
-# Install the docs toolchain, then qforge itself, so autodoc can import the
+# Install the docs toolchain, then QubitWeave itself, so autodoc can import the
 # engines and build the API reference from real signatures and docstrings.
 python:
   install:

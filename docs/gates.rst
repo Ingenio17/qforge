@@ -14,7 +14,7 @@ only where a layer has already accounted for the physics, as described under
 
 .. code-block:: python
 
-    from qforge.core.gate_engine import GateEngine
+    from QubitWeave.core.gate_engine import GateEngine
 
     gates = GateEngine()
     result = gates.simulate_dynamics("Q1", gate_type="X", duration=40.0)
@@ -47,7 +47,7 @@ Driving a transmon applies a voltage that couples to the charge operator
 
 These are exact matrix elements between the circuit's eigenstates, which is what
 makes the leakage predictions meaningful. If a model exposes neither operator,
-qforge falls back to the harmonic approximation
+QubitWeave falls back to the harmonic approximation
 :math:`\hat{n} \approx \tfrac{i}{\sqrt{2}}(a^\dagger - a)` and
 :math:`\hat{\varphi} \approx \tfrac{1}{\sqrt{2}}(a^\dagger + a)`.
 
@@ -321,10 +321,10 @@ disk at ``outputs/calib_cache.json``.
   flag ensures the disk file is read once, when the first ``GateEngine`` is
   constructed.
 * Cache keys are tuples of qubit names, gate type, coupling and drive parameters.
-  JSON requires string keys, so qforge writes ``str(key_tuple)`` and reads it back
+  JSON requires string keys, so QubitWeave writes ``str(key_tuple)`` and reads it back
   with ``ast.literal_eval``, which reconstructs the tuple exactly.
 
-Run ``qforge cache clear`` after changing a qubit's physical parameters, since a
+Run ``QubitWeave cache clear`` after changing a qubit's physical parameters, since a
 calibration keyed to the old ones no longer describes the gate.
 
 Fidelity and tomography
@@ -355,7 +355,7 @@ Average gate fidelity
         duration=150.0,
     )
 
-Rather than running :math:`4^N` separate state simulations, qforge computes the
+Rather than running :math:`4^N` separate state simulations, QubitWeave computes the
 exact propagator, projects it into the :math:`2^N` computational subspace, and
 evaluates
 
@@ -387,7 +387,7 @@ operators for circuit-level simulation with a physically derived noise channel.
 Ideal operator paths
 ====================
 
-qforge keeps exact operator paths and uses them deliberately in three places:
+QubitWeave keeps exact operator paths and uses them deliberately in three places:
 
 * circuit-level abstractions where the pulse has already been calibrated,
 * error-correction workflows, where a full ODE solve for every syndrome-extraction

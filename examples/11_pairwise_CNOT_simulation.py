@@ -12,9 +12,9 @@ import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from qforge.utils.terminal_plot import TerminalPlotter
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)

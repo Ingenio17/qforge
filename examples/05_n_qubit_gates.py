@@ -2,21 +2,21 @@
 05_n_qubit_gates.py
 
 Description:
-Showcases qforge's Generalized N-Qubit physical mapping.
+Showcases QubitWeave's Generalized N-Qubit physical mapping.
 1) A strong static capacitive coupling demonstrating visual excitation hopping.
 2) An active simulation of a calibrated X-drive applied globally to all 4 qubits.
 
 Terminal CLI Equivalents:
 -------------------------
-qforge qubit create --type transmon --name Q0 --EJ 15.0 --EC 0.3
+QubitWeave qubit create --type transmon --name Q0 --EJ 15.0 --EC 0.3
 (Note: Continuous multi-qubit physical simulation is powerfully accessed directly via 
- the Python API GateEngine, whereas `qforge gate simulate` is tuned for single qubits).
+ the Python API GateEngine, whereas `QubitWeave gate simulate` is tuned for single qubits).
 """
 import numpy as np
 import os
-from qforge.utils.terminal_plot import TerminalPlotter
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 def main():
     print("============================================================")

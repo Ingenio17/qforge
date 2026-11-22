@@ -1,4 +1,4 @@
-# Agent instructions for qforge
+# Agent instructions for QubitWeave
 
 Hand this file to your coding assistant after adding a feature, so the docs, the
 presets and the examples do not drift away from the code.
@@ -37,19 +37,19 @@ block introduced by `::`.
 
 ## Adding a qubit type
 
-1. Add the type to `QUBIT_PRESETS` in `qforge/config/defaults.py`, with an `_info`
+1. Add the type to `QUBIT_PRESETS` in `QubitWeave/config/defaults.py`, with an `_info`
    entry and a `typical` parameter set. The CLI and the wizard pick it up
    automatically.
 2. Wire the type into `QubitEngine._create_qubit_object`.
 3. Add a section to `docs/qubits.rst` with the Hamiltonian and the parameter list.
-4. Run `qforge dev sync` to regenerate the preset table on that page.
+4. Run `QubitWeave dev sync` to regenerate the preset table on that page.
 5. Add `examples/NN_<name>_demo.py` and run it.
-6. Check it appears in `qforge --interactive` under "Create a qubit".
+6. Check it appears in `QubitWeave --interactive` under "Create a qubit".
 
 ## Adding a gate
 
-1. Add defaults to `GATE_DEFAULTS` in `qforge/config/defaults.py`.
-2. Implement the physics in `qforge/core/gate_engine.py`. Keep the Hamiltonian, the
+1. Add defaults to `GATE_DEFAULTS` in `QubitWeave/config/defaults.py`.
+2. Implement the physics in `QubitWeave/core/gate_engine.py`. Keep the Hamiltonian, the
    drive and the coupling explicit. Do not substitute an ideal unitary for a method
    that is supposed to model hardware.
 3. Document the drive operator, the envelope and any approximation in
@@ -60,7 +60,7 @@ block introduced by `::`.
 
 ## Adding a coupling
 
-1. Implement it in `qforge/core/coupling.py` and register it in
+1. Implement it in `QubitWeave/core/coupling.py` and register it in
    `CouplingGenerator.get_coupling`.
 2. Write the Hamiltonian and the units of `g` into `docs/couplings.rst`, and say
    which native gate it produces.
@@ -68,7 +68,7 @@ block introduced by `::`.
 
 ## Adding an error correcting code
 
-1. Write a `StabilizerCode` in `qforge/core/stabilizer_codes.py`: generators, the
+1. Write a `StabilizerCode` in `QubitWeave/core/stabilizer_codes.py`: generators, the
    syndrome table, logical operators and the encoding circuit. It must be CSS.
 2. No change to `ErrorCorrectionEngine` should be needed. If one is, say why in the
    commit.
@@ -78,18 +78,18 @@ block introduced by `::`.
 
 ## Adding a CLI command
 
-1. Add it to a group under `qforge/cli/commands/` and register it in
-   `qforge/cli/main.py`.
+1. Add it to a group under `QubitWeave/cli/commands/` and register it in
+   `QubitWeave/cli/main.py`.
 2. Keep the physics in the engines. A Click handler should parse arguments, call an
    engine and render the result.
-3. Add a wizard entry in `qforge/cli/interactive.py` if the flow needs more than a
+3. Add a wizard entry in `QubitWeave/cli/interactive.py` if the flow needs more than a
    couple of arguments.
 4. Document it in `docs/cli.rst`.
 
 ## Before opening a pull request
 
 ```bash
-black qforge tests
-ruff check qforge tests
+black QubitWeave tests
+ruff check QubitWeave tests
 pytest
 ```

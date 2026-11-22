@@ -1,13 +1,13 @@
 ======
-qforge
+QubitWeave
 ======
 
-qforge is a terminal-native toolkit for simulating superconducting quantum hardware.
+QubitWeave is a terminal-native toolkit for simulating superconducting quantum hardware.
 It takes the circuit parameters that define a physical device, builds the Hamiltonian
 those parameters imply, drives it with pulses, and carries the result up through
 calibrated gates, OpenQASM circuits and stabilizer error correction.
 
-The distinction from a gate-level simulator is where the model starts. qforge works
+The distinction from a gate-level simulator is where the model starts. QubitWeave works
 from :math:`E_J`, :math:`E_C`, :math:`E_L`, flux and offset charge, and keeps that
 layer available at every stage above it. An X gate is a microwave pulse acting on a
 charge operator. A CNOT is whichever pulse the available coupling supports. Leakage
@@ -73,7 +73,7 @@ Components
 Getting started
 ===============
 
-``qforge --interactive`` opens a guided wizard that covers most of the toolkit
+``QubitWeave --interactive`` opens a guided wizard that covers most of the toolkit
 without writing code. :doc:`quickstart` covers the same ground in Python.
 
 .. toctree::

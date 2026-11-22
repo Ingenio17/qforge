@@ -72,14 +72,14 @@ env/
 .dmypy.json
 dmypy.json
 
-# qforge specific
+# QubitWeave specific
 *.gds
 *.hdf5
 *.h5
-qforge_state/
+QubitWeave_state/
 outputs/
 calib_cache.json
-.qforge_session.json
+.QubitWeave_session.json
 
 # OS specific
 .DS_Store

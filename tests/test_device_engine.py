@@ -13,9 +13,9 @@ import json
 import numpy as np
 import pytest
 
-from qforge.core.device_engine import DeviceEngine, DeviceError, QuantumDevice
-from qforge.core.device_library import TEMPLATES, list_templates, template_source
-from qforge.core.device_netlist import parse_netlist
+from QubitWeave.core.device_engine import DeviceEngine, DeviceError, QuantumDevice
+from QubitWeave.core.device_library import TEMPLATES, list_templates, template_source
+from QubitWeave.core.device_netlist import parse_netlist
 
 scq = pytest.importorskip("scqubits")
 

@@ -1,5 +1,5 @@
 """
-Comprehensive independent test suite for qforge package.
+Comprehensive independent test suite for QubitWeave package.
 
 This test suite independently validates all claimed functionality
 without relying on developer-provided tests.
@@ -12,9 +12,9 @@ import tempfile
 from pathlib import Path
 
 # Test imports
-from qforge.core.qubit_engine import QubitEngine
-from qforge.comparison.comparator import Comparator
-import qforge
+from QubitWeave.core.qubit_engine import QubitEngine
+from QubitWeave.comparison.comparator import Comparator
+import QubitWeave
 
 
 class TestPackageMetadata:
@@ -22,18 +22,18 @@ class TestPackageMetadata:
     
     def test_version_exists(self):
         """Verify package version is defined."""
-        assert hasattr(qforge, '__version__')
-        # assert qforge.__version__ == "0.1.0" # Version might change, just check existence or match current
-        assert isinstance(qforge.__version__, str)
+        assert hasattr(QubitWeave, '__version__')
+        # assert QubitWeave.__version__ == "0.1.0" # Version might change, just check existence or match current
+        assert isinstance(QubitWeave.__version__, str)
     
     def test_author_correct(self):
         """Verify author is correctly set to Saumya Shah."""
-        assert hasattr(qforge, '__author__')
-        assert qforge.__author__ == "Saumya Shah"
+        assert hasattr(QubitWeave, '__author__')
+        assert QubitWeave.__author__ == "Saumya Shah"
     
     def test_core_imports(self):
         """Verify all advertised imports work."""
-        from qforge import QubitEngine, GateEngine, CircuitEngine, HardwareEngine, Comparator
+        from QubitWeave import QubitEngine, GateEngine, CircuitEngine, HardwareEngine, Comparator
         
         assert QubitEngine is not None
         assert GateEngine is not None
@@ -67,7 +67,7 @@ class TestQubitEngineTransmon:
     
     def test_transmon_parameter_validation(self, engine):
         """Test that invalid parameters are rejected."""
-        # qforge uses defaults, so empty params is valid.
+        # QubitWeave uses defaults, so empty params is valid.
         
         # Test with negative energy
         with pytest.raises(ValueError):

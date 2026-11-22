@@ -2,4 +2,4 @@
 
 pip install -e .
 
-echo "clear && qforge --interactive" >> ~/.bashrc
+echo "clear && QubitWeave --interactive" >> ~/.bashrc

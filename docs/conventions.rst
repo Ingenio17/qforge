@@ -3,7 +3,7 @@ Units and conventions
 =======================
 
 Unit and dimension errors account for most defects in this kind of code. This page
-records the conventions qforge follows, as a reference to check new code against.
+records the conventions QubitWeave follows, as a reference to check new code against.
 
 Units
 =====
@@ -55,7 +55,7 @@ become rad/ns:
 
     H_rad_per_ns = H_ghz * 2 * np.pi
 
-qforge does this explicitly at the boundary between the physics layer and the solver.
+QubitWeave does this explicitly at the boundary between the physics layer and the solver.
 ``GateEngine._get_qubit_hamiltonian`` returns a Hamiltonian already in rad/ns, and
 ``QuantumDevice.effective_operators`` converts rather than leaving it to the caller.
 A Hamiltonian assembled by hand should be converted once, at the point where the
@@ -64,12 +64,12 @@ value stops being a frequency and becomes a generator of time evolution.
 Hilbert space
 =============
 
-A physical qubit in qforge is not a two-level system. It is the lowest
+A physical qubit in QubitWeave is not a two-level system. It is the lowest
 ``truncated_dim`` eigenstates of a superconducting circuit, and :math:`|2\rangle`,
 :math:`|3\rangle` and above are part of the simulation rather than noise to be
 discarded.
 
-Leakage out of the computational subspace is one of the quantities qforge is built
+Leakage out of the computational subspace is one of the quantities QubitWeave is built
 to measure. A fast pulse on a transmon with 250 MHz of anharmonicity populates
 :math:`|2\rangle`, and a simulation truncated to two levels cannot represent that at
 all.
@@ -98,7 +98,7 @@ subsystem operator, then apply it to the whole state.
 Fidelity metrics
 ================
 
-These quantities are distinct, and qforge reports them separately.
+These quantities are distinct, and QubitWeave reports them separately.
 
 .. list-table::
    :header-rows: 1
@@ -129,7 +129,7 @@ Session state and persistence
 =============================
 
 ``QubitEngine`` writes every registered qubit to
-``outputs/qubits/.qforge_session.json``. Creating a qubit therefore has a side
+``outputs/qubits/.QubitWeave_session.json``. Creating a qubit therefore has a side
 effect that outlives the process, which is what lets the CLI work across separate
 invocations.
 
@@ -141,16 +141,16 @@ Two consequences follow:
   ``ErrorCorrectionEngine`` registers data and ancilla clones, and deletes them in a
   ``finally`` block, so they do not remain in the qubit list after a run.
 
-``DeviceEngine`` keeps a parallel registry at ``outputs/devices/.qforge_devices.json``.
+``DeviceEngine`` keeps a parallel registry at ``outputs/devices/.QubitWeave_devices.json``.
 It stores the netlist source rather than a pickled model, so reloading a session
 rebuilds the device from its own definition.
 
 Gate calibrations live in ``outputs/calib_cache.json``, keyed by qubit names, gate
 type, coupling and drive parameters. They persist deliberately, since the sweeps
-dominate the cost of most workflows. Clear them with ``qforge cache clear`` after
+dominate the cost of most workflows. Clear them with ``QubitWeave cache clear`` after
 changing a qubit's physical parameters.
 
-``outputs/qubits/.qforge_metrics.json`` memoizes the frequency and anharmonicity
+``outputs/qubits/.QubitWeave_metrics.json`` memoizes the frequency and anharmonicity
 shown when qubits are listed, so menus and pickers do not re-diagonalize every
 registered qubit each time they open. Entries are keyed by qubit type and
 parameters and stamped with the scqubits version, so they invalidate themselves

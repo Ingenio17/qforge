@@ -8,14 +8,14 @@ time that maximizes the |1> state population, and plot the result.
 
 Terminal CLI Equivalents:
 -------------------------
-qforge qubit create --type transmon --name Q1 --EJ 15.0 --EC 0.3
-qforge gate simulate --qubit Q1 --gate X --duration 79.0 --save
+QubitWeave qubit create --type transmon --name Q1 --EJ 15.0 --EC 0.3
+QubitWeave gate simulate --qubit Q1 --gate X --duration 79.0 --save
 """
 import numpy as np
 import os
-from qforge.utils.terminal_plot import TerminalPlotter
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 def main():
     print("============================================================")

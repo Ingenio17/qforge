@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(".."))
 
-project = "qforge"
+project = "QubitWeave"
 copyright = "2026, Saumya Shah"
 author = "Saumya Shah"
 release = "0.2.0"
@@ -27,7 +27,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 copybutton_prompt_text = "$ "
 html_theme = "furo"
 html_static_path = ["_static"]
-html_title = "qforge"
+html_title = "QubitWeave"
 
 nbsphinx_execute = "never"
 html_logo = "_static/icon.png"

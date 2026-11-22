@@ -8,7 +8,7 @@ circuits the netlists reproduce.
 
 import pytest
 
-from qforge.core.device_netlist import (
+from QubitWeave.core.device_netlist import (
     EC_to_capacitance,
     EJ_to_critical_current,
     EJ_to_josephson_inductance,
@@ -214,7 +214,7 @@ C1 1 0 EC=0.3
 
 def test_junction_without_capacitance_gets_a_negligible_one():
     netlist = parse_netlist("J1 1 0 EJ=15\nC1 1 0 EC=0.3\n")
-    from qforge.core.device_netlist import NEGLIGIBLE_JUNCTION_EC_GHZ
+    from QubitWeave.core.device_netlist import NEGLIGIBLE_JUNCTION_EC_GHZ
 
     assert netlist.elements[0].values["EC"].ghz == NEGLIGIBLE_JUNCTION_EC_GHZ
     assert any("negligible" in note for note in netlist.notes)
@@ -263,7 +263,7 @@ def test_mutual_inductance_conversion_carries_the_scqubits_factor():
     oscillators. If it ever changes, a netlist written with k = 0.05 would
     silently model a different circuit, so it is pinned here.
     """
-    from qforge.core.device_netlist import SCQUBITS_ML_FACTOR
+    from QubitWeave.core.device_netlist import SCQUBITS_ML_FACTOR
 
     assert SCQUBITS_ML_FACTOR == 2.0
     mutual = 5e-9

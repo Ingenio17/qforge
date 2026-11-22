@@ -7,8 +7,8 @@ single qubit's spectrum to Grover's algorithm executed as physical microwave pul
 
 .. code-block:: bash
 
-    $ qforge example list
-    $ qforge example run --name 02_single_qubit_gates
+    $ QubitWeave example list
+    $ QubitWeave example run --name 02_single_qubit_gates
 
 The wizard offers the same list under "Run an example". Each script reports what it is
 doing and plots its results in the terminal.

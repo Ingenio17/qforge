@@ -4,7 +4,7 @@ Device design
 
 The four preset qubit types do not cover every circuit worth simulating. Any other
 topology can be described as a netlist of capacitors, inductors, junctions and
-resistors, which qforge then quantizes.
+resistors, which QubitWeave then quantizes.
 
 .. code-block:: text
 
@@ -33,7 +33,7 @@ therefore remains usable headless, and the CLI and GUI share a single renderer.
 Getting started
 ===============
 
-The quickest route is the wizard: ``qforge --interactive``, then "Design a device",
+The quickest route is the wizard: ``QubitWeave --interactive``, then "Design a device",
 then "Start from a template". Nine worked circuits are bundled, from an LC resonator
 to zero-pi.
 
@@ -41,7 +41,7 @@ From Python:
 
 .. code-block:: python
 
-    from qforge.core.device_engine import DeviceEngine
+    from QubitWeave.core.device_engine import DeviceEngine
 
     engine = DeviceEngine()
     device = engine.create_device_from_file("examples/device_files/transmon.qdl")
@@ -176,7 +176,7 @@ Basis cutoffs
 
 scqubits defaults to a charge cutoff of 5 for periodic variables, which is far too
 small for a transmon. At :math:`E_J/E_C \approx 70` it misplaces the ground state by
-several hundred MHz. A custom netlist has no preset to fall back on, so qforge picks
+several hundred MHz. A custom netlist has no preset to fall back on, so QubitWeave picks
 its own defaults and scales them down as the number of modes grows, since the Hilbert
 space is the product over all of them:
 
@@ -264,7 +264,7 @@ several modes, level 2 may belong to a different mode entirely, and the differen
 then a spacing between two unrelated transitions. A circuit with no junctions is
 purely harmonic and has no anharmonicity at all.
 
-qforge does not quietly report a misleading number. ``anharmonicity_meaningful``
+QubitWeave does not quietly report a misleading number. ``anharmonicity_meaningful``
 records which case applies, and ``anharmonicity_note`` explains it in words.
 
 Matrix elements
@@ -335,9 +335,9 @@ workflows and error correction.
 
 .. code-block:: python
 
-    from qforge.core.device_engine import DeviceEngine
-    from qforge.core.qubit_engine import QubitEngine
-    from qforge.core.device_qubit import device_qubit_params
+    from QubitWeave.core.device_engine import DeviceEngine
+    from QubitWeave.core.qubit_engine import QubitEngine
+    from QubitWeave.core.device_qubit import device_qubit_params
 
     device = DeviceEngine().create_device_from_file("transmon.qdl")
 
@@ -428,7 +428,7 @@ Templates
 
 .. code-block:: python
 
-    from qforge.core import device_library
+    from QubitWeave.core import device_library
 
     device_library.list_templates()
     source = device_library.template_source("fluxonium")
@@ -452,7 +452,7 @@ Managing devices
     engine.save_result("transmon_example", result)
 
 Devices live under ``outputs/devices/`` with their registry at
-``.qforge_devices.json``, kept separate from the preset qubits in
+``.QubitWeave_devices.json``, kept separate from the preset qubits in
 ``outputs/qubits/``. A netlist device is not one of the four scqubits qubit types and
 is deliberately not registered as one.
 
@@ -466,7 +466,7 @@ Rendering
 
 .. code-block:: python
 
-    from qforge.core import device_report
+    from QubitWeave.core import device_report
 
     device_report.render_netlist(device.netlist)     # elements, values, connectivity
     device_report.render_schematic(device.netlist)   # text drawing

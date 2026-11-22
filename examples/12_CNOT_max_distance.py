@@ -11,8 +11,8 @@ import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)

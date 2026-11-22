@@ -13,12 +13,12 @@ import numpy as np
 import pytest
 import qutip as qt
 
-from qforge.core.gate_engine import (
+from QubitWeave.core.gate_engine import (
     CONDITIONAL_SELECTIVITY_TARGET,
     GAUSSIAN_AREA_PER_NS,
     GateEngine,
 )
-from qforge.core.qubit_engine import QubitEngine
+from QubitWeave.core.qubit_engine import QubitEngine
 
 # Two transmons whose frequencies are far enough apart, and far enough from the
 # |11>-|20> collision at detuning = |anharmonicity|, that the computational

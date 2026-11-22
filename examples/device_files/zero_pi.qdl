@@ -5,7 +5,7 @@
 * circuit here: three modes, so the Hilbert space grows as the product of three
 * cutoffs, and one analysis takes tens of seconds.
 *
-* The cutoffs below are deliberately coarse, for a first look. qforge's
+* The cutoffs below are deliberately coarse, for a first look. QubitWeave's
 * convergence check will say the spectrum has not converged, which is true: raise
 * '.cutoff all' and watch the transitions settle. That is what the check is for.
 

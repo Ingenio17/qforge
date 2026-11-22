@@ -8,7 +8,7 @@ read the Physics section first.
 Qubits
 ======
 
-.. automodule:: qforge.core.qubit_engine
+.. automodule:: QubitWeave.core.qubit_engine
    :members:
    :undoc-members:
    :show-inheritance:
@@ -16,17 +16,17 @@ Qubits
 Gates and dynamics
 ==================
 
-.. automodule:: qforge.core.gate_engine
+.. automodule:: QubitWeave.core.gate_engine
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.coupling
+.. automodule:: QubitWeave.core.coupling
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.tomography
+.. automodule:: QubitWeave.core.tomography
    :members:
    :undoc-members:
    :show-inheritance:
@@ -34,17 +34,17 @@ Gates and dynamics
 Circuits and workflows
 ======================
 
-.. automodule:: qforge.core.workflow_engine
+.. automodule:: QubitWeave.core.workflow_engine
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.decompose
+.. automodule:: QubitWeave.core.decompose
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.circuit_engine
+.. automodule:: QubitWeave.core.circuit_engine
    :members:
    :undoc-members:
    :show-inheritance:
@@ -57,7 +57,7 @@ the CSS restriction, the syndrome tables and the memory strategy. That material 
 written up in :doc:`error_correction`, so only the public classes are reproduced
 here.
 
-.. currentmodule:: qforge.core.stabilizer_codes
+.. currentmodule:: QubitWeave.core.stabilizer_codes
 
 .. autoclass:: StabilizerCode
    :members:
@@ -70,7 +70,7 @@ here.
 
 The bundled code specifications are ``REPETITION_3``, ``STEANE_7`` and ``SHOR_9``.
 
-.. currentmodule:: qforge.core.error_correction_engine
+.. currentmodule:: QubitWeave.core.error_correction_engine
 
 .. autoclass:: ErrorCorrectionEngine
    :members:
@@ -80,22 +80,22 @@ The bundled code specifications are ``REPETITION_3``, ``STEANE_7`` and ``SHOR_9`
 Device design
 =============
 
-.. automodule:: qforge.core.device_netlist
+.. automodule:: QubitWeave.core.device_netlist
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.device_engine
+.. automodule:: QubitWeave.core.device_engine
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.device_library
+.. automodule:: QubitWeave.core.device_library
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.device_report
+.. automodule:: QubitWeave.core.device_report
    :members:
    :undoc-members:
    :show-inheritance:
@@ -103,7 +103,7 @@ Device design
 Comparison
 ==========
 
-.. automodule:: qforge.comparison.comparator
+.. automodule:: QubitWeave.comparison.comparator
    :members:
    :undoc-members:
    :show-inheritance:
@@ -111,22 +111,22 @@ Comparison
 Utilities
 =========
 
-.. automodule:: qforge.utils.terminal_plot
+.. automodule:: QubitWeave.utils.terminal_plot
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.utils.analysis
+.. automodule:: QubitWeave.utils.analysis
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.utils.circuit_diagram
+.. automodule:: QubitWeave.utils.circuit_diagram
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: qforge.core.run_manager
+.. automodule:: QubitWeave.core.run_manager
    :members:
    :undoc-members:
    :show-inheritance:
@@ -134,6 +134,6 @@ Utilities
 Configuration
 =============
 
-.. automodule:: qforge.config.defaults
+.. automodule:: QubitWeave.config.defaults
    :members:
    :undoc-members:

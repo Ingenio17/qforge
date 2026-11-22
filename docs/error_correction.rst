@@ -39,7 +39,7 @@ Counts are per logical qubit.
 
 .. code-block:: python
 
-    from qforge.core.error_correction_engine import ErrorCorrectionEngine
+    from QubitWeave.core.error_correction_engine import ErrorCorrectionEngine
 
     ec = ErrorCorrectionEngine(qubit_engine, gate_engine)
 
@@ -94,11 +94,11 @@ Stabilizer codes are data
 =========================
 
 The engine hard-codes nothing about any particular code. Everything it requires is
-declared in a ``StabilizerCode`` in ``qforge/core/stabilizer_codes.py``:
+declared in a ``StabilizerCode`` in ``QubitWeave/core/stabilizer_codes.py``:
 
 .. code-block:: python
 
-    from qforge.core.stabilizer_codes import (
+    from QubitWeave.core.stabilizer_codes import (
         StabilizerCode, StabilizerGenerator, EncodingStep,
         REPETITION_3, STEANE_7, SHOR_9,
     )

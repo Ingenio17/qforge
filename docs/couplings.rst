@@ -2,7 +2,7 @@
 Couplings
 =========
 
-A two-qubit gate requires an interaction between the qubits. qforge models three,
+A two-qubit gate requires an interaction between the qubits. QubitWeave models three,
 and the choice determines both the interaction Hamiltonian and the gate that the
 interaction can produce.
 
@@ -63,7 +63,7 @@ inductance.
 
 This requires a circuit with an explicit inductive branch. A transmon is a junction
 shunted by a capacitor, has no :math:`E_L \hat{\varphi}^2` term, and its scqubits
-model in the charge basis exposes no phase operator, so qforge raises an error
+model in the charge basis exposes no phase operator, so QubitWeave raises an error
 explaining this rather than substituting an approximation. Fluxonium, the flux qubit
 and zero-pi all carry a real inductor and accept this coupling.
 
@@ -125,7 +125,7 @@ Which gate each supports
 Analytic forms in ``coupling.py``
 =================================
 
-``CouplingGenerator`` in ``qforge/core/coupling.py`` provides harmonic-oscillator
+``CouplingGenerator`` in ``QubitWeave/core/coupling.py`` provides harmonic-oscillator
 versions of the same interactions, built from ladder operators on a truncated
 oscillator: :math:`g(a^\dagger b + a b^\dagger)` for the capacitive case and
 :math:`g\,\hat{n}_1 \hat{n}_2` for the inductive one.

@@ -1,14 +1,14 @@
-# qforge: Quantum Simulation Toolkit
+# QubitWeave: Quantum Simulation Toolkit
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
-[![PyPI version](https://badge.fury.io/py/qforge.svg)](https://badge.fury.io/py/qforge)
+[![PyPI version](https://badge.fury.io/py/QubitWeave.svg)](https://badge.fury.io/py/QubitWeave)
 
 **A terminal-native quantum simulation toolkit — from qubit physics to gate-level hardware design.**
  
-qforge lets you model superconducting qubits, simulate quantum gate dynamics, and analyze multi-qubit couplings — all from your terminal or Python scripts, no GUI required.
+QubitWeave lets you model superconducting qubits, simulate quantum gate dynamics, and analyze multi-qubit couplings — all from your terminal or Python scripts, no GUI required.
  
-Whether you're designing a transmon-based processor, sweeping Josephson junction parameters, or benchmarking CNOT fidelity across coupling topologies, qforge gives you the physics simulation layer you need — fast
+Whether you're designing a transmon-based processor, sweeping Josephson junction parameters, or benchmarking CNOT fidelity across coupling topologies, QubitWeave gives you the physics simulation layer you need — fast
 
 ---
 
@@ -29,14 +29,14 @@ Whether you're designing a transmon-based processor, sweeping Josephson junction
 ### Install
  
 ```bash
-pip install qforge
+pip install QubitWeave
 ```
  
 Or install from source:
  
 ```bash
-git clone https://github.com/Ingenio17/qforge.git
-cd qforge
+git clone https://github.com/Ingenio17/QubitWeave.git
+cd QubitWeave
 pip install -e .
 ```
  
@@ -45,7 +45,7 @@ pip install -e .
 The easiest way to get started — no scripting needed:
  
 ```bash
-qforge --interactive
+QubitWeave --interactive
 ```
  
 This walks you through creating a qubit, analyzing its spectrum, and simulating a gate interactively.
@@ -54,13 +54,13 @@ This walks you through creating a qubit, analyzing its spectrum, and simulating 
  
 ```bash
 # 1. Create a transmon qubit
-qforge qubit create transmon --name my_qubit --EJ 15 --EC 0.3
+QubitWeave qubit create transmon --name my_qubit --EJ 15 --EC 0.3
  
 # 2. Plot its energy spectrum
-qforge qubit analyze --name my_qubit --plot
+QubitWeave qubit analyze --name my_qubit --plot
  
 # 3. Simulate an X (pi-pulse) gate
-qforge gate simulate --qubit my_qubit --gate X --duration 40
+QubitWeave gate simulate --qubit my_qubit --gate X --duration 40
 ```
  
 ---
@@ -68,18 +68,18 @@ qforge gate simulate --qubit my_qubit --gate X --duration 40
 ## 📖 Documentation
  
 Full documentation including API reference and worked examples:
-👉 **[qforge.readthedocs.io](https://qforge.readthedocs.io/en/latest/)**
+👉 **[QubitWeave.readthedocs.io](https://QubitWeave.readthedocs.io/en/latest/)**
  
 ---
  
 ## 🐍 Python API
  
-For scripting and research workflows, qforge exposes clean Python engines:
+For scripting and research workflows, QubitWeave exposes clean Python engines:
  
 ```python
-from qforge.core.qubit_engine import QubitEngine
-from qforge.core.gate_engine import GateEngine
-from qforge.utils.terminal_plot import TerminalPlotter
+from QubitWeave.core.qubit_engine import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
  
 # Create and characterize a transmon
 qubit_engine = QubitEngine()
@@ -116,7 +116,7 @@ TerminalPlotter.plot_time_evolution(
  
 ## 🔗 Multi-Qubit Couplings
  
-qforge models three physical coupling regimes used in real superconducting hardware:
+QubitWeave models three physical coupling regimes used in real superconducting hardware:
  
 | Coupling Type | Hamiltonian | Best For |
 |---|---|---|
@@ -159,7 +159,7 @@ results = gate_engine.compare_couplings(q1="q1", q2="q2", gate="CNOT")
  
 ## 🧑‍💻 Who Is This For?
  
-qforge is built for:
+QubitWeave is built for:
  
 - **Quantum hardware researchers** designing and characterizing superconducting qubit circuits
 - **Graduate students** exploring qubit physics and gate-level simulation
@@ -169,7 +169,7 @@ qforge is built for:
 
 ## 🏗️ Architecture
 
-qforge is built on industry-standard quantum libraries:
+QubitWeave is built on industry-standard quantum libraries:
 
 - **[scqubits](https://scqubits.readthedocs.io/)**: Superconducting qubit physics
 - **[QuTiP](https://qutip.org/)**: Quantum dynamics and gate simulation
@@ -181,7 +181,7 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md).
 
 ## Acknowledgments
 
-qforge relies on the following open-source projects:
+QubitWeave relies on the following open-source projects:
 
 *   **[scqubits](https://scqubits.readthedocs.io/)**: Setup and simulation of superconducting qubits.
     *   Copyright (c) 2019 and later, Jens Koch and Peter Groszkowski. Licensed under BSD 3-Clause.

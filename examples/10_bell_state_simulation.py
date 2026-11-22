@@ -7,8 +7,8 @@ sequence on two transmon qubits, with and without DRAG pulse correction.
 
 Terminal CLI Equivalents:
 -------------------------
-qforge qubit create --type transmon --name T1 --EJ 15.0 --EC 0.3
-qforge qubit create --type transmon --name T2 --EJ 13.5 --EC 0.2
+QubitWeave qubit create --type transmon --name T1 --EJ 15.0 --EC 0.3
+QubitWeave qubit create --type transmon --name T2 --EJ 13.5 --EC 0.2
 """
 
 import numpy as np
@@ -17,9 +17,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch
-from qforge.utils.terminal_plot import TerminalPlotter
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)

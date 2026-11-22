@@ -8,17 +8,17 @@ deterministically evolves the data qubit to |1>.
 
 Terminal CLI Equivalents:
 -------------------------
-qforge qubit create --type transmon --name T1 --EJ 15.0 --EC 0.3
-qforge qubit create --type transmon --name T2 --EJ 13.5 --EC 0.2
+QubitWeave qubit create --type transmon --name T1 --EJ 15.0 --EC 0.3
+QubitWeave qubit create --type transmon --name T2 --EJ 13.5 --EC 0.2
 """
 import numpy as np
 import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from qforge.utils.terminal_plot import TerminalPlotter
-from qforge import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.utils.terminal_plot import TerminalPlotter
+from QubitWeave import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -165,8 +165,8 @@ def main():
         )
         
         # Save high-res plot to outputs/plots
-        os.makedirs(os.path.join("qforge", "outputs", "plots"), exist_ok=True)
-        save_path = os.path.join("qforge", "outputs", "plots", f"11_deutsch_algorithm_{oracle_type.lower()}.png")
+        os.makedirs(os.path.join("QubitWeave", "outputs", "plots"), exist_ok=True)
+        save_path = os.path.join("QubitWeave", "outputs", "plots", f"11_deutsch_algorithm_{oracle_type.lower()}.png")
         
         plt.figure(figsize=(10, 6))
         plt.plot(times, p_00, label='P(|00>)', linewidth=2, alpha=0.6)

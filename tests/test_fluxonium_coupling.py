@@ -1,8 +1,8 @@
 import unittest
 import numpy as np
 import qutip as qt
-from qforge.core.qubit_engine import QubitEngine
-from qforge.core.gate_engine import GateEngine
+from QubitWeave.core.qubit_engine import QubitEngine
+from QubitWeave.core.gate_engine import GateEngine
 
 class TestFluxoniumCoupling(unittest.TestCase):
     """

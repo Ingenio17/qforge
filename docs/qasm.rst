@@ -70,8 +70,9 @@ reduced to this set:
    * - ``x``
      - A calibrated :math:`\pi` microwave pulse.
    * - ``h``
-     - A calibrated Hadamard microwave pulse, natively calibrated rather than
-       decomposed.
+     - A calibrated :math:`R_y(\pi/2)` microwave pulse preceded by a virtual Z, which
+       together are a Hadamard. The Stark phase the pulse leaves on the qubit is
+       measured during calibration and cancelled in the frame.
    * - ``rz(theta)``
      - A virtual Z. A phase update in the software frame. Zero duration, zero
        decoherence. Aliases ``p`` and ``u1``.
@@ -81,13 +82,15 @@ reduced to this set:
      - On a tunable coupler, compiled to
        :math:`X(-\pi/2) \rightarrow \mathrm{CZ} \rightarrow X(+\pi/2)` on the target,
        with a flux pulse holding the avoided crossing and a Stark-shift-corrected
-       closing pulse. On any other coupling the scheduler emits a single drive on the
+       closing pulse. Strongly anharmonic pairs such as fluxonium use a parametrically
+       modulated coupler for the CZ and no flux pulse. On any other coupling the scheduler emits a single drive on the
        control at the target's frequency.
    * - ``swap``
      - Three alternating ``cx`` sequences, laid out in time.
    * - ``cp(theta)``
      - A fractional ``cz``, with the coupler pulse duration scaled by
-       :math:`|\theta|/\pi`.
+       :math:`|\theta|/\pi`. On a strongly anharmonic pair, a parametric pulse
+       calibrated for :math:`\theta` directly.
 
 Decompositions
 ==============

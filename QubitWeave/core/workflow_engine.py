@@ -9,6 +9,8 @@ import numpy as np
 import copy
 from typing import List, Dict, Tuple, Any, Optional
 
+import qutip as qt
+
 from QubitWeave.core.qubit_engine import QubitEngine
 from QubitWeave.core.gate_engine import GateEngine
 
@@ -53,6 +55,14 @@ gate cswap a,b,c { cx c,b; ccx a,b,c; cx c,b; }
 """
 
 
+# A two-qubit calibration scoring below this is not performing the gate it was
+# asked for, so the workflow says so instead of simulating it as if it had worked.
+CALIBRATION_WARN = 0.9
+
+# Peak single-qubit drive amplitude (GHz, multiplying the charge operator).
+DEFAULT_DRIVE_AMPLITUDE = 0.025
+
+
 class QASMTranspiler:
     """A parser and transpiler that converts OpenQASM 2.0 into a strict basis gate set."""
 
@@ -63,7 +73,10 @@ class QASMTranspiler:
     GATE_DEF_PATTERN = re.compile(r"gate\s+([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?\s*([^{;]+)\{([^{}]*)\}")
     OPAQUE_DEF_PATTERN = re.compile(r"opaque\s+[^;]+;")
     # A single statement: NAME(params)? remainder
-    STATEMENT_PATTERN = re.compile(r"^([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?\s*(.*)$")
+    # Parameters may contain nested parentheses, e.g. u3(-(phi+lambda)/2,0,sin(pi/4)).
+    STATEMENT_PATTERN = re.compile(
+        r"^([A-Za-z_]\w*)\s*(?:\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\))?\s*(.*)$"
+    )
     # "measure <qubit(s)> -> <clbit(s)>" - parsed separately for parse_logical()
     # only, since STATEMENT_PATTERN's "remainder" group can't cleanly hold the
     # "->" target and it is otherwise unused by the physical parse.
@@ -292,12 +305,13 @@ class QASMTranspiler:
                     self._decompose("h", [], qubits))
         
         if gate_name == "ry":
-            # RY(theta) = RZ(pi/2) H RZ(theta) H RZ(-pi/2)
-            return (self._decompose("rz", [np.pi/2], qubits) +
+            # RY(theta) = RZ(pi/2) RX(theta) RZ(-pi/2) as a matrix product, so the
+            # RZ(-pi/2) is applied first. The other order is RY(-theta).
+            return (self._decompose("rz", [-np.pi/2], qubits) +
                     self._decompose("h", [], qubits) +
                     self._decompose("rz", params, qubits) +
                     self._decompose("h", [], qubits) +
-                    self._decompose("rz", [-np.pi/2], qubits))
+                    self._decompose("rz", [np.pi/2], qubits))
 
         # 5. UNIVERSAL SINGLE-QUBIT DECOMPOSITIONS
         if gate_name == "u2":
@@ -515,9 +529,25 @@ class PhysicalWorkflowEngine:
     Automates the full physical workflow simulation:
     Abstract OpenQASM -> Transpilation -> Calibration -> Scheduling -> Physics Simulation
     """
-    def __init__(self, q_eng: QubitEngine, g_eng: GateEngine):
+    def __init__(self, q_eng: QubitEngine, g_eng: GateEngine, drive_amplitudes: Optional[Dict[str, float]] = None):
+        """
+        Args:
+            drive_amplitudes: Peak microwave drive per qubit name, in GHz (it
+                multiplies the charge operator). Qubits not listed use
+                DEFAULT_DRIVE_AMPLITUDE. A fluxonium's 0-1 charge matrix element is
+                some 20 times smaller than a transmon's, so it needs a
+                correspondingly stronger drive for the same gate time.
+        """
         self.q_eng = q_eng
         self.g_eng = g_eng
+        self.drive_amplitudes = dict(drive_amplitudes or {})
+        # Virtual-Z phase accumulated on each qubit by the last compiled schedule.
+        # The logical state is diag(1, exp(i*frame)) on each qubit times the
+        # physical one.
+        self.frame_phases: List[float] = []
+
+    def _drive_amplitude(self, qubit_name: str) -> float:
+        return float(self.drive_amplitudes.get(qubit_name, DEFAULT_DRIVE_AMPLITUDE))
 
     def parse_qasm_circuit(self, qasm_path: str) -> List[Dict[str, Any]]:
         """
@@ -540,16 +570,21 @@ class PhysicalWorkflowEngine:
             "two_qubit": {}
         }
         
-        # We auto-calibrate the prime single-qubit primitives for all involved qubits
+        # Calibrate only what the circuit plays: sweeps are the slow part of a workflow.
+        used = {str(instr["type"]).lower() for instr in transpiled_circuit}
+        flipped = {qubit_names[instr["target"]] for instr in transpiled_circuit if str(instr["type"]).lower() == "x"}
+
         for q in qubit_names:
-            # Physics-informed X calibration
-            best_x, _ = self.g_eng.calibrate_gate(q, gate_type="X", parameter="duration", amplitude=0.025)
-            # Natively calibrate the H-gate
-            best_h, _ = self.g_eng.calibrate_gate(q, gate_type="H", parameter="duration", amplitude=0.025)
+            amplitude = self._drive_amplitude(q)
+            # The pi/2 pulse every H and CNOT is built from, with the Z phase it leaves
+            half_pi, z_phase = self.g_eng.calibrate_half_pi(q, amplitude=amplitude)
+            calibrations["single_qubit"][q] = {"H": half_pi, "H_phase": z_phase}
+            if q in flipped:
+                # Physics-informed X calibration
+                best_x, _ = self.g_eng.calibrate_gate(q, gate_type="X", parameter="duration", amplitude=amplitude)
+                calibrations["single_qubit"][q]["X"] = best_x
             
-            calibrations["single_qubit"][q] = {"X": best_x, "H": best_h}
-            
-        # We auto-calibrate CZ on all defined couplings
+        # Two-qubit gates on all defined couplings
         for c in couplings:
             q1_idx = c["q1"]
             q2_idx = c["q2"]
@@ -558,10 +593,19 @@ class PhysicalWorkflowEngine:
             ctype = c["type"]
             strength = c["strength"]
             
-            best_cz, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CZ", ctype, strength, "duration")
-            best_cx, _ = self.g_eng.calibrate_gate(q1_name, q2_name, "CNOT", ctype, strength, "duration")
-            calibrations["two_qubit"][(q1_name, q2_name)] = {"CZ": best_cz, "CX": best_cx}
-            calibrations["two_qubit"][(q2_name, q1_name)] = {"CZ": best_cz, "CX": best_cx}
+            durations = {}
+            for label, key, gates in (("CZ", "CZ", {"cz", "cp"}), ("CNOT", "CX", {"cx", "cnot", "swap"})):
+                if not used & gates:
+                    continue
+                durations[key], metric = self.g_eng.calibrate_gate(q1_name, q2_name, label, ctype, strength, "duration")
+                if metric < CALIBRATION_WARN:
+                    print(
+                        f"  [!] {label} calibration on {q1_name}-{q2_name} only reached {metric:.4f}. "
+                        f"The {ctype} coupling does not realize this gate here, so do not trust "
+                        f"the populations below."
+                    )
+            calibrations["two_qubit"][(q1_name, q2_name)] = durations
+            calibrations["two_qubit"][(q2_name, q1_name)] = durations
             
         return calibrations
 
@@ -572,19 +616,55 @@ class PhysicalWorkflowEngine:
         schedule = []
         num_qubits = len(qubit_names)
         qubit_times = [0.0] * num_qubits
-        
+        frames = [0.0] * num_qubits
+
         # Fetch transition frequencies w01 from QubitEngine for parameterization
         w01_list = []
         for q in qubit_names:
             evals = self.q_eng.get_qubit(q).eigensys(evals_count=2)[0]
             w01_list.append(evals[1] - evals[0])
-            
-        def _add_h(targ_idx, t_start):
-            dur = calibrations["single_qubit"][qubit_names[targ_idx]]["H"]
-            schedule.append({"target": targ_idx, "type": "H", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
+        charge_ops = [self.g_eng._get_qubit_hamiltonian(q)[1]["n"] for q in qubit_names]
+
+        def _add_rotation(targ_idx, axis, dur, t_start):
+            # A resonant pulse about the azimuth `axis` (0 = X, pi/2 = Y), in the
+            # qubit's current virtual-Z frame.
+            schedule.append({"target": targ_idx, "type": "X", "amplitude": self._drive_amplitude(qubit_names[targ_idx]), "frequency": w01_list[targ_idx], "phase": self.g_eng._rotation_phase(charge_ops[targ_idx], axis, frames[targ_idx]), "start_time": t_start, "end_time": t_start + dur})
             return t_start + dur
-            
+
+        def _add_half_pi(targ_idx, axis, t_start):
+            # The physical pulse is Z(b) R(pi/2) Z(b) = Z(2b) R'(pi/2) with its axis
+            # turned by -b, so turn the drive back and move Z(2b) into the frame.
+            calibration = calibrations["single_qubit"][qubit_names[targ_idx]]
+            b = calibration.get("H_phase", 0.0)
+            frames[targ_idx] -= b
+            t_end = _add_rotation(targ_idx, axis, calibration["H"], t_start)
+            frames[targ_idx] -= b
+            return t_end
+
+        def _add_h(targ_idx, t_start):
+            # H = Ry(pi/2) Z: a virtual Z followed by one physical pulse. The pulse
+            # alone is not a Hadamard (applied twice it is a flip, not the identity).
+            frames[targ_idx] += np.pi
+            return _add_half_pi(targ_idx, np.pi / 2, t_start)
+
+        def _is_parametric(q1_idx, q2_idx, c_conf):
+            return c_conf["type"] == "tunable_coupler" and not self.g_eng._flux_activation_is_physical(qubit_names[q1_idx], qubit_names[q2_idx])
+
+        def _add_parametric_cphase(q1_idx, q2_idx, c_conf, theta, t_start):
+            lo, hi = min(q1_idx, q2_idx), max(q1_idx, q2_idx)
+            theta = float(theta) % (2 * np.pi)
+            if min(theta, 2 * np.pi - theta) < 1e-9:
+                return t_start
+            pulse = self.g_eng._parametric_cphase_schedule(qubit_names[lo], qubit_names[hi], c_conf["strength"], target_phase=theta)
+            schedule.append(self.g_eng._parametric_coupler_drive(pulse, (lo, hi), t_start))
+            # The pulse leaves a small Z phase on each qubit; undo it in the frame.
+            frames[lo] -= pulse["phases"][0]
+            frames[hi] -= pulse["phases"][1]
+            return t_start + pulse["duration"]
+
         def _add_cz(q1_idx, q2_idx, c_conf, t_start):
+            if _is_parametric(q1_idx, q2_idx, c_conf):
+                return _add_parametric_cphase(q1_idx, q2_idx, c_conf, np.pi, t_start)
             dur = calibrations["two_qubit"][(qubit_names[q1_idx], qubit_names[q2_idx])]["CZ"]
             schedule.append({"target": (min(q1_idx, q2_idx), max(q1_idx, q2_idx)), "type": "coupler_pulse", "strength": c_conf["strength"], "start_time": t_start, "end_time": t_start + dur})
             return t_start + dur
@@ -593,7 +673,13 @@ class PhysicalWorkflowEngine:
             dur_cx = calibrations["two_qubit"][(qubit_names[ctrl_idx], qubit_names[targ_idx])]["CX"]
             ctype = c_conf["type"]
 
-            if ctype == "tunable_coupler":
+            if _is_parametric(ctrl_idx, targ_idx, c_conf):
+                # CNOT = Ry(pi/2) CZ Ry(-pi/2) on the target, with the CZ run by
+                # modulating the coupler rather than by flux-tuning the target.
+                t1 = _add_half_pi(targ_idx, -np.pi / 2, t_start)
+                t2 = _add_parametric_cphase(ctrl_idx, targ_idx, c_conf, np.pi, t1)
+                return _add_half_pi(targ_idx, np.pi / 2, t2)
+            elif ctype == "tunable_coupler":
                 # Physically a tunable-coupler CNOT is compiled as H(target) -> CZ -> H(target).
                 # The CZ leg only reaches the |11>-|02> avoided crossing if the target qubit is
                 # flux-detuned into resonance for the duration of the coupler pulse - this must
@@ -601,17 +687,16 @@ class PhysicalWorkflowEngine:
                 # GateEngine.simulate_n_qubit_dynamics uses internally when it calibrates dur_cx
                 # (see the CNOT/tunable_coupler auto-compile block), otherwise the calibrated
                 # duration corresponds to a gate that is never actually executed here.
-                t_h = calibrations["single_qubit"][qubit_names[targ_idx]]["X"] / 2.0
                 detuning = self.g_eng._calculate_resonant_flux(qubit_names[ctrl_idx], qubit_names[targ_idx])
                 stark_shift_phase = self.g_eng._calculate_stark_shift(detuning, dur_cx)
 
-                schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": -np.pi / 2, "start_time": t_start, "end_time": t_start + t_h})
-                t1 = t_start + t_h
+                t1 = _add_half_pi(targ_idx, -np.pi / 2, t_start)
                 schedule.append({"target": (min(ctrl_idx, targ_idx), max(ctrl_idx, targ_idx)), "type": "coupler_pulse", "strength": c_conf["strength"], "start_time": t1, "end_time": t1 + dur_cx})
                 schedule.append({"target": targ_idx, "type": "flux_pulse", "detuning": detuning, "start_time": t1, "end_time": t1 + dur_cx})
                 t2 = t1 + dur_cx
-                schedule.append({"target": targ_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": np.pi / 2 + stark_shift_phase, "start_time": t2, "end_time": t2 + t_h})
-                return t2 + t_h
+                # The Stark phase stays on the target, so it belongs in its frame.
+                frames[targ_idx] += stark_shift_phase
+                return _add_half_pi(targ_idx, np.pi / 2, t2)
             else:
                 schedule.append({"target": ctrl_idx, "type": "X", "amplitude": 0.025, "frequency": w01_list[targ_idx], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur_cx})
                 return t_start + dur_cx
@@ -629,15 +714,12 @@ class PhysicalWorkflowEngine:
                 
                 if op_name == 'x':
                     dur = calibrations["single_qubit"][q_name]["X"]
-                    schedule.append({"target": q, "type": "X", "amplitude": 0.025, "frequency": w01_list[q], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
-                    qubit_times[q] += dur
+                    qubit_times[q] = _add_rotation(q, 0.0, dur, t_start)
                 elif op_name == 'h':
-                    dur = calibrations["single_qubit"][q_name]["H"]
-                    schedule.append({"target": q, "type": "H", "amplitude": 0.025, "frequency": w01_list[q], "phase": 0.0, "start_time": t_start, "end_time": t_start + dur})
-                    qubit_times[q] += dur
+                    qubit_times[q] = _add_h(q, t_start)
                 elif op_name == 'rz':
-                    # Abstract instantaneous frame update
-                    pass
+                    # Virtual Z: zero duration, every later pulse on this qubit shifts phase.
+                    frames[q] += float(instr.get("theta", 0.0))
                 else:
                     print(f"Warning: Single qubit gate {op_name} unsupported in rigorous native basis mapping. Treating it as identity wait.")
                     
@@ -666,6 +748,9 @@ class PhysicalWorkflowEngine:
                     
                 elif op_name == 'cp' or op_name == 'cphase':
                     theta = float(instr.get("theta", np.pi))
+                    if _is_parametric(q1, q2, c_conf):
+                        qubit_times[q1] = qubit_times[q2] = _add_parametric_cphase(q1, q2, c_conf, theta, t_start)
+                        continue
                     frac = np.abs(theta) / np.pi
                     base_dur = calibrations["two_qubit"][(q1_name, q2_name)]["CZ"]
                     dur = max(2.0, base_dur * frac) # proportional phase duration scaling 
@@ -678,11 +763,34 @@ class PhysicalWorkflowEngine:
                     qubit_times[q1] = qubit_times[q2] = _add_cx(q2, q1, c_conf, qubit_times[q1])
                     qubit_times[q1] = qubit_times[q2] = _add_cx(q1, q2, c_conf, qubit_times[q1])
 
+        self.frame_phases = [float(f) for f in frames]
         return schedule, max(qubit_times)
 
-    def execute_workflow(self, qubit_names: List[str], couplings: List[Dict], qasm_path: str) -> Dict:
+    def _logical_state(self, qubit_names: List[str], state: qt.Qobj, total_time: float) -> qt.Qobj:
+        """
+        The state the circuit is meant to produce, phases included: `state` taken
+        into the frame rotating at each qubit's own energies, with the accumulated
+        virtual Zs applied. Populations are unchanged and leakage levels are kept.
+        """
+        factors = []
+        for name, frame in zip(qubit_names, self.frame_phases):
+            energies = np.real(self.g_eng._get_qubit_hamiltonian(name)[0].diag())
+            phases = (energies - energies[0]) * total_time
+            phases[1] += frame
+            factors.append(qt.Qobj(np.diag(np.exp(1j * phases))))
+        frame = qt.tensor(factors)
+        return frame * state if state.type == "ket" else frame * state * frame.dag()
+
+    def execute_workflow(self, qubit_names: List[str], couplings: List[Dict], qasm_path: str,
+                         noise: Optional[Dict[str, Dict[str, float]]] = None,
+                         steps: Optional[int] = None) -> Dict:
         """
         Bundles compiling and simulating into a single execution step, returning the full dynamics payload.
+
+        Args:
+            noise: Optional {qubit name: {"T1": us, "T2": us}}. The result is then a
+                density matrix from a Lindblad master equation.
+            steps: Stored time points. Defaults to two per nanosecond.
         """
         print(f"1. Translating Qubit-Agnostic QASM from '{qasm_path}' to precise superconducting native basis...")
         transpiled = self.parse_qasm_circuit(qasm_path)
@@ -707,6 +815,9 @@ class PhysicalWorkflowEngine:
             couplings=couplings,
             drives=schedule,
             initial_state=initial_state,
-            steps=max(10, int(total_time * 2)) 
+            steps=steps or max(10, int(total_time * 2)),
+            noise=noise,
         )
+        res["frame_phases"] = list(self.frame_phases)
+        res["logical_state"] = self._logical_state(qubit_names, res["final_state"], total_time)
         return res

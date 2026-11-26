@@ -6,10 +6,18 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from QubitWeave.comparison.comparator import Comparator
+from QubitWeave.cli._lazy import Lazy
 
 console = Console()
-comparator = Comparator()
+
+
+def _comparator():
+    from QubitWeave.comparison.comparator import Comparator
+
+    return Comparator()
+
+
+comparator = Lazy(_comparator)
 
 
 @click.group()

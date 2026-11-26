@@ -76,12 +76,13 @@ class QASMTranspiler:
                     self._decompose("h", [], qubits))
         
         if gate_name == "ry":
-            # RY(theta) = RZ(pi/2) H RZ(theta) H RZ(-pi/2)
-            return (self._decompose("rz", [np.pi/2], qubits) +
+            # RY(theta) = RZ(pi/2) RX(theta) RZ(-pi/2) as a matrix product, so the
+            # RZ(-pi/2) is applied first. The other order is RY(-theta).
+            return (self._decompose("rz", [-np.pi/2], qubits) +
                     self._decompose("h", [], qubits) +
                     self._decompose("rz", params, qubits) +
                     self._decompose("h", [], qubits) +
-                    self._decompose("rz", [-np.pi/2], qubits))
+                    self._decompose("rz", [np.pi/2], qubits))
 
         # 5. UNIVERSAL SINGLE-QUBIT DECOMPOSITIONS
         if gate_name == "u2":

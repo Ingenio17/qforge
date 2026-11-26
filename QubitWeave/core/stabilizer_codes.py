@@ -171,6 +171,16 @@ class StabilizerCode:
                        The repetition code's |0>_L happens to equal |000>, so
                        its (still explicitly declared, for uniformity) encoding
                        circuit is provably a no-op there.
+        logical_hadamard:
+                       how the logical H is performed.
+                       "transversal": H on every data qubit (Steane, exactly; the
+                       repetition code up to the next syndrome round).
+                       "relabel": H on every data qubit, then data qubit q is renamed
+                       `hadamard_relabelling[q]`. For codes whose X and Z checks have
+                       different supports that a symmetry of the lattice exchanges.
+                       "encoder": un-encode, H on data qubit 0 (which must carry the
+                       unencoded message), re-encode. Exact on the codespace but not
+                       fault tolerant: one faulty gate inside it can spread.
     """
     name: str
     num_data: int
@@ -182,8 +192,22 @@ class StabilizerCode:
     logical_z_qubits: Tuple[int, ...]
     logical_z_pauli: str
     encoding_circuit: Tuple[EncodingStep, ...]
+    logical_hadamard: str = "transversal"
+    hadamard_relabelling: Tuple[int, ...] = ()
 
     def __post_init__(self):
+        if self.logical_hadamard not in ("transversal", "relabel", "encoder"):
+            raise ValueError(
+                f"StabilizerCode '{self.name}': unknown logical_hadamard "
+                f"{self.logical_hadamard!r}."
+            )
+        if self.logical_hadamard == "relabel" and sorted(self.hadamard_relabelling) != list(
+            range(self.num_data)
+        ):
+            raise ValueError(
+                f"StabilizerCode '{self.name}': hadamard_relabelling must be a permutation "
+                f"of its data qubits."
+            )
         if len(self.generators) != self.num_ancilla:
             raise ValueError(
                 f"StabilizerCode '{self.name}': {len(self.generators)} generators "
@@ -394,6 +418,8 @@ SHOR_9 = StabilizerCode(
     logical_x_pauli="Z",
     logical_z_qubits=(0, 1, 2),
     logical_z_pauli="X",
+    # Shor's X and Z checks have different weights, so H on every qubit leaves the code.
+    logical_hadamard="encoder",
     encoding_circuit=(
         EncodingStep(gate="ICX", control=0, target=3),
         EncodingStep(gate="ICX", control=0, target=6),
@@ -527,5 +553,98 @@ STEANE_7 = StabilizerCode(
         EncodingStep(gate="ICX", control=3, target=4),
         EncodingStep(gate="ICX", control=3, target=5),
         EncodingStep(gate="ICX", control=3, target=6),
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# 9-qubit rotated surface code (distance 3)
+# ---------------------------------------------------------------------------
+#
+# Data qubits sit on a 3x3 grid and every stabilizer touches only neighbours,
+# which is why this is the code planar superconducting chips are built for:
+#
+#     0 -- 1 -- 2        Z plaquettes: {1,2,4,5}, {3,4,6,7}, boundary {0,3}, {5,8}
+#     |    |    |        X plaquettes: {0,1,3,4}, {4,5,7,8}, boundary {1,2}, {6,7}
+#     3 -- 4 -- 5
+#     |    |    |        logical Z = Z0 Z1 Z2 (top row)
+#     6 -- 7 -- 8        logical X = X0 X3 X6 (left column)
+#
+# Every X plaquette overlaps every Z plaquette on 0 or 2 qubits, so all eight
+# commute. Each logical operator overlaps the opposite-type plaquettes evenly and
+# the other logical operator on qubit 0 alone, so X_bar and Z_bar anticommute.
+#
+# A bit flip and a phase flip are diagnosed by disjoint sets of plaquettes, so the
+# two halves of the syndrome are decoded independently, each to a minimum-weight
+# error. Several single-qubit errors can share a syndrome; they then differ by a
+# stabilizer and correcting either restores the state.
+#
+# H on every qubit exchanges the X and Z plaquettes, which are the same shapes turned by
+# 90 degrees. Following it with that rotation of the lattice, a relabelling of the qubits
+# that needs no gates, gives the logical Hadamard.
+
+def _minimum_weight_table(
+    checks: List[Tuple[int, ...]], num_data: int
+) -> Dict[Tuple[int, ...], Tuple[int, ...]]:
+    """Lightest error set producing each syndrome of one family of checks."""
+    table: Dict[Tuple[int, ...], Tuple[int, ...]] = {}
+    for weight in range(num_data + 1):
+        for error in itertools.combinations(range(num_data), weight):
+            syndrome = tuple(len(set(error) & set(check)) % 2 for check in checks)
+            table.setdefault(syndrome, error)
+        if len(table) == 2 ** len(checks):
+            break
+    return table
+
+
+_SURFACE9_Z = [(0, 3), (1, 2, 4, 5), (3, 4, 6, 7), (5, 8)]
+_SURFACE9_X = [(1, 2), (0, 1, 3, 4), (4, 5, 7, 8), (6, 7)]
+
+
+def _build_surface9_syndrome_table() -> Dict[Tuple[int, ...], List[Tuple[int, str]]]:
+    """Ancillas 0-3 (Z plaquettes) fix X errors; ancillas 4-7 (X plaquettes) fix Z errors."""
+    flips = _minimum_weight_table(_SURFACE9_Z, 9)
+    phases = _minimum_weight_table(_SURFACE9_X, 9)
+    return {
+        sz + sx: [(q, "X") for q in flips[sz]] + [(q, "Z") for q in phases[sx]]
+        for sz in flips
+        for sx in phases
+        if flips[sz] or phases[sx]
+    }
+
+
+SURFACE_9 = StabilizerCode(
+    name="9-qubit rotated surface code (d=3)",
+    num_data=9,
+    num_ancilla=8,
+    generators=tuple(
+        StabilizerGenerator(basis=basis, data_qubits=qubits, ancilla=i)
+        for i, (basis, qubits) in enumerate(
+            [("Z", q) for q in _SURFACE9_Z] + [("X", q) for q in _SURFACE9_X]
+        )
+    ),
+    syndrome_to_correction=_build_surface9_syndrome_table(),
+    logical_x_qubits=(0, 3, 6),
+    logical_x_pauli="X",
+    logical_z_qubits=(0, 1, 2),
+    logical_z_pauli="Z",
+    # A 90 degree turn of the lattice, (row, column) -> (column, 2 - row).
+    logical_hadamard="relabel",
+    hadamard_relabelling=tuple(3 * (q % 3) + 2 - q // 3 for q in range(9)),
+    # |0>_L is |0...0> projected onto every X plaquette: one Hadamarded pivot per
+    # plaquette, each chosen to sit in no other X plaquette, fanned out by CNOTs.
+    encoding_circuit=(
+        EncodingStep(gate="H", target=2),
+        EncodingStep(gate="H", target=0),
+        EncodingStep(gate="H", target=8),
+        EncodingStep(gate="H", target=6),
+        EncodingStep(gate="ICX", control=2, target=1),
+        EncodingStep(gate="ICX", control=0, target=1),
+        EncodingStep(gate="ICX", control=0, target=3),
+        EncodingStep(gate="ICX", control=0, target=4),
+        EncodingStep(gate="ICX", control=8, target=4),
+        EncodingStep(gate="ICX", control=8, target=5),
+        EncodingStep(gate="ICX", control=8, target=7),
+        EncodingStep(gate="ICX", control=6, target=7),
     ),
 )

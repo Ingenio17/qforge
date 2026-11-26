@@ -1,0 +1,8 @@
+check,result,expected,tolerance,status
+"GHZ fidelity, pulse level",0.999987,1,0.02,PASS
+fringe frequency (three times a single qubit's),3,3,0.02,PASS
+fringe visibility equals twice the GHZ coherence,0.999987,0.999987,0.02,PASS
+Mermin value vs the quantum maximum,3.99994,4,0.1,PASS
+Mermin value recomputed from the density matrix,3.99995,3.99994,0.05,PASS
+noisy state is a valid density matrix: trace kept,0.999966,1,0.02,PASS
+noisy Mermin still violates the classical bound of 2,1,1,0,PASS

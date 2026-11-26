@@ -1,0 +1,8 @@
+check,result,expected,tolerance,status
+|110⟩ → |111⟩: final population,0.999699,1,0.02,PASS
+|100⟩ stays: final population,0.999675,1,0.02,PASS
+"worst entry of the truth table, all 8 inputs",0.998231,1,0.02,PASS
+"average gate fidelity to the ideal Toffoli, phases included",0.999661,1,0.02,PASS
+leakage out of the computational states,0.000336082,0,0.01,PASS
+(|0⟩+|1⟩)|10⟩ → (|010⟩+|111⟩)/√2: fidelity,0.999847,1,0.02,PASS
+columns stay orthonormal (largest deviation),0.00176649,0,0.01,PASS

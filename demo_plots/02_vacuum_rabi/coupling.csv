@@ -1,0 +1,5 @@
+Quantity,Netlist,Model from C matrix
+"Resonator at flux 0.40, qubit far below (GHz)",7.0443,7.0443
+Vacuum Rabi splitting 2g (MHz),295.13,295.13
+2g from g·n01 formula (MHz),295.13,295.00
+Flux at resonance (Φ0),0.2033,0.2033

@@ -1,0 +1,6 @@
+check,result,expected,tolerance,status
+Hartree-Fock energy at 0.7414 Å vs literature (Ha),-1.11668,-1.1167,0.0002,PASS
+FCI energy at 0.7414 Å vs literature (Ha),-1.13727,-1.1373,0.0002,PASS
+worst VQE error over the whole curve (kcal/mol),0.000695869,0,1,PASS
+"VQE respects the variational principle (min error, mHa)",0,0,0.3,PASS
+equilibrium bond length (Å),0.735,0.730209,0.015,PASS

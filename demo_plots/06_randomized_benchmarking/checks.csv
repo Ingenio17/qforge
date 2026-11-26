@@ -1,0 +1,7 @@
+check,result,expected,tolerance,status
+"Transmon, 20 ns DRAG: leakage-aware RB / true error",1.00212,1,0.1,PASS
+"Transmon, 8 ns Gaussian: leakage-aware RB / true error",0.997267,1,0.1,PASS
+"Transmon, 4 ns DRAG: leakage-aware RB / true error",0.958316,1,0.1,PASS
+"Fluxonium, 40 ns DRAG: leakage-aware RB / true error",0.999498,1,0.1,PASS
+20 ns DRAG is coherence limited (true / limit),1.0019,1,0.03,PASS
+number of Cliffords,24,24,0,PASS

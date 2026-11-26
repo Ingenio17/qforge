@@ -3,6 +3,7 @@ Qubit Engine: Wrapper around scqubits for qubit physics modeling.
 """
 
 import hashlib
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -41,6 +42,12 @@ class QubitEngine:
     def __init__(self):
         """Initialize the qubit engine."""
         self._qubits = {}  # Store created qubits
+        self._save_depth = 0  # > 0 inside deferred_save()
+        self._save_pending = False
+        # (mtime, size) of the session file this engine last read or wrote, and the
+        # names it held, so an unchanged file is not parsed again.
+        self._session_stamp = None
+        self._session_names = frozenset()
         self._ensure_output_dirs()
         self._session_file = Path(OUTPUT_DIRS["qubits"]) / ".QubitWeave_session.json"
         self._metrics_file = Path(OUTPUT_DIRS["qubits"]) / ".QubitWeave_metrics.json"
@@ -55,8 +62,29 @@ class QubitEngine:
         for dir_path in OUTPUT_DIRS.values():
             Path(dir_path).mkdir(parents=True, exist_ok=True)
     
+    @contextlib.contextmanager
+    def deferred_save(self):
+        """
+        Write the session file once, on exit, however many qubits change inside.
+
+        Creating or deleting a qubit rewrites the whole file, which dominates when an
+        encoded register adds and removes dozens of them.
+        """
+        self._save_depth += 1
+        try:
+            yield
+        finally:
+            self._save_depth -= 1
+            if self._save_depth == 0 and self._save_pending:
+                self._save_pending = False
+                self._save_session()
+
     def _save_session(self):
         """Save current session (all qubits) to disk."""
+        if self._save_depth:
+            self._save_pending = True
+            return
+
         # Helper to convert numpy types to python types
         def convert(o):
             if isinstance(o, np.integer): return int(o)
@@ -76,15 +104,22 @@ class QubitEngine:
         try:
             with open(self._session_file, 'w') as f:
                 json.dump(session_data, f, indent=2, default=convert)
+            self._session_stamp = self._file_stamp()
+            self._session_names = frozenset(session_data)
         except Exception:
             # Silently fail if can't save - don't break user workflow
             pass
     
     def _load_session(self):
         """Load previous session (all qubits) from disk."""
-        if not self._session_file.exists():
+        if self._save_depth:
+            return  # memory is ahead of the file until deferred_save() exits
+        stamp = self._file_stamp()
+        if stamp is None:
             return
-        
+        if stamp == self._session_stamp and self._session_names <= self._qubits.keys():
+            return
+
         try:
             with open(self._session_file, 'r') as f:
                 session_data = json.load(f)
@@ -117,9 +152,18 @@ class QubitEngine:
                 except Exception:
                     # Skip qubits that fail to load
                     pass
+            self._session_stamp = stamp
+            self._session_names = frozenset(n for n in session_data if n in self._qubits)
         except Exception:
             # If session file is corrupted, start fresh
             pass
+
+    def _file_stamp(self):
+        try:
+            status = os.stat(self._session_file)
+        except OSError:
+            return None
+        return (status.st_mtime_ns, status.st_size)
     
     def _create_qubit_object(self, qubit_type, params):
         """Internal method to create qubit object from type and params."""
@@ -631,39 +675,48 @@ class QubitEngine:
             "property_values": []
         }
         
-        for param_val in param_range:
-            params = fixed_params.copy()
-            params[param_name] = param_val
+        # One session write at the end rather than one per point, and the scratch qubit
+        # does not outlive the sweep.
+        previous = self._qubits.get("_sweep_temp")
+        with self.deferred_save():
+            for param_val in param_range:
+                params = fixed_params.copy()
+                params[param_name] = param_val
             
-            try:
-                # Create temporary qubit
-                qubit = self.create_qubit(qubit_type, f"_sweep_temp", params)
+                try:
+                    # Create temporary qubit
+                    qubit = self.create_qubit(qubit_type, "_sweep_temp", params)
                 
-                # Compute requested property
-                if property_name == "frequency":
-                    evals = qubit.eigenvals(evals_count=2)
-                    value = evals[1] - evals[0]
-                elif property_name == "anharmonicity":
-                    evals = qubit.eigenvals(evals_count=3)
-                    omega_01 = evals[1] - evals[0]
-                    omega_12 = evals[2] - evals[1]
-                    value = (omega_12 - omega_01) * 1000  # MHz
-                elif property_name == "T1":
-                    coherence = self.estimate_coherence(qubit)
-                    value = coherence.get("T1 (dielectric)", {}).get("value", 0)
-                elif property_name == "T2":
-                    coherence = self.estimate_coherence(qubit)
-                    value = coherence.get("T2 (echo)", {}).get("value", 0)
-                else:
-                    value = 0
+                    # Compute requested property
+                    if property_name == "frequency":
+                        evals = qubit.eigenvals(evals_count=2)
+                        value = evals[1] - evals[0]
+                    elif property_name == "anharmonicity":
+                        evals = qubit.eigenvals(evals_count=3)
+                        omega_01 = evals[1] - evals[0]
+                        omega_12 = evals[2] - evals[1]
+                        value = (omega_12 - omega_01) * 1000  # MHz
+                    elif property_name == "T1":
+                        coherence = self.estimate_coherence(qubit)
+                        value = coherence.get("T1 (dielectric)", {}).get("value", 0)
+                    elif property_name == "T2":
+                        coherence = self.estimate_coherence(qubit)
+                        value = coherence.get("T2 (echo)", {}).get("value", 0)
+                    else:
+                        value = 0
                 
-                results["parameter_values"].append(param_val)
-                results["property_values"].append(value)
+                    results["parameter_values"].append(param_val)
+                    results["property_values"].append(value)
                 
-            except Exception as e:
-                # Skip failed calculations
-                pass
-        
+                except Exception as e:
+                    # Skip failed calculations
+                    pass
+
+            if previous is None:
+                self._qubits.pop("_sweep_temp", None)
+            else:
+                self._qubits["_sweep_temp"] = previous
+
         return results
     
     def visualize_enhanced(self, qubit, plot_types: list = None, save: bool = True, subtract_ground: bool = False):

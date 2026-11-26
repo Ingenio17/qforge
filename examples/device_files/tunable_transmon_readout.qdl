@@ -1,0 +1,22 @@
+* A flux-tunable transmon coupled to a readout resonator.
+*
+* The single junction of a transmon is replaced by a SQUID, so flux 1 tunes the
+* qubit through the resonator. Nothing in this file says "coupling strength": the
+* vacuum Rabi splitting follows from the 6 fF capacitor.
+
+.title  Tunable transmon with readout resonator
+.name   tunable_transmon_readout
+
+J1  1  0  Ic=40nA  Cj=2fF       ; SQUID, junction A
+J2  1  0  Ic=28nA  Cj=2fF       ; SQUID, junction B (asymmetric)
+C1  1  0  70fF                  ; transmon shunt
+Cc  1  2  6fF                   ; coupling capacitor
+L2  2  0  2nH                   ; resonator
+C2  2  0  250fF
+
+.flux   1 = 0.0
+.options ext_basis=harmonic
+.cutoff n1   = 14
+.cutoff ext2 = 16               ; check_convergence reports 2 MHz of error at 8
+.levels 6
+.end

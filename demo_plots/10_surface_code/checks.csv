@@ -1,0 +1,12 @@
+check,result,expected,tolerance,status
+7-qubit Steane code: single-qubit errors corrected,21,21,0,PASS
+9-qubit Shor code: single-qubit errors corrected,27,27,0,PASS
+9-qubit rotated surface code (d=3): single-qubit errors corrected,27,27,0,PASS
+"surface code: no error, no syndrome",0,0,0,PASS
+repetition code vs 3p² − 2p³ at p = 0.07,0.014014,0.014014,1e-12,PASS
+surface code has distance 3 (weight-1 failures),0,0,0,PASS
+logical error falls as p²,1.99965,2,0.01,PASS
+engine Monte Carlo at p = 2% vs exact (σ away),0.591897,0,3,PASS
+engine Monte Carlo at p = 5% vs exact (σ away),0.0759655,0,3,PASS
+engine Monte Carlo at p = 10% vs exact (σ away),-1.24332,0,3,PASS
+engine Monte Carlo at p = 18% vs exact (σ away),0.661242,0,3,PASS

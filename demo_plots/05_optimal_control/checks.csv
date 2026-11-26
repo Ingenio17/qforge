@@ -1,0 +1,5 @@
+check,result,expected,tolerance,status
+5 ns: GRAPE beats DRAG by at least 100x in the lab frame (log10 ratio),2,2,1e-09,PASS
+5 ns GRAPE error below 1e-4 in the lab frame (1 = yes),1,1,0,PASS
+5 ns GRAPE propagator vs QuTiP (max element),3.80079e-15,0,1e-10,PASS
+lab-frame P(1) vs QuTiP sesolve,0.999992,0.999992,2e-05,PASS

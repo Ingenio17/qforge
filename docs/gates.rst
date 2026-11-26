@@ -254,6 +254,28 @@ target. The CZ itself is built as follows:
 5. Apply the closing :math:`X(+\pi/2)` with its phase offset by that amount, which
    is a virtual Z correction.
 
+This recipe is for weakly anharmonic pairs. It models a flux pulse as a rigid shift of
+the whole ladder, which stops being meaningful when a qubit's anharmonicity exceeds
+half its frequency or the required detuning exceeds three quarters of it. A half-flux
+fluxonium is far past both.
+
+Such pairs use a **parametrically activated** CZ instead. The coupler is modulated at
+the frequency separating :math:`|11\rangle` from :math:`|02\rangle` and
+:math:`|20\rangle`,
+
+.. math::
+
+    g(t) = g\,f(t)\cos(2\pi f_{\mathrm{mod}} t), \qquad
+    f_{\mathrm{mod}} = |E_{02} - E_{11}| / h
+
+which makes the exchange resonant while both qubits stay at their operating points.
+One full cycle out of :math:`|11\rangle` and back is a CZ, and a detuned cycle is an
+arbitrary controlled phase. Frequency and duration are solved for by maximising the
+average gate fidelity of the full multilevel propagator, with no rotating-wave
+approximation. The Z phase the pulse leaves on each qubit is undone in the frame. The
+mechanism is chosen automatically; passing an explicit ``detuning`` forces the
+flux-activated gate. See :mod:`QubitWeave.core.parametric_gate`.
+
 Noise
 =====
 
@@ -303,6 +325,9 @@ A duration sweep starts from an analytic estimate, whose form depends on the gat
        duration is multi-peaked, because the coupling-driven population transfer
        interferes with the detuning's own dynamical phase, and the tallest peak is
        not reliably near :math:`T_{\mathrm{est}}`.
+   * - Parametric CZ or CNOT (strongly anharmonic pair on a tunable coupler)
+     - Not swept. The duration is solved for, and the score returned is the average
+       gate fidelity of the CZ.
    * - Capacitive CZ
      - 20 points across :math:`\pm 20` percent of :math:`T_{\mathrm{est}} = \pi/(4g)`.
    * - Anything else

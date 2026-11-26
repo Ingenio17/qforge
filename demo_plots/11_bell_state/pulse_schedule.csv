@@ -1,0 +1,5 @@
+#,Step,Pulse,Start (ns),End (ns),Frequency (GHz)
+1,H on Q1,microwave,0.0,22.1,5.6826
+2,CNOT: Ry(−π/2) on Q2,microwave,22.1,483.9,0.3634
+3,CZ,coupler modulation,483.9,524.9,3.3405
+4,CNOT: Ry(π/2) on Q2,microwave,524.9,986.6,0.3634

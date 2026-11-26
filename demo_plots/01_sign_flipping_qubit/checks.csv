@@ -1,0 +1,8 @@
+check,result,expected,tolerance,status
+levels vs scqubits.FluxQubit at flux 0.000 (MHz),0.0148293,0,1,PASS
+levels vs scqubits.FluxQubit at flux 0.447 (MHz),0.00609742,0,1,PASS
+levels vs scqubits.FluxQubit at flux 0.479 (MHz),0.0231188,0,1,PASS
+levels vs scqubits.FluxQubit at flux 0.500 (MHz),0.0316365,0,1,PASS
+anharmonicity at the harmonic point (MHz),0.000435412,0,0.05,PASS
+spectrum is symmetric about half flux (MHz),1.69109e-09,0,0.01,PASS
+basis-truncation error (MHz),2.55795e-09,0,0.5,PASS

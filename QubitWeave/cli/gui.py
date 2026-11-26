@@ -55,8 +55,10 @@ try:
     from QubitWeave.core.qubit_engine import QubitEngine
     from QubitWeave.core.gate_engine import GateEngine
     from QubitWeave.core.workflow_engine import PhysicalWorkflowEngine
-    from QubitWeave.core.error_correction_engine import ErrorCorrectionEngine
-    from QubitWeave.core.stabilizer_codes import REPETITION_3, STEANE_7, SHOR_9
+    from QubitWeave.core.error_correction_engine import (
+        LARGE_STATE_BYTES, ErrorCorrectionEngine, estimate_state_size,
+    )
+    from QubitWeave.core.stabilizer_codes import REPETITION_3, STEANE_7, SHOR_9, SURFACE_9
     from QubitWeave.core import device_report
     from QubitWeave.core.device_engine import DeviceEngine, DeviceError
     from QubitWeave.core.device_library import (
@@ -86,7 +88,9 @@ except ImportError:
     TerminalPlotter = device_report = _Stub
     QUBIT_PRESETS = {"transmon": {"typical": {"EJ": 15.0, "EC": 0.2, "ng": 0.0, "ncut": 30}}}
     OUTPUT_DIRS = {"base": "outputs"}
-    REPETITION_3 = STEANE_7 = SHOR_9 = None
+    REPETITION_3 = STEANE_7 = SHOR_9 = SURFACE_9 = None
+    LARGE_STATE_BYTES = 2**30
+    def estimate_state_size(*a, **kw): return (0, 0)
     NETLIST_EXTENSIONS = (".qdl",)
     class DeviceError(Exception): pass
     class NetlistError(Exception): pass
@@ -109,6 +113,7 @@ EC_CODE_MAP = {
     "3-qubit repetition code": (REPETITION_3, "execute_3q_repetition_workflow"),
     "7-qubit Steane code": (STEANE_7, "execute_steane7_workflow"),
     "9-qubit Shor code": (SHOR_9, "execute_shor9_workflow"),
+    "9-qubit surface code (d=3)": (SURFACE_9, "execute_surface9_workflow"),
 }
 EC_LABELS = ["No error correction"] + list(EC_CODE_MAP.keys())
 
@@ -2385,10 +2390,13 @@ class QubitWeaveGUI(tk.Tk):
                 f"qubits ({code.num_data} data + {code.num_ancilla} ancilla). "
                 f"{len(qubit_names)} logical qubit(s) -> {n_physical} physical qubits total.[/dim]"
             )
-            if n_physical > 20 and not self._confirm(
+            levels = max(self.engine.get_qubit(n).truncated_dim for n in qubit_names)
+            amplitudes, size_bytes = estimate_state_size(code, len(qubit_names), levels)
+            if size_bytes >= LARGE_STATE_BYTES and not self._confirm(
                 "Large simulation",
-                f"That is a {2 ** n_physical:,}-dimensional state vector.\n"
-                "This may be slow or memory-heavy. Continue anyway?",
+                f"The state vector has {amplitudes:,} amplitudes ({size_bytes / 2**30:.1f} GB), "
+                "and the run needs roughly three times that.\n"
+                "Continue anyway?",
                 danger=True, default=False,
             ):
                 self._warn("Aborted.")
@@ -2828,6 +2836,7 @@ class QubitWeaveGUI(tk.Tk):
         try:
             GateEngine._calib_cache.clear()
             g_eng._save_cache_to_disk()
+            g_eng.clear_parametric_cache()
             self._ok(f"Calibration cache cleared ({n_cached} entr{'y' if n_cached == 1 else 'ies'} removed).")
             self._notify("Cache cleared", "The calibration cache has been cleared.", kind="success")
         except Exception as e:
@@ -2880,11 +2889,12 @@ class QubitWeaveGUI(tk.Tk):
   [dim]·[/dim] [cyan]Netlist format reference[/cyan] prints the complete syntax.
 
 [bold]Error correction[/bold]
-  Run full workflow now offers three codes, each mapping every logical
+  Run full workflow now offers four codes, each mapping every logical
   qubit onto more physical qubits so it can detect and correct errors:
   [dim]·[/dim] [cyan]3-qubit repetition code[/cyan]   5 physical qubits per logical qubit, corrects a single bit flip.
   [dim]·[/dim] [cyan]7-qubit Steane code[/cyan]       13 physical qubits per logical qubit, corrects any single-qubit Pauli error.
   [dim]·[/dim] [cyan]9-qubit Shor code[/cyan]         17 physical qubits per logical qubit, corrects any single-qubit error.
+  [dim]·[/dim] [cyan]9-qubit surface code[/cyan]      17 physical qubits per logical qubit, corrects any single-qubit error.
 
 [bold]Tips[/bold]
   [dim]·[/dim] Start with [cyan]Create a qubit[/cyan] if you are new here.

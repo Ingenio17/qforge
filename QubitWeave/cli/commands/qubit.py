@@ -7,11 +7,12 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
+from QubitWeave.cli._lazy import Lazy
 from QubitWeave.core.qubit_engine import QubitEngine
 from QubitWeave.config.defaults import QUBIT_PRESETS
 
 console = Console()
-engine = QubitEngine()
+engine = Lazy(QubitEngine)
 
 
 @click.group()

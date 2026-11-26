@@ -1,0 +1,22 @@
+* Capacitively shunted flux qubit (CSFQ).
+*
+* A loop of three junctions, one smaller by ALPHA, with a large capacitor across the
+* small one. Away from half flux it is a transmon: high frequency, negative
+* anharmonicity. Near half flux the quadratic part of the potential nearly cancels,
+* the quartic part takes over, and the anharmonicity turns strongly positive.
+
+.title  Capacitively shunted flux qubit
+.name   csfq
+
+.param  EJ0   = 80.0            ; GHz, the two large junctions
+.param  ALPHA = 0.43            ; the third junction is ALPHA times smaller
+
+J1  0  1  EJ=EJ0          EC=4.0
+J2  1  2  EJ=EJ0          EC=4.0
+J3  2  0  EJ={EJ0*ALPHA}  EC={4.0/ALPHA}
+Csh 2  0  EC=0.30               ; the shunt
+
+.flux   1 = 0.5
+.cutoff all = 12
+.levels 5
+.end

@@ -1,0 +1,8 @@
+**Randomized benchmarking vs the exact error of the same simulated channels**
+
+| Gate | Clifford (ns) | T1 / T2 (µs) | True error | Standard RB | Leakage-aware RB | Aware / true | Coherence limit | Coherent error | True leakage | RB leakage |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Transmon, 20 ns DRAG | 40 | 50 / 70 | 3.243e-04 | 3.240e-04 | 3.250e-04 | 1.002 | 3.24e-04 | 3.1e-07 | 4.9e-07 | 1.8e-07 |
+| Transmon, 8 ns Gaussian | 16 | 50 / 70 | 1.182e-03 | 1.257e-03 | 1.179e-03 | 0.997 | 1.30e-04 | 1.1e-03 | 1.0e-03 | 9.9e-04 |
+| Transmon, 4 ns DRAG | 8 | 50 / 70 | 2.516e-03 | 1.720e-03 | 2.411e-03 | 0.958 | 6.48e-05 | 2.4e-03 | 2.4e-03 | 2.3e-03 |
+| Fluxonium, 40 ns DRAG | 80 | 1000 / 800 | 4.670e-05 | 4.668e-05 | 4.667e-05 | 0.999 | 4.67e-05 | 2.9e-08 | 3.1e-08 | 2.0e-08 |

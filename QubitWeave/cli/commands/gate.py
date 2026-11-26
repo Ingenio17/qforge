@@ -6,13 +6,19 @@ import click
 import numpy as np
 from rich.console import Console
 
-from QubitWeave.core.gate_engine import GateEngine
+from QubitWeave.cli._lazy import Lazy
 from QubitWeave.utils.terminal_plot import TerminalPlotter
 from QubitWeave.config.defaults import OUTPUT_DIRS
 from pathlib import Path
 
 console = Console()
-engine = GateEngine()
+def _gate_engine():
+    from QubitWeave.core.gate_engine import GateEngine
+
+    return GateEngine()
+
+
+engine = Lazy(_gate_engine)
 
 
 @click.group()

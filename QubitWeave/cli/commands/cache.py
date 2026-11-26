@@ -20,6 +20,10 @@ def clear():
     # This must match the exact path logic in your GateEngine.__init__
     cache_file = os.path.join(OUTPUT_DIRS.get("data", "outputs"), "calib_cache.json")
     
+    parametric_file = os.path.join(os.path.dirname(cache_file), "parametric_cache.json")
+    if os.path.exists(parametric_file):
+        os.remove(parametric_file)
+
     if os.path.exists(cache_file):
         try:
             os.remove(cache_file)

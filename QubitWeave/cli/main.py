@@ -13,7 +13,6 @@ from QubitWeave.utils.console import enable_unicode_console
 enable_unicode_console()
 
 from QubitWeave.cli.commands import qubit, gate, circuit, hardware, compare, workflow, example, clean
-from QubitWeave.cli.interactive import run_interactive
 from QubitWeave import __version__
 
 from pathlib import Path
@@ -66,6 +65,7 @@ def cli(ctx, interactive, gui, cache_clear):
 
         with open(cache_file, "w", encoding="utf-8") as f:
             f.write("{}")
+        (cache_file.parent / "parametric_cache.json").unlink(missing_ok=True)
 
         click.echo(f"Cache cleared: {cache_file}")
         ctx.exit()
@@ -77,6 +77,8 @@ def cli(ctx, interactive, gui, cache_clear):
         ctx.exit()
 
     if interactive:
+        from QubitWeave.cli.interactive import run_interactive
+
         run_interactive()
         ctx.exit()
     

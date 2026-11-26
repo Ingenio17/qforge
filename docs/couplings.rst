@@ -79,7 +79,7 @@ coupler element. There is no static term: a tunable coupler contributes nothing 
 the Hamiltonian until its envelope is switched on, which is what allows the
 interaction to be gated for exactly the duration of a gate.
 
-Two envelopes appear, depending on how the interaction is driven:
+Three envelopes appear, depending on how the interaction is driven:
 
 .. list-table::
    :header-rows: 1
@@ -93,6 +93,9 @@ Two envelopes appear, depending on how the interaction is driven:
        the compiled CNOT
      - :math:`f(t) = \sin^2\!\left(\pi (t - t_0) / T\right)`, which starts and ends
        at zero.
+   * - A ``coupler_pulse`` carrying a ``frequency``, as emitted for a parametric CZ
+     - A raised-cosine flat top times
+       :math:`\cos(2\pi f_{\mathrm{mod}}(t - t_0))`.
 
 Which gate each supports
 ========================

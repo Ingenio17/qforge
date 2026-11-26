@@ -1,0 +1,8 @@
+check,result,expected,tolerance,status
+"disorder ±0 GHz: engine vs tight binding, worst site and time",1.79557e-05,0,0.02,PASS
+"disorder ±0.15 GHz: engine vs tight binding, worst site and time",0.00209407,0,0.02,PASS
+"disorder ±0.45 GHz: engine vs tight binding, worst site and time",5.29156e-05,0,0.02,PASS
+"disorder ±1.5 GHz: engine vs tight binding, worst site and time",6.88667e-06,0,0.02,PASS
+clean chain: excitation number conserved,2.12383e-05,0,0.01,PASS
+first neighbour follows the Bessel-function light cone,0.0019916,0,0.02,PASS
+"localization: start-site population, strongest disorder",1,1,0,PASS

@@ -1,0 +1,16 @@
+check,result,expected,tolerance,status
+Kerr constant vs perturbation theory EC·EJ/(EJ+EL) (MHz),15.0076,15,0.05,PASS
+change of K per photon (MHz),0.00621612,0,0.02,PASS
+basis-truncation error (MHz),8.52651e-11,0,0.01,PASS
+t = 0: fidelity of the netlist state to the ideal cat,1,1,0.003,PASS
+t = 0: lies in the span of 1 coherent state(s),1,1,0.003,PASS
+T/4: fidelity of the netlist state to the ideal cat,0.999867,1,0.003,PASS
+T/4: lies in the span of 4 coherent state(s),0.999867,1,0.003,PASS
+T/3: fidelity of the netlist state to the ideal cat,0.999764,1,0.003,PASS
+T/3: lies in the span of 3 coherent state(s),0.999764,1,0.003,PASS
+T/2: fidelity of the netlist state to the ideal cat,0.999469,1,0.003,PASS
+T/2: lies in the span of 2 coherent state(s),0.999469,1,0.003,PASS
+T: fidelity of the netlist state to the ideal cat,0.997886,1,0.003,PASS
+T: lies in the span of 1 coherent state(s),0.997886,1,0.003,PASS
+residual infidelity grows as t^2 (T versus T/2),3.98113,4,0.1,PASS
+"mean photon number decays as exp(-t/T1), T1 = 1 µs",3.86893,3.86893,0.002,PASS

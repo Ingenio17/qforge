@@ -1,0 +1,5 @@
+Operating point,Flux (Φ0),f01 (GHz),f12 (GHz),Anharmonicity (MHz),FluxQubit class f01 (GHz),Max level error (MHz)
+Zero flux (transmon-like),0.0000,12.4642,12.2833,-180.85,12.4642,0.015
+Most negative,0.4471,6.4906,6.0255,-465.11,6.4906,0.006
+Harmonic point,0.4793,4.5071,4.5071,+0.00,4.5071,0.023
+Half flux (sweet spot),0.5000,3.5404,4.2453,+704.91,3.5404,0.032

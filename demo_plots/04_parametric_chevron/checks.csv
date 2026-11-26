@@ -1,0 +1,14 @@
+check,result,expected,tolerance,status
+"CZ fidelity, Fluxonium + fluxonium (presets)",1,1,0.01,PASS
+"CZ fidelity, Netlist fluxonium + preset high-coherence fluxonium",1,1,0.01,PASS
+"CZ fidelity, Fluxonium fast + fluxonium typical",1,1,0.01,PASS
+"CZ fidelity, Transmon + fluxonium",0.999994,1,0.01,PASS
+"CZ fidelity, Netlist transmon + fluxonium",0.999689,1,0.01,PASS
+"CZ fidelity, Netlist CSFQ + transmon",0.999729,1,0.01,PASS
+"chevron vs analytic Rabi formula, worst pixel",0.00494984,0,0.05,PASS
+CZ fidelity re-integrated with QuTiP,1,1,0.0001,PASS
+conditional phase re-integrated with QuTiP (π),1.00003,1,0.005,PASS
+CPHASE(0.25π): phase (π),0.250049,0.25,0.01,PASS
+CPHASE(0.75π): phase (π),0.750154,0.75,0.01,PASS
+CPHASE(1.25π): phase (π),1.24995,1.25,0.01,PASS
+CPHASE(1.75π): phase (π),1.74992,1.75,0.01,PASS

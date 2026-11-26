@@ -2,6 +2,7 @@
 Gate Engine: Simulation of quantum gates and dynamics using QuTiP.
 """
 
+import hashlib
 import math
 
 import numpy as np
@@ -14,6 +15,11 @@ import os
 
 from QubitWeave.core.qubit_engine import QubitEngine
 from QubitWeave.core.coupling import CouplingGenerator, CouplingType
+from QubitWeave.core.parametric_gate import (
+    calibrate_parametric_cphase,
+    evaluate_parametric_cphase,
+)
+from QubitWeave.core.pulse_solver import PulseCoefficient, evolve
 from QubitWeave.config.defaults import OUTPUT_DIRS
 
 last_print = ""
@@ -45,6 +51,81 @@ CONDITIONAL_SELECTIVITY_TARGET = 2.5
 # the gate, so it is reported as a warning rather than silently absorbed.
 DRESSED_PURITY_WARN = 0.90
 
+# ODE integration of lab-frame evolution. QuTiP's default (Adams, rtol 1e-6) lets the
+# GHz phases drift by several parts in a thousand of population over a few hundred ns
+# and damps coherences by a similar amount per microsecond, which is larger than the
+# gate errors being simulated and skews any calibration that maximises a population.
+# A 7th-order Runge-Kutta holds the error near 1e-6 and is faster as well.
+SOLVER_OPTIONS = {"method": "vern7", "atol": 1e-10, "rtol": 1e-8}
+
+# Bump when parametric_gate changes what it would calculate for the same pair.
+PARAMETRIC_CACHE_VERSION = 1
+
+# The flux-activated CZ models a flux pulse as detuning * (number operator), i.e.
+# it slides the whole ladder rigidly. That only describes a weakly anharmonic
+# qubit moved by a fraction of its own frequency. Past either limit the model
+# stops meaning anything (a fluxonium would need its 0-1 transition pushed to a
+# large negative frequency), and the CZ is activated parametrically instead.
+FLUX_MAX_RELATIVE_ANHARMONICITY = 0.5
+FLUX_MAX_RELATIVE_DETUNING = 0.75
+
+
+def _physics_key(qubit) -> Optional[Tuple]:
+    """
+    Everything that determines a qubit's spectrum and operators, or None if unknown.
+
+    Read from the object on every call, so changing a parameter in place is seen.
+    """
+    try:
+        if hasattr(qubit, "state_key"):  # a netlist device
+            return qubit.state_key()
+        data = qubit.get_initdata()
+        return (
+            type(qubit).__name__,
+            int(qubit.truncated_dim),
+            tuple(sorted((name, repr(value)) for name, value in data.items())),
+        )
+    except Exception:
+        return None
+
+
+def _flat_top(tau, duration, rise):
+    """Raised-cosine flat top. Unwindowed: smooth a little past both ends."""
+    edge = np.minimum(tau, duration - tau)
+    return np.where(edge >= rise, 1.0, 0.5 * (1.0 - np.cos(np.pi * edge / rise)))
+
+
+def _climb_to_peak(evaluate, grid) -> Optional[List[float]]:
+    """
+    Find the maximum of a single-peaked function on a grid without sampling all of it.
+
+    Samples every third point, checks that they rise to one peak and then fall, and walks
+    the grid uphill from the best. Returns one value per grid point with -inf where
+    nothing was evaluated, or None if the samples are not single-peaked.
+    """
+    count = len(grid)
+    values = [-np.inf] * count
+
+    def at(index):
+        if values[index] == -np.inf:
+            values[index] = evaluate(grid[index])
+        return values[index]
+
+    probes = sorted({*range(0, count, 3), count - 1})
+    samples = np.array([at(i) for i in probes])
+    top = int(np.argmax(samples))
+    if np.any(np.diff(samples[: top + 1]) < 0) or np.any(np.diff(samples[top:]) > 0):
+        return None
+
+    best = probes[top]
+    while True:
+        neighbours = [i for i in (best - 1, best + 1) if 0 <= i < count]
+        better = max(neighbours, key=at)
+        if values[better] <= values[best]:
+            return values
+        best = better
+
+
 class GateEngine:
     """Engine for simulating quantum gates and dynamics."""
 
@@ -65,6 +146,13 @@ class GateEngine:
     # In-memory only: it is derived entirely from the registered qubits, so
     # there is nothing worth persisting across sessions.
     _conditional_cache: Dict[Tuple, Dict[str, Any]] = {}
+    # Calibrated parametric controlled-phase schedules. Keyed by the spectra and
+    # charge operators themselves rather than by qubit name, so re-registering a
+    # name with different parameters can never return a stale schedule.
+    _parametric_cache: Dict[Tuple, Dict[str, Any]] = {}
+    _parametric_disk: Optional[Dict[str, Dict[str, Any]]] = None
+    # Single-qubit (H0, operators), keyed by _physics_key.
+    _operator_cache: Dict[Tuple, Tuple[qt.Qobj, Dict[str, qt.Qobj]]] = {}
 
     def __init__(self):
         """Initialize the gate engine."""
@@ -146,7 +234,14 @@ class GateEngine:
         self.qubit_engine.load_session()
         qubit = self.qubit_engine.get_qubit(qubit_name)
         dim = qubit.truncated_dim
-        
+
+        # A zero-pi or netlist qubit takes seconds to diagonalize and every simulation
+        # asks for it. Keyed by the physics, so editing a qubit can never hit stale data.
+        key = _physics_key(qubit)
+        if key is not None and key in GateEngine._operator_cache:
+            H0, operators = GateEngine._operator_cache[key]
+            return H0, dict(operators)
+
         # Get eigenvalues for diagonal Hamiltonian (in GHz * 2pi)
         evals = qubit.eigenvals(evals_count=dim)
         H0 = qt.Qobj(np.diag(evals)) * 2 * np.pi
@@ -167,7 +262,11 @@ class GateEngine:
             a = qt.destroy(dim)
             operators['n'] = 1j * (a.dag() - a) / np.sqrt(2)
             operators['phi'] = (a.dag() + a) / np.sqrt(2)
-            
+
+        if key is not None:
+            if len(GateEngine._operator_cache) >= 256:
+                GateEngine._operator_cache.clear()
+            GateEngine._operator_cache[key] = (H0, dict(operators))
         return H0, operators
 
     def get_control_hamiltonian(self, gate_type: str, operators: Dict[str, qt.Qobj]) -> qt.Qobj:
@@ -593,8 +692,32 @@ class GateEngine:
         kwargs["virtual_z"] = float(kwargs.get("virtual_z", 0.0))
         
    
+        # A pair that cannot be flux-tuned into |11>-|02> resonance gets a parametric
+        # CZ, whose duration is solved for directly rather than swept. An explicit
+        # detuning is a request for the flux-activated gate and is honoured.
+        use_parametric = (
+            q2_name is not None
+            and gate_type in ["CNOT", "CZ"]
+            and coupling_type == "tunable_coupler"
+            and not kwargs.get("detuning")
+            and not self._flux_activation_is_physical(q1_name, q2_name)
+        )
+        if use_parametric and parameter == "duration" and len(range_vals) == 0:
+            print(f"Calibrating {gate_type} (parametric {coupling_type}) on {target_str}...")
+            schedule = self._parametric_cphase_schedule(q1_name, q2_name, coupling_strength)
+            print(
+                f"  -> Coupler modulated at {schedule['frequency']:.4f} GHz "
+                f"(|11> <-> {schedule['transition']}), duration {schedule['duration']:.4f} ns "
+                f"(Average gate fidelity: {schedule['fidelity']:.6f})"
+            )
+            for warning in schedule["warnings"]:
+                print(f"  [!] {warning}")
+            return schedule["duration"], schedule["fidelity"]
+
         if "detuning" not in kwargs:
-            if gate_type in ["CNOT", "CZ"] and coupling_type == "tunable_coupler":
+            if use_parametric:
+                kwargs["detuning"] = 0.0
+            elif gate_type in ["CNOT", "CZ"] and coupling_type == "tunable_coupler":
                 kwargs["detuning"] = float(self._calculate_resonant_flux(q1_name, q2_name))
             else:
                 kwargs["detuning"] = 0.0
@@ -610,6 +733,10 @@ class GateEngine:
             kwargs.pop(parameter)
 
         kw_tuple = tuple(sorted(kwargs.items()))
+        if gate_type in ["X", "Y", "H"]:
+            # Solver error shifts these sharp peaks, so a duration calibrated against a
+            # looser integration must not be reused.
+            kw_tuple += (("solver", SOLVER_OPTIONS["method"]),)
         
         # define cache key
         cache_key = (q1_name, q2_name, gate_type, coupling_type, coupling_strength, parameter, kw_tuple)
@@ -629,7 +756,8 @@ class GateEngine:
         tc_candidate_centers = None   # duration range is auto-generated; guards the
         # fine-sweep step logic and the duration/detuning refinement stage below
         # against an explicitly-passed range_vals (no auto-estimation).
-        if len(range_vals) == 0:
+        auto_range = len(range_vals) == 0
+        if auto_range:
             if parameter == "duration":
                 # --- A. Single Qubit Gates ---
                 if gate_type in ["X", "Y", "H"]:
@@ -747,6 +875,11 @@ class GateEngine:
 
                     metric = min(fidelity_on, fidelity_off)
                     
+                elif gate_type == "CZ" and use_parametric and not current_det:
+                    metric = self._parametric_cphase_schedule(
+                        q1_name, q2_name, coupling_strength, duration=current_dur
+                    )["fidelity"]
+
                 elif gate_type == "CZ":
                     phase_pi = self._calculate_interaction_phase_metric(
                         q1_name, q2_name, coupling_type, coupling_strength, current_dur, detuning=current_det
@@ -762,7 +895,12 @@ class GateEngine:
         # 6. coarse
         print(f" -> Analytical coarse sweep ({len(range_vals)} points near estimate)...")
         last_print = f" -> Analytical coarse sweep ({len(range_vals)} points near estimate)..."
-        metrics = [evaluate_metric(v) for v in range_vals]
+        # A rotation has one smooth peak in the window, so it can be climbed instead of
+        # sampled end to end. Anything else (and any surprise) gets the full sweep.
+        smooth_peak = auto_range and gate_type in ["X", "Y", "H"] and parameter == "duration"
+        metrics = _climb_to_peak(evaluate_metric, range_vals) if smooth_peak else None
+        if metrics is None:
+            metrics = [evaluate_metric(v) for v in range_vals]
         best_idx = np.argmax(metrics)
         best_val = range_vals[best_idx]
         max_metric = metrics[best_idx]
@@ -797,6 +935,16 @@ class GateEngine:
              if fine_metrics[fine_best_idx] > max_metric:
                  best_val = fine_range[fine_best_idx]
                  max_metric = fine_metrics[fine_best_idx]
+
+             # A rotation's peak is a smooth parabola, so its vertex locates the
+             # optimum far better than the grid spacing does.
+             if gate_type in ["X", "Y", "H"] and parameter in ("duration", "amplitude"):
+                 curvature, slope, _ = np.polyfit(fine_range - best_val, fine_metrics, 2)
+                 vertex = best_val - slope / (2 * curvature) if curvature < 0 else best_val
+                 if fine_range[0] < vertex < fine_range[-1]:
+                     vertex_metric = evaluate_metric(vertex)
+                     if vertex_metric > max_metric - 1e-6:
+                         best_val, max_metric = float(vertex), float(vertex_metric)
 
         # 7b. Local duration/detuning refinement (tunable-coupler CNOT only)
         #
@@ -840,7 +988,7 @@ class GateEngine:
             candidate_durations = sorted(candidate_durations)
             det_range = np.linspace(base_det * 0.7, base_det * 1.2, 13)
 
-            def _evaluate_pair(dur_val, det_val):
+            def _evaluate_pair(dur_val, det_val, to_beat):
                 try:
                     res_on = self.simulate_two_qubit_dynamics(
                         q1_name, q2_name, "CNOT", coupling_type, coupling_strength,
@@ -849,6 +997,8 @@ class GateEngine:
                         initial_state="10", virtual_z=kwargs.get("virtual_z", 0.0),
                     )
                     fidelity_on = res_on["populations"]["11"][-1]
+                    if fidelity_on <= to_beat:
+                        return fidelity_on  # the minimum of both can only be lower
                     res_off = self.simulate_two_qubit_dynamics(
                         q1_name, q2_name, "CNOT", coupling_type, coupling_strength,
                         duration=dur_val, steps=40, detuning=det_val,
@@ -869,7 +1019,7 @@ class GateEngine:
             best_refined = (max_metric, float(best_val), float(base_det))
             for dur_val in candidate_durations:
                 for det_val in det_range:
-                    m = _evaluate_pair(dur_val, float(det_val))
+                    m = _evaluate_pair(dur_val, float(det_val), best_refined[0])
                     if m > best_refined[0]:
                         best_refined = (m, dur_val, float(det_val))
 
@@ -929,9 +1079,30 @@ class GateEngine:
                 op_int = qt.tensor(op_list)
                 
                 def make_coupler_coeff(g_val, ts, dur):
-                     return lambda t, args: g_val * (np.sin(np.pi * (t - ts) / dur)**2) if (ts <= t <= ts + dur) else 0.0
-                     
-                pulse_func = make_coupler_coeff(g_amp, t_start, pulse_dur)
+                     return PulseCoefficient(
+                         lambda t: g_val * np.sin(np.pi * (t - ts) / dur) ** 2,
+                         ts, ts + dur, frequency=1.0 / dur,
+                     )
+
+                # A "frequency" makes this a parametric pulse: the coupling is
+                # modulated under a flat top, in time local to the pulse, so the
+                # executed propagator is the one that was calibrated.
+                def make_modulated_coeff(g_val, ts, dur, w_mod, rise):
+                     return PulseCoefficient(
+                         lambda t: g_val * _flat_top(t - ts, dur, rise) * np.cos(w_mod * (t - ts)),
+                         ts, ts + dur,
+                         frequency=abs(w_mod) / (2 * np.pi) + 1.0 / rise,
+                         knots=(ts + rise, ts + dur - rise),
+                     )
+
+                if drive.get("frequency"):
+                    pulse_func = make_modulated_coeff(
+                        g_amp, t_start, pulse_dur,
+                        drive["frequency"] * 2 * np.pi,
+                        drive.get("rise_time", 0.15 * pulse_dur),
+                    )
+                else:
+                    pulse_func = make_coupler_coeff(g_amp, t_start, pulse_dur)
                 H_total.append([op_int, pulse_func])
                 
             elif drive.get("type") == "flux_pulse":
@@ -969,18 +1140,13 @@ class GateEngine:
                      # crossing while remaining adiabatic at the intended one,
                      # which is held for the bulk of the duration.
                      edge = max(edge_frac * dur, 1e-9)
-                     def _coeff(t, args):
-                         if t < ts or t > ts + dur:
-                             return 0.0
-                         tau = t - ts
-                         if tau < edge:
-                             return det_val * 0.5 * (1.0 - np.cos(np.pi * tau / edge))
-                         if tau > dur - edge:
-                             tau_end = dur - tau
-                             return det_val * 0.5 * (1.0 - np.cos(np.pi * tau_end / edge))
-                         return det_val
-                     return _coeff
-                     
+                     return PulseCoefficient(
+                         lambda t: det_val * _flat_top(t - ts, dur, edge),
+                         ts, ts + dur,
+                         frequency=1.0 / edge,
+                         knots=(ts + edge, ts + dur - edge),
+                     )
+
                 flux_func = make_flux_coeff(det, t_start, pulse_dur)
                 H_total.append([op_flux, flux_func])
             else:
@@ -1013,12 +1179,18 @@ class GateEngine:
                      dur = te - ts
                      mu = ts + dur / 2.0
                      sigma = dur / 6.0 if dur > 0 else 1.0
-                     return lambda t, args: (
-                         (a * np.exp(-0.5 * ((t - mu) / sigma)**2) * np.cos(f * t + p) - 
-                          d_coef * a * (-(t - mu) / (sigma**2)) * np.exp(-0.5 * ((t - mu) / sigma)**2) * np.sin(f * t + p))
-                         if (ts <= t <= te) else 0.0
+
+                     def shape(t):
+                         envelope = a * np.exp(-0.5 * ((t - mu) / sigma)**2)
+                         return envelope * (
+                             np.cos(f * t + p)
+                             + d_coef * (t - mu) / (sigma**2) * np.sin(f * t + p)
+                         )
+
+                     return PulseCoefficient(
+                         shape, ts, te, frequency=abs(f) / (2 * np.pi) + 2.0 / max(dur, 1e-9)
                      )
-                         
+
                 coeff_func = make_drive_coeff(amp, freq, phase, t_start, t_end, drag_coef)
                 H_total.append([op_drive, coeff_func])
             
@@ -1047,8 +1219,11 @@ class GateEngine:
                     def make_pulse_coeff(g_val, dur):
                          mu = dur / 2.0
                          sigma = dur / 6.0 if dur > 0 else 1.0
-                         return lambda t, args: g_val * np.exp(-0.5 * ((t - mu) / sigma)**2) if (0 <= t <= dur) else 0.0
-                         
+                         return PulseCoefficient(
+                             lambda t: g_val * np.exp(-0.5 * ((t - mu) / sigma)**2),
+                             0.0, dur, frequency=1.0 / max(sigma, 1e-9),
+                         )
+
                     pulse_func = make_pulse_coeff(g_amp, duration)
                     H_total.append([op_int, pulse_func])
                 
@@ -1069,15 +1244,14 @@ class GateEngine:
                     op_list[1] = qt.num(dims[1]) 
                     n2_op = qt.tensor(op_list)
                     
-                    def flux_coeff(t, args):
-                        T = args['T']
-                        mu = T / 2.0
-                        sigma = T / 6.0 if T > 0 else 1.0
-                        return args['det'] * np.exp(-0.5 * ((t - mu) / sigma)**2) if (0 <= t <= T) else 0.0
-                    H_total.append([n2_op, flux_coeff])
-                    args['det'] = detuning * 2 * np.pi
-                    args['T'] = duration
-                    
+                    flux = detuning * 2 * np.pi
+                    centre = duration / 2.0
+                    width = duration / 6.0 if duration > 0 else 1.0
+                    H_total.append([n2_op, PulseCoefficient(
+                        lambda t: flux * np.exp(-0.5 * ((t - centre) / width)**2),
+                        0.0, duration, frequency=1.0 / width,
+                    )])
+
         return H_total, args
 
     def generate_process_tomography(self, 
@@ -1103,7 +1277,7 @@ class GateEngine:
             H_sys, dims, local_ops, qubit_names, gate_type, duration, couplings, drives, detuning
         )
         
-        opts = {"nsteps": 10000000}
+        opts = {"nsteps": 10000000, **SOLVER_OPTIONS}
         U_sim = qt.propagator(H_total, duration, [], args=args, options=opts)
         
         # Project U_sim to the 2^N computational subspace
@@ -1180,6 +1354,254 @@ class GateEngine:
 
         return w1 - w2 - alpha2
     
+    @staticmethod
+    def _collapse_operators(
+        qubit_names: List[str],
+        dims: List[int],
+        noise: Optional[Dict[str, Dict[str, float]]],
+    ) -> List[qt.Qobj]:
+        """
+        Lindblad operators (sqrt(1/ns)) for per-qubit T1 and T2 given in us.
+
+        Relaxation is ladder-like, rate k/T1 from level k to k-1. Pure dephasing,
+        1/Tphi = 1/T2 - 1/(2 T1), couples to the level number and so dephases
+        levels k and l at (k - l)^2 / Tphi. With T2 omitted there is none.
+        """
+        unknown = set(noise or {}) - set(qubit_names)
+        if unknown:
+            raise ValueError(f"Noise given for qubits not in the register: {sorted(unknown)}")
+
+        c_ops: List[qt.Qobj] = []
+        for idx, name in enumerate(qubit_names):
+            times = (noise or {}).get(name, {})
+            if any(value <= 0 for value in times.values()):
+                raise ValueError(f"'{name}': T1 and T2 must be positive, got {times}.")
+            gamma_1 = 1.0 / (times["T1"] * 1e3) if "T1" in times else 0.0  # 1/ns
+            gamma_2 = 1.0 / (times["T2"] * 1e3) if "T2" in times else gamma_1 / 2.0
+            gamma_phi = gamma_2 - gamma_1 / 2.0
+            if gamma_phi < -1e-12:
+                raise ValueError(
+                    f"'{name}': T2 = {times['T2']} us exceeds 2 T1 = {2 * times['T1']} us."
+                )
+            for rate, op in (
+                (gamma_1, qt.destroy(dims[idx])),
+                (2.0 * gamma_phi, qt.num(dims[idx])),
+            ):
+                if rate > 1e-15:
+                    factors = [qt.qeye(d) for d in dims]
+                    factors[idx] = np.sqrt(rate) * op
+                    c_ops.append(qt.tensor(factors))
+        return c_ops
+
+    def _flux_activation_is_physical(self, q1_name: str, q2_name: str) -> bool:
+        """
+        Whether |11> can be flux-tuned onto |02> within the rigid-ladder flux model.
+
+        True for a pair of weakly anharmonic qubits (transmons) whose required
+        detuning is a modest fraction of the target frequency. False for fluxonium
+        and other strongly anharmonic circuits: see FLUX_MAX_RELATIVE_*.
+        """
+        for name in (q1_name, q2_name):
+            evals = np.real(self.qubit_engine.get_qubit(name).eigensys(evals_count=3)[0])
+            w01 = evals[1] - evals[0]
+            anharmonicity = (evals[2] - evals[1]) - w01
+            if abs(anharmonicity) > FLUX_MAX_RELATIVE_ANHARMONICITY * w01:
+                return False
+
+        detuning = self._calculate_resonant_flux(q1_name, q2_name)
+        return bool(abs(detuning) <= FLUX_MAX_RELATIVE_DETUNING * w01)
+
+    def _parametric_cphase_schedule(
+        self,
+        q1_name: str,
+        q2_name: str,
+        coupling_strength: float,
+        duration: Optional[float] = None,
+        target_phase: float = np.pi,
+    ) -> Dict[str, Any]:
+        """
+        Calibrate a parametrically activated controlled-phase gate on a tunable
+        coupler (see QubitWeave.core.parametric_gate).
+
+        Args:
+            q1_name, q2_name: The pair. "phases" in the result follow this order.
+            coupling_strength: Peak coupling g in GHz, as in H_int = g(t) n1 n2.
+            duration: Coupler pulse length in ns. None solves for the length that
+                completes the gate; a value runs the calibrated modulation for that
+                long and reports the fidelity it actually reaches.
+            target_phase: Phase acquired by |11>, in rad. Pi is a CZ.
+
+        Returns:
+            The schedule dict of calibrate_parametric_cphase. Treat as read-only.
+        """
+        system = []
+        for name in (q1_name, q2_name):
+            H0, ops = self._get_qubit_hamiltonian(name)
+            system += [np.real(H0.diag()) / (2 * np.pi), ops["n"].full()]
+
+        # Magnitudes only: eigenvector signs are arbitrary between
+        # diagonalizations and the schedule does not depend on them.
+        e1, n1, e2, n2 = system
+        fingerprint = tuple(
+            np.round(part, 9).tobytes()
+            for part in (e1 - e1[0], np.abs(n1), e2 - e2[0], np.abs(n2))
+        )
+        key = (fingerprint, float(coupling_strength), round(float(target_phase), 12))
+        if key not in GateEngine._parametric_cache:
+            GateEngine._parametric_cache[key] = self._stored_parametric_schedule(
+                key,
+                lambda: calibrate_parametric_cphase(
+                    *system, float(coupling_strength), target_phase
+                ),
+            )
+        calibrated = GateEngine._parametric_cache[key]
+        if duration is None or abs(duration - calibrated["duration"]) < 1e-6:
+            return calibrated
+
+        key = key + (round(float(duration), 6),)
+        if key not in GateEngine._parametric_cache:
+            GateEngine._parametric_cache[key] = evaluate_parametric_cphase(
+                *system, calibrated, float(duration)
+            )
+        return GateEngine._parametric_cache[key]
+
+    @property
+    def parametric_cache_file(self) -> str:
+        return os.path.join(os.path.dirname(self.cache_file), "parametric_cache.json")
+
+    def clear_parametric_cache(self) -> None:
+        """Forget every parametric schedule, in memory and on disk."""
+        GateEngine._parametric_cache.clear()
+        GateEngine._parametric_disk = {}
+        if os.path.exists(self.parametric_cache_file):
+            os.remove(self.parametric_cache_file)
+
+    def _stored_parametric_schedule(self, key: Tuple, calibrate) -> Dict[str, Any]:
+        """
+        A calibrated schedule from disk, or a fresh one that is then stored.
+
+        Calibrating takes several seconds and depends only on the two spectra, the charge
+        operators and the coupling, all of which are in the key.
+        """
+        if GateEngine._parametric_disk is None:
+            GateEngine._parametric_disk = {}
+            try:
+                with open(self.parametric_cache_file) as handle:
+                    GateEngine._parametric_disk = json.load(handle)
+            except (OSError, ValueError):
+                pass
+
+        digest = hashlib.sha256(repr((PARAMETRIC_CACHE_VERSION, key)).encode()).hexdigest()
+        stored = GateEngine._parametric_disk.get(digest)
+        if stored is not None:
+            return {**stored, "phases": tuple(stored["phases"])}
+
+        schedule = calibrate()
+        GateEngine._parametric_disk[digest] = schedule
+        try:
+            os.makedirs(os.path.dirname(self.parametric_cache_file), exist_ok=True)
+            with open(self.parametric_cache_file, "w") as handle:
+                json.dump(GateEngine._parametric_disk, handle)
+        except OSError:
+            pass
+        return schedule
+
+    @staticmethod
+    def _parametric_coupler_drive(
+        schedule: Dict[str, Any], targets: Tuple[int, int], start_time: float
+    ) -> Dict[str, Any]:
+        """The coupler_pulse drive that executes a parametric schedule."""
+        return {
+            "target": targets,
+            "type": "coupler_pulse",
+            "strength": schedule["strength"],
+            "frequency": schedule["frequency"],
+            "rise_time": schedule["rise_time"],
+            "start_time": start_time,
+            "end_time": start_time + schedule["duration"],
+        }
+
+    def calibrate_half_pi(self, qubit_name: str, amplitude: float = 0.025) -> Tuple[float, float]:
+        """
+        Calibrate a physical pi/2 pulse, including the Z phase it leaves behind.
+
+        A drive Stark-shifts the qubit while it rotates it, so a pi/2 pulse really is
+        Z(b) R(pi/2) Z(b). Maximising a population after two pulses (what
+        calibrate_gate("H") does) trades that phase off against the angle and gets both
+        slightly wrong. Here the duration is solved so that one pulse leaves |0> at
+        exactly P(1) = 1/2, and b is read off the propagator so it can be cancelled by
+        virtual Zs at no cost.
+
+        Args:
+            amplitude: Peak drive in GHz, multiplying the charge operator.
+
+        Returns:
+            (duration in ns, b in rad).
+        """
+        H0, ops = self._get_qubit_hamiltonian(qubit_name)
+        energies = np.real(H0.diag())  # rad/ns
+        energies = energies - energies[0]
+        f01 = energies[1] / (2 * np.pi)
+        n01 = float(abs(ops["n"].full()[1, 0]))
+        key = (
+            qubit_name, None, "HALF_PI", None, 0.0, "duration",
+            (("amplitude", float(amplitude)), ("f01", round(float(f01), 9)),
+             ("n01", round(n01, 9)), ("solver", SOLVER_OPTIONS["method"])),
+        )
+        if key in GateEngine._calib_cache:
+            return GateEngine._calib_cache[key]
+
+        phase = self._rotation_phase(ops["n"], np.pi / 2)
+
+        def column(duration, start):
+            drive = {
+                "target": 0, "type": "X", "amplitude": amplitude, "frequency": f01,
+                "phase": phase, "start_time": 0.0, "end_time": duration,
+            }
+            final = self.simulate_n_qubit_dynamics(
+                [qubit_name], "Calibrate_HALF_PI", duration, [], [drive], start, steps=20
+            )["final_state"].full().ravel()
+            return np.exp(1j * energies * duration) * final
+
+        print(f"Calibrating pi/2 pulse on {qubit_name}...")
+        previous = 0.25 / (amplitude * n01 * GAUSSIAN_AREA_PER_NS)
+        error_previous = abs(column(previous, "0")[1]) ** 2 - 0.5
+        duration = previous * (1.0 - 2.0 / np.pi * error_previous) if error_previous else previous
+        for _ in range(8):
+            error = abs(column(duration, "0")[1]) ** 2 - 0.5
+            if abs(error) < 1e-6 or error == error_previous:
+                break
+            step = -error * (duration - previous) / (error - error_previous)
+            previous, error_previous = duration, error
+            duration = float(np.clip(duration + step, 0.7 * duration, 1.3 * duration))
+
+        from_0, from_1 = column(duration, "0"), column(duration, "1")
+        z_phase = float(np.angle(from_1[1] / from_0[0]) / 2)
+        leakage = 1.0 - 0.5 * sum(np.sum(np.abs(c[:2]) ** 2) for c in (from_0, from_1))
+        print(f"  -> Duration {duration:.4f} ns, Z phase {z_phase:+.4f} rad, leakage {leakage:.1e}")
+        GateEngine._calib_cache[key] = (float(duration), z_phase)
+        self._save_cache_to_disk()
+        return GateEngine._calib_cache[key]
+
+    @staticmethod
+    def _rotation_phase(charge_op: qt.Qobj, axis: float, frame: float = 0.0) -> float:
+        """
+        Microwave phase that rotates a qubit about cos(axis) X + sin(axis) Y.
+
+        A drive A cos(wt + p) on the charge operator rotates about the azimuth
+        arg(<1|n|0>) - p. That argument is a property of the eigenvector gauge (a
+        fluxonium's charge operator is imaginary, a transmon's is real), so it has
+        to be read off the operator for "X" and "Y" to mean the same thing on
+        every qubit.
+
+        Args:
+            charge_op: Charge operator in the qubit's eigenbasis.
+            axis: Rotation axis azimuth in rad. 0 is X, pi/2 is Y.
+            frame: Virtual-Z phase accumulated so far: the logical state is
+                diag(1, exp(i frame)) times the physical one.
+        """
+        return float(np.angle(charge_op.full()[1, 0]) - axis + frame)
+
     def _dressed_computational_basis(
         self, H: qt.Qobj, dims: List[int]
     ) -> Dict[Tuple[int, ...], Tuple[float, qt.Qobj, float]]:
@@ -1676,7 +2098,8 @@ class GateEngine:
                                   detuning: float = 0.0,
                                   use_drag: bool = True,
                                   virtual_z: float = 0.0,
-                                  drag_lambda: float = 0.5) -> Dict[str, Any]:
+                                  drag_lambda: float = 0.5,
+                                  noise: Optional[Dict[str, Dict[str, float]]] = None) -> Dict[str, Any]:
         """
         Simulate the generalized dynamics of an N-qubit system.
         
@@ -1688,6 +2111,9 @@ class GateEngine:
             drives: Microwave pulses applied to specific qubits
             initial_state: String like "011", or a QuTiP Qobj. Defaults to all-zero state.
             use_drag: Whether to apply DRAG correction to microwave drives.
+            noise: Optional decoherence, {qubit name: {"T1": us, "T2": us}}. Either
+                time may be omitted. With noise the evolution is a Lindblad master
+                equation and the states are density matrices.
         """
         self.qubit_engine.load_session()
         N = len(qubit_names)
@@ -1770,6 +2196,74 @@ class GateEngine:
                 "populations": populations,
                 "final_state": psi_final
             }
+
+        # A pair that cannot be flux-tuned into |11>-|02> resonance (fluxonium, or any
+        # strongly anharmonic circuit) runs its CZ by modulating the coupler instead.
+        # An explicit detuning or an explicit coupler pulse is left to the paths below.
+        if (
+            N == 2
+            and gate_type in ["CNOT", "CZ"]
+            and couplings
+            and couplings[0].get("type") == "tunable_coupler"
+            and couplings[0].get("strength", 0.0) > 0.0
+            and detuning == 0.0
+            and not any(d.get("type") in ("coupler_pulse", "flux_pulse") for d in drives)
+            and not self._flux_activation_is_physical(qubit_names[0], qubit_names[1])
+        ):
+            schedule = self._parametric_cphase_schedule(
+                qubit_names[0], qubit_names[1], couplings[0]["strength"], duration=duration
+            )
+
+            if gate_type == "CZ":
+                compiled_drives = list(drives) + [
+                    self._parametric_coupler_drive(schedule, (0, 1), 0.0)
+                ]
+                total_time = max(
+                    [duration, schedule["duration"]] + [d.get("end_time", 0.0) for d in drives]
+                )
+            else:
+                # CNOT = Ry(-pi/2) . CZ . Ry(pi/2) on the target, the closing pulse
+                # in the frame left by the Z phase the coupler pulse imprints.
+                t_h, stark = self.calibrate_half_pi(qubit_names[1])
+                H0_target, ops_target = self._get_qubit_hamiltonian(qubit_names[1])
+                w01_target = np.real(H0_target.diag()[1] - H0_target.diag()[0]) / (2 * np.pi)
+                t_close = t_h + schedule["duration"]
+                total_time = t_close + t_h
+
+                def half_pi(axis, frame, start):
+                    return {
+                        "target": 1,
+                        "type": "X",
+                        "amplitude": 0.025,
+                        "frequency": w01_target,
+                        "phase": self._rotation_phase(ops_target["n"], axis, frame),
+                        "start_time": start,
+                        "end_time": start + t_h,
+                    }
+
+                compiled_drives = list(drives) + [
+                    half_pi(-np.pi / 2, -stark, 0.0),
+                    self._parametric_coupler_drive(schedule, (0, 1), t_h),
+                    half_pi(
+                        np.pi / 2, virtual_z - 3.0 * stark - schedule["phases"][1], t_close
+                    ),
+                ]
+
+            result = self.simulate_n_qubit_dynamics(
+                qubit_names=qubit_names,
+                gate_type=f"{gate_type}_COMPILED",
+                duration=total_time,
+                couplings=[],
+                drives=compiled_drives,
+                initial_state=initial_state,
+                steps=steps,
+                use_drag=use_drag,
+                drag_lambda=drag_lambda,
+                noise=noise,
+            )
+            result["parametric_schedule"] = dict(schedule)
+            result["warnings"] = list(schedule["warnings"])
+            return result
 
         # flux pulse detuning implicit calculation
         if N == 2 and gate_type in ["CNOT", "CZ"] and couplings and couplings[0].get("type") == "tunable_coupler":
@@ -1879,7 +2373,8 @@ class GateEngine:
                 steps=steps,
                 detuning=detuning,
                 use_drag=use_drag,
-                drag_lambda=drag_lambda
+                drag_lambda=drag_lambda,
+                noise=noise
             )
 
         # With a fixed capacitive coupling there is no coupler to pulse and no
@@ -1929,6 +2424,7 @@ class GateEngine:
                 use_drag=use_drag,
                 virtual_z=virtual_z,
                 drag_lambda=drag_lambda,
+                noise=noise,
             )
             # Hand back copies: the schedule itself is cached and shared between
             # every call at these parameters, so a caller poking at the result
@@ -1966,36 +2462,34 @@ class GateEngine:
 
         # 4. Evolution
         times = np.linspace(0, duration, steps)
-        opts = {"store_states": True, "nsteps": 10000000}
+        opts = {"store_states": True, "nsteps": 10000000, **SOLVER_OPTIONS}
  
         # Warning: H_total must be formatted exactly for QuTiP
-        res = qt.mesolve(H_total, psi0, times, c_ops=[], e_ops=[], args=args, options=opts)
+        c_ops = self._collapse_operators(qubit_names, dims, noise)
+        states = evolve(H_total, psi0, times, c_ops=c_ops, args=args, options=opts)
 
         # 5. Process Results (Populations up to 4 states per qubit: 0, 1, 2, 3)
-        comp_states = {}
-        if len(res.states) > 0:
-            import itertools
-            # Track up to level 3 (ket 0, 1, 2, 3)
-            ranges = [range(min(4, d)) for d in dims]
+        import itertools
+        if states[0].type == 'ket':
+            probs = np.abs(np.array([s.full().ravel() for s in states]))**2
+        else:
+            probs = np.real(np.array([s.diag() for s in states]))
 
-            is_ket = res.states[0].type == 'ket'
-            if is_ket:
-                state_data = np.array([s.full().flatten() for s in res.states])
-                probs = np.abs(state_data)**2
-            else:
-                state_data = np.array([s.diag() for s in res.states])
-                probs = np.real(state_data)
-
-            for k_tuple in itertools.product(*ranges):
-                state_str = "".join(str(k) for k in k_tuple)
-                idx = np.ravel_multi_index(k_tuple, dims)
-                comp_states[state_str] = probs[:, idx]
+        # One column per tracked label, read off the register axes in one go.
+        tracked = [min(4, d) for d in dims]
+        per_level = probs.reshape([len(states)] + dims)[
+            (slice(None),) + tuple(slice(k) for k in tracked)
+        ].reshape(len(states), -1)
+        comp_states = {
+            "".join(map(str, levels)): per_level[:, column]
+            for column, levels in enumerate(itertools.product(*map(range, tracked)))
+        }
 
         result = {
             "times": times,
-            "states": res.states,
+            "states": states,
             "populations": comp_states,
-            "final_state": res.states[-1]
+            "final_state": states[-1]
         }
 
         return result
@@ -2082,7 +2576,7 @@ class GateEngine:
             
             # 2. Compute Propagator U_sim
             # Use increased nsteps for stiff pulses and Dict options
-            opts = qt.Options(nsteps=50000)
+            opts = {"nsteps": 50000}
             U_sim = qt.propagator(H_total, duration, args=args, options=opts)
             
             # 3. Project to Computational Subspace (2x2 = 4 states)

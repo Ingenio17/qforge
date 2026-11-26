@@ -1,0 +1,8 @@
+#,Pulse,On,Start (ns),End (ns),Frequency (GHz),Amplitude (MHz),Phase (rad)
+1,microwave,transmon,0.0,22.1,5.6826,25,-1.514
+2,microwave,fluxonium (netlist),22.1,137.4,0.3639,100,-0.020
+3,coupler modulation,fluxonium (netlist) – transmon,137.4,178.2,3.3323,50,+0.000
+4,microwave,fluxonium (netlist),178.2,293.5,0.3639,100,+3.077
+5,microwave,fluxonium (preset),293.5,537.5,0.1330,100,-0.048
+6,coupler modulation,transmon – fluxonium (preset),537.5,575.6,3.8052,50,+0.000
+7,microwave,fluxonium (preset),575.6,819.6,0.1330,100,+2.991

@@ -1,0 +1,32 @@
+check,result,expected,tolerance,status
+no EC: P(00),0.500011,0.5,0.005,PASS
+no EC: P(11),0.499983,0.5,0.005,PASS
+no EC: Bell-state fidelity,0.999994,1,0.001,PASS
+"3-qubit repetition, clean: logical Bell fidelity",1,1,1e-09,PASS
+"3-qubit repetition, clean: every stabilizer is +1",1,1,1e-09,PASS
+"3-qubit repetition, with X error: logical Bell fidelity",1,1,1e-09,PASS
+"3-qubit repetition, with X error: every stabilizer is +1",1,1,1e-09,PASS
+3-qubit repetition: worst fidelity over 120 single-error runs,1,1,1e-09,PASS
+3-qubit repetition: P(00) and P(11) after the circuit,3.88578e-16,0,1e-09,PASS
+3-qubit repetition: an uncorrected error destroys the state,0,0,1e-09,PASS
+"7-qubit Steane, clean: logical Bell fidelity",1,1,1e-09,PASS
+"7-qubit Steane, clean: every stabilizer is +1",1,1,1e-09,PASS
+"7-qubit Steane, with Y error: logical Bell fidelity",1,1,1e-09,PASS
+"7-qubit Steane, with Y error: every stabilizer is +1",1,1,1e-09,PASS
+7-qubit Steane: worst fidelity over 42 single-error runs,1,1,1e-09,PASS
+7-qubit Steane: P(00) and P(11) after the circuit,1.11022e-16,0,1e-09,PASS
+7-qubit Steane: an uncorrected error destroys the state,0,0,1e-09,PASS
+"9-qubit Shor, clean: logical Bell fidelity",1,1,1e-09,PASS
+"9-qubit Shor, clean: every stabilizer is +1",1,1,1e-09,PASS
+"9-qubit Shor, with Y error: logical Bell fidelity",1,1,1e-09,PASS
+"9-qubit Shor, with Y error: every stabilizer is +1",1,1,1e-09,PASS
+9-qubit Shor: worst fidelity over 54 single-error runs,1,1,1e-09,PASS
+9-qubit Shor: P(00) and P(11) after the circuit,3.88578e-16,0,1e-09,PASS
+9-qubit Shor: an uncorrected error destroys the state,0,0,1e-09,PASS
+"9-qubit surface (d = 3), clean: logical Bell fidelity",1,1,1e-09,PASS
+"9-qubit surface (d = 3), clean: every stabilizer is +1",1,1,1e-09,PASS
+"9-qubit surface (d = 3), with Y error: logical Bell fidelity",1,1,1e-09,PASS
+"9-qubit surface (d = 3), with Y error: every stabilizer is +1",1,1,1e-09,PASS
+9-qubit surface (d = 3): worst fidelity over 54 single-error runs,1,1,1e-09,PASS
+9-qubit surface (d = 3): P(00) and P(11) after the circuit,1.11022e-16,0,1e-09,PASS
+9-qubit surface (d = 3): an uncorrected error destroys the state,0,0,1e-09,PASS

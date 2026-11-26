@@ -184,9 +184,9 @@ def main():
     fig1, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(14, 11), sharex=True)
     fig1.suptitle(
         "Bell State Creation: Physical Simulation on Transmon Qubits\n"
-        r"$|00\rangle \;\xrightarrow{\;H \otimes I\;}\; "
-        r"\tfrac{|00\rangle+|10\rangle}{\sqrt{2}} \;\xrightarrow{\;\text{CNOT}\;}\; "
-        r"\tfrac{|00\rangle+|11\rangle}{\sqrt{2}} = |\Phi^+\rangle$",
+        r"$|00\rangle \;\rightarrow\; "
+        r"\frac{|00\rangle+|10\rangle}{\sqrt{2}} \;\rightarrow\; "
+        r"\frac{|00\rangle+|11\rangle}{\sqrt{2}} = |\Phi^+\rangle$",
         fontsize=15, fontweight="bold", y=0.99,
     )
     t_nd, p_nd, l_nd = results["without"]

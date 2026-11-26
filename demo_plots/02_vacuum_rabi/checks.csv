@@ -1,0 +1,15 @@
+check,result,expected,tolerance,status
+dispersive shift 2χ at flux 0.26 (MHz),-22.5129,-22.511,0.05,PASS
+dispersive shift 2χ at flux 0.27 (MHz),-17.3336,-17.3323,0.05,PASS
+dispersive shift 2χ at flux 0.28 (MHz),-13.5686,-13.5677,0.05,PASS
+dispersive shift 2χ at flux 0.29 (MHz),-10.7856,-10.785,0.05,PASS
+dispersive shift 2χ at flux 0.3 (MHz),-8.69309,-8.69262,0.05,PASS
+dispersive shift 2χ at flux 0.31 (MHz),-7.0938,-7.09344,0.05,PASS
+dispersive shift 2χ at flux 0.32 (MHz),-5.85293,-5.85265,0.05,PASS
+dispersive shift 2χ at flux 0.33 (MHz),-4.87683,-4.87661,0.05,PASS
+dispersive shift 2χ at flux 0.34 (MHz),-4.09946,-4.09928,0.05,PASS
+"Koch formula at the largest detuning, relative error",1.02226,1,0.05,PASS
+basis-truncation error (MHz),3.52983e-05,0,0.01,PASS
+vacuum Rabi splitting 2g (MHz),295.131,295.131,1,PASS
+resonance flux,0.203263,0.203258,0.002,PASS
+worst transition vs model over the sweep (MHz),0.0438374,0,5,PASS

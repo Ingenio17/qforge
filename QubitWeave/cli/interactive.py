@@ -31,10 +31,14 @@ from QubitWeave.core.device_library import (
     write_template,
 )
 from QubitWeave.core.device_netlist import NetlistError
-from QubitWeave.core.error_correction_engine import ErrorCorrectionEngine
+from QubitWeave.core.error_correction_engine import (
+    LARGE_STATE_BYTES,
+    ErrorCorrectionEngine,
+    estimate_state_size,
+)
 from QubitWeave.core.gate_engine import GateEngine
 from QubitWeave.core.qubit_engine import QubitEngine
-from QubitWeave.core.stabilizer_codes import REPETITION_3, SHOR_9, STEANE_7
+from QubitWeave.core.stabilizer_codes import REPETITION_3, SHOR_9, STEANE_7, SURFACE_9
 from QubitWeave.core.workflow_engine import PhysicalWorkflowEngine
 
 console = Console()
@@ -1367,12 +1371,14 @@ EC_CODES = {
     "repetition": REPETITION_3,
     "steane": STEANE_7,
     "shor": SHOR_9,
+    "surface": SURFACE_9,
 }
 
 EC_METHODS = {
     "repetition": "execute_3q_repetition_workflow",
     "steane": "execute_steane7_workflow",
     "shor": "execute_shor9_workflow",
+    "surface": "execute_surface9_workflow",
 }
 
 
@@ -1471,6 +1477,11 @@ def _wizard_full_workflow():
             "9-qubit Shor code",
             "17 physical qubits/logical qubit, corrects any single-qubit error",
         ),
+        (
+            "surface",
+            "9-qubit surface code (distance 3)",
+            "17 physical qubits/logical qubit, corrects any single-qubit error",
+        ),
     ]
     ec_choice = _flat_choose(ec_items, title="Error correction") or "none"
 
@@ -1534,10 +1545,12 @@ def _run_ec_workflow(qubit_names, ec_choice, qasm_completer):
         f"physical qubits ({code.num_data} data + {code.num_ancilla} ancilla). "
         f"{len(qubit_names)} logical qubit(s) -> {n_physical} physical qubits total.[/dim]"
     )
-    if n_physical > 20:
+    levels = max(engine.get_qubit(n).truncated_dim for n in qubit_names)
+    amplitudes, size_bytes = estimate_state_size(code, len(qubit_names), levels)
+    if size_bytes >= LARGE_STATE_BYTES:
         console.print(
-            f"[yellow]That's a {2 ** n_physical:,}-dimensional state vector. "
-            "This may be slow or memory-heavy.[/yellow]"
+            f"[yellow]The state vector has {amplitudes:,} amplitudes "
+            f"({size_bytes / 2**30:.1f} GB), and the run needs roughly three times that.[/yellow]"
         )
         if not Confirm.ask("Continue anyway?", default=True):
             return
@@ -1619,7 +1632,7 @@ def _show_help():
 2. **Simulate a gate** - drive a calibrated single- or two-qubit gate and watch it evolve
 3. **Analyze multi-qubit gates** - compare capacitive, inductive, and tunable-coupler CNOT/CZ
 4. **Run full workflow** - take an OpenQASM circuit all the way to a physical execution,
-   optionally protected by the 3-qubit repetition, 7-qubit Steane, or 9-qubit Shor code
+   optionally protected by the 3-qubit repetition, 7-qubit Steane, 9-qubit Shor or surface code
 5. **Compare qubits** - side-by-side metrics across qubit types or instances
 
 ## Design a device

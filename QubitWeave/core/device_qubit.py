@@ -113,6 +113,22 @@ class DeviceQubit:
     def hilbertdim(self) -> int:
         return self.device.hilbert_dim
 
+    def state_key(self) -> tuple:
+        """
+        Everything the spectrum depends on: the netlist, the truncation, and the present
+        value of every parameter that can be changed on the built circuit.
+        """
+        circuit = self.device.circuit
+        knobs = self.device.sweepable_parameters()
+        cutoffs = {name: int(getattr(circuit, name)) for name in circuit.cutoff_names}
+        return (
+            "device",
+            self.netlist.source,
+            self.truncated_dim,
+            tuple(sorted(knobs.items())),
+            tuple(sorted(cutoffs.items())),
+        )
+
     # -- mode selection ---------------------------------------------------
 
     @property

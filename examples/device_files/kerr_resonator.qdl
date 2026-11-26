@@ -1,0 +1,17 @@
+* Kerr resonator: a junction diluted by a parallel inductor.
+*
+* Half of the linear inductance is the junction, so the mode inherits a weak, almost
+* pure Kerr nonlinearity (about 15 MHz per photon) that barely changes with photon
+* number. A coherent state left alone in it turns into Schroedinger cats.
+
+.title  Kerr resonator
+.name   kerr_resonator
+
+J1  1  0  EJ=60  EC=200
+L1  1  0  EL=60
+C1  1  0  EC=0.03
+
+.options ext_basis=harmonic
+.cutoff ext1 = 70
+.levels 24
+.end
